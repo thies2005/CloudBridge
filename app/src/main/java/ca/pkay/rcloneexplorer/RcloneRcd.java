@@ -11,6 +11,7 @@ import android.util.SparseArray;
 import androidx.annotation.IntDef;
 import androidx.preference.PreferenceManager;
 import ca.pkay.rcloneexplorer.util.FLog;
+import ca.pkay.rcloneexplorer.util.RemoteNameUtil;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -238,20 +239,6 @@ public class RcloneRcd {
         } catch (IllegalThreadStateException e) {
             return RUNNING;
         }
-    }
-
-    /**
-     * Convert a rcloneExplorer remote name into fs parameter format
-     * @param remoteName
-     * @return
-     */
-    private String remoteNameAsFs(String remoteName) {
-        remoteName += ':';
-        // TODO: figure out if this is required or vestigal
-        if (':' != remoteName.charAt(remoteName.length() - 1)) {
-            remoteName += ':';
-        }
-        return remoteName;
     }
 
     /**
@@ -516,8 +503,8 @@ public class RcloneRcd {
     }
 
     public void copyFile(String srcRemoteName, String srcPath, String dstRemoteName, String dstPath, JobStatusHandler handler) {
-        String srcFs = remoteNameAsFs(srcRemoteName);
-        String dstFs = remoteNameAsFs(dstRemoteName);
+        String srcFs = RemoteNameUtil.remoteNameAsFs(srcRemoteName);
+        String dstFs = RemoteNameUtil.remoteNameAsFs(dstRemoteName);
         srcPath = pathAsPath(srcRemoteName, srcPath);
         dstPath = pathAsPath(dstRemoteName, dstPath);
         JobIdResponse response = performRcCall("operations/copyfile", new CopyFileRcOpParam(srcPath, srcFs, dstPath, dstFs), JobIdResponse.class);
@@ -532,7 +519,7 @@ public class RcloneRcd {
     }
 
     public ListItem[] list(String remoteName, String path) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         ListRcOpResponse response = performRcCall("operations/list", new ListRcOpParam(fs, path), ListRcOpResponse.class);
         return response.list;
@@ -547,7 +534,7 @@ public class RcloneRcd {
     }
 
     public AboutResponse getStorageUsage(String remoteName) {
-        return performRcCall("operations/about", new AboutRcOpParam(remoteNameAsFs(remoteName)), AboutResponse.class);
+        return performRcCall("operations/about", new AboutRcOpParam(RemoteNameUtil.remoteNameAsFs(remoteName)), AboutResponse.class);
     }
 
     // TODO: figure out how this works - docu unclear!
@@ -556,7 +543,7 @@ public class RcloneRcd {
     }
 
     public void deleteFile(String remoteName, String path, JobStatusHandler handler) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         JobIdResponse response = performRcCall("operations/deletefile", new DeleteFileRcOpParam(fs, path), JobIdResponse.class);
         jobsHandlers.append(response.jobid, handler);
@@ -564,7 +551,7 @@ public class RcloneRcd {
     }
 
     public void purge(String remoteName, String path, JobStatusHandler handler) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         JobIdResponse response = performRcCall("operations/purge", new PurgeRcOpParam(fs, path), JobIdResponse.class);
         jobsHandlers.append(response.jobid, handler);
@@ -572,20 +559,20 @@ public class RcloneRcd {
     }
 
     public FsInfoRcOpResponse getFsInfo(String remoteName) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         return performRcCall("operations/fsinfo", new FsInfoRcOpParam(fs), FsInfoRcOpResponse.class);
     }
 
     public void mkDir(String remoteName, String path) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         performRcCall("operations/mkdir", new MkDirRcOpParam(fs, path), EmptyOkResponse.class);
     }
 
     public void moveFile(String srcRemoteName, String srcPath, String dstRemoteName, String dstPath, JobStatusHandler handler) {
-        String srcFs = remoteNameAsFs(srcRemoteName);
+        String srcFs = RemoteNameUtil.remoteNameAsFs(srcRemoteName);
         String srcRemote = pathAsPath(srcRemoteName, srcPath);
-        String dstFs = remoteNameAsFs(dstRemoteName);
+        String dstFs = RemoteNameUtil.remoteNameAsFs(dstRemoteName);
         String dstRemote = pathAsPath(dstRemoteName, dstPath);
         JobIdResponse response = performRcCall("operations/movefile", new MoveFileRcOpParam(srcFs, srcRemote, dstFs, dstRemote), JobIdResponse.class);
         pendingJobs.add(response.jobid);
@@ -593,20 +580,20 @@ public class RcloneRcd {
     }
 
     public String getPublicLink(String remoteName, String path) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         PublicLinkRcOpResponse response = performRcCall("operations/publiclink", new PublicLinkRcOpParam(fs, path), PublicLinkRcOpResponse.class);
         return response.url;
     }
 
     public void rmDir(String remoteName, String path) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         performRcCall("operations/rmdir", new RmDirRcOpParam(fs, path), EmptyOkResponse.class);
     }
 
     public void rmDirs(String remoteName, String path) {
-        String fs = remoteNameAsFs(remoteName);
+        String fs = RemoteNameUtil.remoteNameAsFs(remoteName);
         path = pathAsPath(remoteName, path);
         performRcCall("operations/rmdirs", new RmDirsRcOpParam(fs, path), EmptyOkResponse.class);
     }
