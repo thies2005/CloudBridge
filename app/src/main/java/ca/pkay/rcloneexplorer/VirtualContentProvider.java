@@ -771,13 +771,8 @@ public class VirtualContentProvider extends SingleRootProvider {
     public void deleteDocument(String rawDocumentId) throws FileNotFoundException {
         FLog.v(TAG, "deleteDocument: %s", rawDocumentId);
 
-        // TODO: bug: remotes/remotes/... instead of remotes/...
-        final String rootedDocumentId;
-        if (getNoRootId(rawDocumentId).startsWith(ROOT_DOC_PREFIX)) {
-            rootedDocumentId = getNoRootId(rawDocumentId);
-        } else {
-            rootedDocumentId = rawDocumentId;
-        }
+        // bug: remotes/remotes/... instead of remotes/...
+        final String rootedDocumentId = getRootedDocumentId(getShortId(rawDocumentId));
 
         if (isRemoteDocument(rootedDocumentId)) {
             FLog.e(TAG, "deleteDocument: deleting remotes not supported");
