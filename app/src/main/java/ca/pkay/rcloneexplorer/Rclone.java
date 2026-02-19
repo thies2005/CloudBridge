@@ -579,6 +579,7 @@ public class Rclone {
         }
     }
 
+    @Nullable
     public String obscure(String pass) {
         String[] command = createCommand("obscure", pass);
 
