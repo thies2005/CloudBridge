@@ -27,10 +27,9 @@ class SyncService: IntentService("ca.pkay.rcexplorer.SYNC_SERCVICE"){
 
         if (action.equals("START_TASK")) {
             val db = DatabaseHandler(this)
-            for (task in db.allTasks) {
-                if (task.id == taskId.toLong()) {
-                    SyncManager(this).queue(task)
-                }
+            val task = db.getTask(taskId.toLong())
+            if (task != null) {
+                SyncManager(this).queue(task)
             }
         }
     }
