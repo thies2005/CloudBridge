@@ -3,9 +3,7 @@ package ca.pkay.rcloneexplorer.util;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.AssetManager;
-import android.content.res.Configuration;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.util.AttributeSet;
 import android.webkit.WebView;
 import android.widget.Toast;
@@ -23,11 +21,11 @@ public class MarkdownView extends WebView {
     private static final String TAG = "MarkdownView";
 
     public MarkdownView(Context context) {
-        super(patchContext(context));
+        super(context);
     }
 
     public MarkdownView(Context context, AttributeSet attrs) {
-        super(patchContext(context), attrs);
+        super(context, attrs);
     }
 
     public static void closeOnMissingWebView(Activity host, Exception exception) {
@@ -38,15 +36,6 @@ public class MarkdownView extends WebView {
         } else {
             throw new RuntimeException(exception);
         }
-    }
-
-    private static Context patchContext(Context context) {
-        // TODO: Only affects appcompat 1.1.x, remove with 1.2.x
-        //       https://stackoverflow.com/questions/41025200/android-view-inflateexception-error-inflating-class-android-webkit-webview/58131421
-        if (Build.VERSION.SDK_INT == 22 || Build.VERSION.SDK_INT == 23) {
-            return context.createConfigurationContext(new Configuration());
-        }
-        return context;
     }
 
     public void loadAsset(String path) {
