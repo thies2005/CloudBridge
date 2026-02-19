@@ -10,6 +10,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
@@ -87,6 +88,7 @@ public class TriggerService extends Service {
             long timeToTrigger = System.currentTimeMillis() + difference;
 
             AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            am.cancel(getLegacyIntent(trigger.getId()));
             PendingIntent pi = getIntent(trigger.getId());
             am.cancel(pi);
 
@@ -120,6 +122,7 @@ public class TriggerService extends Service {
             long timeToTrigger = System.currentTimeMillis();
 
             AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            am.cancel(getLegacyIntent(trigger.getId()));
             PendingIntent pi = getIntent(trigger.getId());
             am.cancel(pi);
             am.setInexactRepeating(
@@ -133,6 +136,7 @@ public class TriggerService extends Service {
 
     public void cancelTrigger(long triggerID){
         AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        am.cancel(getLegacyIntent(triggerID));
         am.cancel(getIntent(triggerID));
     }
 
@@ -160,14 +164,25 @@ public class TriggerService extends Service {
         sm.queue(trigger);
     }
 
-    private PendingIntent getIntent(long triggerId){
+    private PendingIntent getLegacyIntent(long triggerId){
         Intent i = new Intent(context, TriggerReciever.class);
         i.setAction(TRIGGER_RECIEVE);
         i.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         i.putExtra(TRIGGER_ID, triggerId);
 
-        // Todo: Beacause of the long to int cast, this may fail when the user has more than Integer.MAX tasks.
         return PendingIntent.getBroadcast(context, (int) triggerId, i, PendingIntent.FLAG_UPDATE_CURRENT ^ PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private PendingIntent getIntent(long triggerId){
+        Intent i = new Intent(context, TriggerReciever.class);
+        i.setAction(TRIGGER_RECIEVE);
+        // Use a unique data URI to distinguish pending intents, resolving the issue where casting a long ID > Integer.MAX_VALUE
+        // to an int requestCode causes collisions.
+        i.setData(Uri.parse("trigger:" + triggerId));
+        i.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        i.putExtra(TRIGGER_ID, triggerId);
+
+        return PendingIntent.getBroadcast(context, 0, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
     @Override
