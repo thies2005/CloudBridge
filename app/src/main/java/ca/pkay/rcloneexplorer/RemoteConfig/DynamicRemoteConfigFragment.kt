@@ -209,7 +209,11 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
 
             val textViewTitle = TextView(mContext)
             textViewTitle.contentDescription = it.name
-            textViewTitle.text = it.getNameCapitalized()
+            var title = it.getNameCapitalized()
+            if (it.required) {
+                title += " *"
+            }
+            textViewTitle.text = title
             textViewTitle.typeface = Typeface.DEFAULT_BOLD
             layout.addView(textViewTitle)
 
@@ -227,14 +231,17 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                         input.inputType =
                             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                         //input.setText(mOptionMap[it.name])
+                        input.tag = it.name
                         updateValue(input, it)
                         setTextInputListener(input, it.name)
 
                     } else if(it.examples.size > 0 && it.type != "CommaSepList") {
-                        createSpinnerFromExample(it, it.name ,layout)
+                        val input = createSpinnerFromExample(it, it.name ,layout)
+                        input.tag = it.name
                     } else {
                         val input = getAttachedEditText(it.name, layout)
                         //input.setText(mOptionMap[it.name])
+                        input.tag = it.name
                         updateValue(input, it)
                         setTextInputListener(input, it.name)
                     }
@@ -242,6 +249,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                 "bool" -> {
                     val input = CheckBox(mContext)
                     input.text = it.name
+                    input.tag = it.name
                     updateValue(input, it)
 
                     // only now add listener, so to not store default values if they have not been changed.
@@ -252,6 +260,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                 "int" -> {
                     val input = getAttachedEditText(it.name, layout)
                     input.inputType = InputType.TYPE_CLASS_NUMBER
+                    input.tag = it.name
                     updateValue(input, it)
                     setTextInputListener(input, it.name)
                 }
@@ -264,6 +273,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                 "CommaSepList", "Duration", "MultiEncoder"  -> {
                     val input = getAttachedEditText(it.name, layout)
                     //input.setText(mOptionMap[it.name])
+                    input.tag = it.name
                     updateValue(input, it)
                     setTextInputListener(input, it.name)
                 }
@@ -271,6 +281,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                     Log.e(this::class.java.simpleName, "Unknown Provideroption: ${it.type}")
                     val unknownType = getAttachedEditText(it.name, layout)
                     //unknownType.hint = it.type
+                    unknownType.tag = it.name
                     updateValue(unknownType, it)
                     setTextInputListener(unknownType, it.name)
                 }
@@ -382,6 +393,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         valueContainer.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, 1.0f)
 
         val valueInput = TextInputEditText(valueContainer.context)
+        valueInput.tag = option.name
         valueInput.setPadding(padding)
         valueInput.setText(number)
         //@ManualTheming
@@ -511,6 +523,35 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
 
         val options = java.util.ArrayList<String>()
         val name: String = mRemoteName?.text.toString()
+
+        if (name.trim().isEmpty()) {
+            mRemoteName?.error = getString(R.string.error_field_required)
+            mRemoteName?.requestFocus()
+            return
+        }
+
+        mProvider!!.options.forEach {
+            if (it.required) {
+                val value = mOptionMap[it.name]
+                if (value.isNullOrEmpty()) {
+                    if (it.default.isEmpty()) {
+                        val view = mFormView?.findViewWithTag<View>(it.name)
+                        if (view != null) {
+                            view.requestFocus()
+                            if (view is TextView) {
+                                view.error = getString(R.string.error_field_required)
+                            } else {
+                                Toast.makeText(mContext, getString(R.string.error_field_required), Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(mContext, "${it.name}: ${getString(R.string.error_field_required)}", Toast.LENGTH_SHORT).show()
+                        }
+                        return
+                    }
+                }
+            }
+        }
+
         options.add(name)
         options.add(mProviderTitle)
 

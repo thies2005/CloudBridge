@@ -185,6 +185,7 @@
     <string name="serve_dlna">DLNA</string>
     <string name="provider_webdav">Webdav</string>
     <string name="error_creating_remote">Error creating remote</string>
+    <string name="error_field_required">This field is required</string>
     <string name="remote_creation_success">Remote created successfully</string>
     <string name="next">Next</string>
     <string name="title_activity_remote_config">Select type</string>
