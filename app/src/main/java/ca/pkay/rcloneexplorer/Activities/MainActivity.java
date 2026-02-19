@@ -411,13 +411,10 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void startConfigImportFlow() {
-        Uri configUri;
         if (rclone.isConfigFileCreated()) {
             warnUserAboutOverwritingConfiguration();
-        } else if(null != (configUri = rclone.searchExternalConfig())) {
-            askUseExternalConfig(configUri);
         } else {
-            importConfigFile();
+            new SearchExternalConfigTask().execute();
         }
     }
 
@@ -500,12 +497,7 @@ public class MainActivity extends AppCompatActivity
         builder.setMessage(R.string.config_file_lost_statement);
         builder.setPositiveButton(R.string.continue_statement, (dialogInterface, i) -> {
             dialogInterface.cancel();
-            Uri configUri;
-            if(null != (configUri = rclone.searchExternalConfig())){
-                askUseExternalConfig(configUri);
-            } else {
-                importConfigFile();
-            }
+            new SearchExternalConfigTask().execute();
         });
         builder.setNegativeButton(R.string.cancel, (dialogInterface, i) -> dialogInterface.cancel());
         builder.show();
@@ -649,6 +641,37 @@ public class MainActivity extends AppCompatActivity
         availableDrawerPinnedRemoteId = 1;
 
         pinRemotesToDrawer();
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class SearchExternalConfigTask extends AsyncTask<Void, Void, Uri> {
+
+        private LoadingDialog loadingDialog;
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            loadingDialog = new LoadingDialog()
+                    .setTitle(R.string.working)
+                    .setCanCancel(false);
+            loadingDialog.show(getSupportFragmentManager(), "loading dialog");
+        }
+
+        @Override
+        protected Uri doInBackground(Void... voids) {
+            return rclone.searchExternalConfig();
+        }
+
+        @Override
+        protected void onPostExecute(Uri configUri) {
+            super.onPostExecute(configUri);
+            Dialogs.dismissSilently(loadingDialog);
+            if (configUri != null) {
+                askUseExternalConfig(configUri);
+            } else {
+                importConfigFile();
+            }
+        }
     }
 
     @SuppressLint("StaticFieldLeak")
