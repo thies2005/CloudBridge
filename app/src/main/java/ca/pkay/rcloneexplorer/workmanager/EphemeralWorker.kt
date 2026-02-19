@@ -38,6 +38,11 @@ import android.util.Log
 import de.felixnuesse.extract.notifications.implementations.DeleteWorkerNotification
 import de.felixnuesse.extract.notifications.implementations.MoveWorkerNotification
 import de.felixnuesse.extract.notifications.implementations.UploadWorkerNotification
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 
 class EphemeralWorker (private var mContext: Context, workerParams: WorkerParameters): Worker(mContext, workerParams) {
@@ -451,17 +456,26 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             }
             Type.UPLOAD -> {
                 val pathAndName = inputData.getString(UPLOAD_FILE) ?: ""
-                val name = pathAndName.substring(pathAndName.lastIndexOf("/")+1, pathAndName.length)
-                val path = pathAndName.substring(0, pathAndName.lastIndexOf("/")+1)
-                // TODO: Make this work properly! All the params are guessed!
+                val file = File(pathAndName)
+                val name = file.name
+                val path = if (file.parentFile != null) file.parentFile!!.absolutePath + "/" else ""
+                val size = file.length()
+                val isDir = file.isDirectory
+
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                dateFormat.timeZone = TimeZone.getTimeZone("UTC")
+                val modTime = dateFormat.format(Date(file.lastModified()))
+
+                val mimeType = FileItem.getMimeType("application/octet-stream", pathAndName)
+
                 FileItem(
                         RemoteItem("", ""),
                         path,
                         name,
-                        0L,
-                        "modTime",
-                        "mimeType",
-                        false,
+                        size,
+                        modTime,
+                        mimeType,
+                        isDir,
                         false)
             }
             Type.MOVE -> {
