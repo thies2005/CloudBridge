@@ -932,9 +932,13 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     @Override
     public String getDocumentType(String documentId) throws FileNotFoundException {
-        // TODO: NetworkOnMainThreadException in case of cache miss, e.g. when the directory
-        //          not browsed previously
-        ListItem item = getFileItem(getNoRootId(documentId));
+        ListItem item;
+        try {
+            item = CompletableFuture.supplyAsync(() -> getFileItem(getNoRootId(documentId)), asyncExc).join();
+        } catch (Exception e) {
+            FLog.e(TAG, "getDocumentType: failed to retrieve item", e);
+            throw new FileNotFoundException();
+        }
         if (null == item) {
             throw new FileNotFoundException();
         }
