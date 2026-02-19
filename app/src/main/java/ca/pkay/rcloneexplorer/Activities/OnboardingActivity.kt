@@ -150,20 +150,17 @@ class OnboardingActivity : AppIntro2(), SlideLeaveInterface, SlideSwitchCallback
             }
         }
 
-        //Todo: Check if that build version check can be removed because mPermissions checks it
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if(!mPermissions.grantedAlarms()) {
-                addSlide(
-                    IdentifiableAppIntroFragment.createInstance(
-                        title = getString(R.string.intro_alarms_title),
-                        description = getString(R.string.intro_alarms_description),
-                        imageDrawable = R.drawable.undraw_time_management,
-                        backgroundColorRes = color,
-                        id = SLIDE_ID_ALARMS,
-                        callback = this
-                    ))
-                switchColor()
-            }
+        if(!mPermissions.grantedAlarms()) {
+            addSlide(
+                IdentifiableAppIntroFragment.createInstance(
+                    title = getString(R.string.intro_alarms_title),
+                    description = getString(R.string.intro_alarms_description),
+                    imageDrawable = R.drawable.undraw_time_management,
+                    backgroundColorRes = color,
+                    id = SLIDE_ID_ALARMS,
+                    callback = this
+                ))
+            switchColor()
         }
 
         if(!mPermissions.grantedBatteryOptimizationExemption()) {
