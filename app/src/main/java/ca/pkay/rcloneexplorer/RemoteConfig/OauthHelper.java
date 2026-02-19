@@ -292,10 +292,11 @@ public class OauthHelper {
 
     /**
      * A step that triggers on Internxt 2FA prompt and shows a dialog for code input.
+     * Trigger pattern matches exact text from rclone internxt.go source.
      */
     public static class InternxtTwoFactorStep extends InteractiveRunner.Step {
-        // Internxt prompts with "2FA code is required"
-        private static final String TRIGGER = "2FA code";
+        // Exact prompt from rclone internxt.go: fs.ConfigInput("2fa", "config_2fa", "Two-factor authentication code")
+        private static final String TRIGGER = "Two-factor authentication code";
 
         public InternxtTwoFactorStep(Context context) {
             super(TRIGGER, InteractiveRunner.Step.CONTAINS, InteractiveRunner.Step.INTERLEAVED,

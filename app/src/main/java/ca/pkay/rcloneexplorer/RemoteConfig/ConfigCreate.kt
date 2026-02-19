@@ -10,7 +10,6 @@ import android.widget.Toast
 import android.content.Intent
 import android.view.View
 import ca.pkay.rcloneexplorer.Activities.MainActivity
-import ca.pkay.rcloneexplorer.InteractiveRunner
 import ca.pkay.rcloneexplorer.util.FLog
 import java.util.ArrayList
 
@@ -57,57 +56,293 @@ class ConfigCreate internal constructor(
     }
 
     /**
-     * Creates an Internxt remote using InteractiveRunner to handle 2FA.
+     * Creates an Internxt remote with 2FA support.
+     * Uses manual buffer reading to handle both 2FA and non-2FA accounts.
+     * 
      * Flow:
-     * 1. Start rclone config create
-     * 2. If 2FA is required, show dialog for code
-     * 3. Complete configuration
+     * 1. Ask user for Auth Method (Temporary vs Auto-Login)
+     * 2. If Auto-Login: Ask for TOTP Secret (Seed) and add to options
+     * 3. rclone authenticates with email/password (+ totp_secret if provided)
+     * 4. If 2FA enabled: prompts "Two-factor authentication code" -> show dialog
+     * 5. Shows "Keep this" confirmation -> respond with 'y'
      */
     private fun createInternxtWithTwoFactor(): Boolean {
-        // Add obscure flag for password handling
-        val opts = ArrayList(options)
-        opts.add("--obscure")
+        android.util.Log.e(TAG, "=== INTERNXT AUTH START ===")
+        android.util.Log.e(TAG, "Options: $options")
+
+        // Step 0: Ask for Auth Method (Temporary vs Auto-Login)
+        val authMethod = getAuthPreferenceFromUser()
+        if (authMethod == "CANCEL") {
+             return false
+        }
+
+        if (authMethod == "PERMANENT") {
+            val totpSecret = getTOTPSecretFromUser()
+            if (totpSecret.isEmpty()) {
+                // User cancelled or entered empty string
+                return false
+            }
+            // Add totp_secret to options
+            options.add("totp_secret")
+            options.add(totpSecret)
+            android.util.Log.e(TAG, "Added totp_secret to options")
+        }
         
-        process = mRclone.config("create", opts)
+        // Step 1: Create the remote entry (this just saves email/pass, no auth)
+        android.util.Log.e(TAG, "Step 1: Running config create...")
+        process = mRclone.configCreate(options)
         if (process == null) {
-            FLog.e(TAG, "Failed to start rclone config create for Internxt")
+            android.util.Log.e(TAG, "Step 1 FAILED: process is null")
+            return false
+        }
+        
+        var createProc = process!!
+        android.util.Log.e(TAG, "Step 1: Waiting for config create to finish...")
+        
+        // Drain output to prevent blocking
+        val createOutput = StringBuilder()
+        Thread {
+            try {
+                createProc.inputStream.bufferedReader().forEachLine { createOutput.appendLine(it) }
+            } catch (e: Exception) {}
+        }.start()
+        Thread {
+            try {
+                createProc.errorStream.bufferedReader().forEachLine { createOutput.appendLine(it) }
+            } catch (e: Exception) {}
+        }.start()
+        
+        try {
+            val finished = createProc.waitFor(1, java.util.concurrent.TimeUnit.MINUTES)
+            android.util.Log.e(TAG, "Step 1 finished=$finished, exitCode=${if (finished) createProc.exitValue() else -1}")
+            android.util.Log.e(TAG, "Step 1 output: $createOutput")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Step 1 EXCEPTION: ${e.message}")
+            createProc.destroyForcibly()
+            return false
+        }
+        
+        // Extract remote name from options (first element)
+        val remoteName = if (options.isNotEmpty()) options[0] else {
+            android.util.Log.e(TAG, "ERROR: options empty, cannot get remote name")
+            return false
+        }
+        android.util.Log.e(TAG, "Step 2: Running config reconnect for '$remoteName'...")
+        
+        // Step 2: Run config reconnect to complete the interactive auth
+        return runConfigReconnect(remoteName)
+    }
+    
+    /**
+     * Runs config reconnect to complete Internxt authentication.
+     * Handles both 2FA and mnemonic confirmation interactively.
+     */
+    private fun runConfigReconnect(remoteName: String): Boolean {
+        // rclone config reconnect expects format: remoteName:
+        val reconnectOptions = arrayListOf("$remoteName:")
+        android.util.Log.e(TAG, "Starting config reconnect for: $remoteName:")
+        process = mRclone.config("reconnect", reconnectOptions)
+        
+        if (process == null) {
+            android.util.Log.e(TAG, "Failed to start config reconnect")
             return false
         }
         
         val proc = process!!
+        var twoFactorHandled = false
+        var confirmHandled = false
+        var processOutput = ""
         
-        // Create the interactive runner flow
-        // Step 1: Wait for 2FA prompt (if account has 2FA enabled)
-        val twoFactorStep = OauthHelper.InternxtTwoFactorStep(mContext)
-        
-        // Step 2: After 2FA, wait for config completion confirmation
-        val finishStep = OauthHelper.InternxtFinishStep()
-        twoFactorStep.addFollowing(finishStep)
-        
-        // Also handle case where 2FA is not required (goes straight to finish)
-        // We need parallel steps for both possibilities
-        val directFinishStep = OauthHelper.InternxtFinishStep()
-        
-        // Error handler
-        val errorHandler = InteractiveRunner.ErrorHandler { e ->
-            FLog.e(TAG, "Internxt config error", e)
-            proc.destroy()
+        val outputReader = Thread {
+            try {
+                val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.inputStream))
+                val errorReader = java.io.BufferedReader(java.io.InputStreamReader(proc.errorStream))
+                val buffer = StringBuilder()
+                
+                while (!Thread.currentThread().isInterrupted) {
+                    var readSomething = false
+                    while (errorReader.ready()) {
+                        val char = errorReader.read()
+                        if (char == -1) break
+                        buffer.append(char.toChar())
+                        readSomething = true
+                    }
+                    while (reader.ready()) {
+                        val char = reader.read()
+                        if (char == -1) break
+                        buffer.append(char.toChar())
+                        readSomething = true
+                    }
+                    
+                    if (readSomething) {
+                        val output = buffer.toString()
+                        processOutput = output
+                        android.util.Log.e(TAG, "Reconnect buffer: $output")
+                        
+                        // Check for 2FA prompt
+                        if (!twoFactorHandled && output.contains("Two-factor authentication code")) {
+                            android.util.Log.e(TAG, "2FA prompt detected, showing dialog")
+                            twoFactorHandled = true
+                            val code = getTwoFactorCodeFromUser()
+                            if (code.isNotEmpty()) {
+                                proc.outputStream.write("$code\n".toByteArray())
+                                proc.outputStream.flush()
+                                android.util.Log.e(TAG, "2FA code sent")
+                            }
+                            buffer.clear()
+                        }
+                        
+                        // Check for mnemonic confirmation (various patterns)
+                        if (!confirmHandled && (output.contains("Keep this") || output.contains("y/n"))) {
+                            android.util.Log.e(TAG, "Confirmation detected, sending 'y'")
+                            confirmHandled = true
+                            proc.outputStream.write("y\n".toByteArray())
+                            proc.outputStream.flush()
+                        }
+                    }
+                    Thread.sleep(50)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Reader thread ended: ${e.message}")
+            }
         }
+        outputReader.start()
         
-        // Try with 2FA first, but also allow direct finish
-        // Use a custom approach: read output and decide
         return try {
-            val runner = InteractiveRunner(twoFactorStep, errorHandler, proc)
-            OauthHelper.registerRunner(runner)
-            runner.runSteps()
+            val completed = proc.waitFor(5, java.util.concurrent.TimeUnit.MINUTES)
+            outputReader.interrupt()
+            outputReader.join(1000)
             
-            proc.waitFor()
-            proc.exitValue() == 0
+            if (!completed) {
+                FLog.e(TAG, "Config reconnect timed out")
+                proc.destroyForcibly()
+                return false
+            }
+            
+            val exitCode = proc.exitValue()
+            FLog.d(TAG, "Config reconnect exited with code: $exitCode")
+            exitCode == 0
         } catch (e: Exception) {
-            FLog.e(TAG, "Internxt config failed", e)
-            proc.destroy()
+            FLog.e(TAG, "Config reconnect failed", e)
+            proc.destroyForcibly()
             false
         }
+    }
+
+    private fun getAuthPreferenceFromUser(): String {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var choice = "CANCEL"
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(mContext)
+            builder.setTitle(R.string.internxt_auth_method_title)
+
+            
+            val options = arrayOf(
+                mContext.getString(R.string.internxt_auth_option_temp),
+                mContext.getString(R.string.internxt_auth_option_perm)
+            )
+            
+            builder.setItems(options) { dialog, which ->
+                if (which == 0) {
+                    choice = "TEMPORARY"
+                } else {
+                    choice = "PERMANENT"
+                }
+                latch.countDown()
+            }
+            
+            builder.setNegativeButton(android.R.string.cancel) { _, _ ->
+                latch.countDown()
+            }
+            builder.setCancelable(false)
+            builder.show()
+        }
+
+        try {
+            latch.await(5, java.util.concurrent.TimeUnit.MINUTES)
+        } catch (e: Exception) {
+            FLog.e(TAG, "Error waiting for user auth preference", e)
+        }
+        return choice
+    }
+
+    private fun getTOTPSecretFromUser(): String {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var secret = ""
+        
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(mContext)
+            builder.setTitle(R.string.internxt_totp_secret_title)
+            builder.setMessage(R.string.internxt_totp_secret_message)
+            
+            val inputLayout = com.google.android.material.textfield.TextInputLayout(mContext)
+            inputLayout.hint = mContext.getString(R.string.internxt_totp_secret_hint)
+            
+            val input = com.google.android.material.textfield.TextInputEditText(mContext)
+            input.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            inputLayout.addView(input)
+            
+            val padding = (16 * mContext.resources.displayMetrics.density).toInt()
+            inputLayout.setPadding(padding, 0, padding, 0)
+            builder.setView(inputLayout)
+            
+            builder.setPositiveButton(android.R.string.ok) { _, _ ->
+                secret = input.text?.toString()?.trim() ?: ""
+                latch.countDown()
+            }
+            builder.setNegativeButton(android.R.string.cancel) { _, _ ->
+                latch.countDown()
+            }
+            builder.setCancelable(false)
+            builder.show()
+        }
+        
+        try {
+            latch.await(5, java.util.concurrent.TimeUnit.MINUTES)
+        } catch (e: Exception) {
+            FLog.e(TAG, "Error waiting for user TOTP secret", e)
+        }
+        return secret
+    }
+
+    private fun getTwoFactorCodeFromUser(): String {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var code = ""
+        
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(mContext)
+            builder.setTitle(R.string.internxt_2fa_title)
+            builder.setMessage(R.string.internxt_2fa_message)
+            
+            val inputLayout = com.google.android.material.textfield.TextInputLayout(mContext)
+            inputLayout.hint = mContext.getString(R.string.internxt_2fa_hint)
+            
+            val input = com.google.android.material.textfield.TextInputEditText(mContext)
+            input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            inputLayout.addView(input)
+            
+            val padding = (16 * mContext.resources.displayMetrics.density).toInt()
+            inputLayout.setPadding(padding, 0, padding, 0)
+            builder.setView(inputLayout)
+            
+            builder.setPositiveButton(android.R.string.ok) { _, _ ->
+                code = input.text?.toString()?.trim() ?: ""
+                latch.countDown()
+            }
+            builder.setNegativeButton(android.R.string.cancel) { _, _ ->
+                latch.countDown()
+            }
+            builder.setCancelable(false)
+            builder.show()
+        }
+        
+        try {
+            latch.await(5, java.util.concurrent.TimeUnit.MINUTES)
+        } catch (e: Exception) {
+            FLog.e(TAG, "Error waiting for user input", e)
+        }
+        return code
     }
 
     override fun onCancelled() {
@@ -138,3 +373,4 @@ class ConfigCreate internal constructor(
         mContext.startActivity(intent)
     }
 }
+

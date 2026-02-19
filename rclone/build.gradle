@@ -95,7 +95,8 @@ def getCrossCompiler(abi) {
     def osName = System.properties['os.name']
     def osArch = System.properties['os.arch']
     def os = null
-    if (osName.startsWith('Windows') && osArch == 'amd64') {
+    def isWindows = osName.startsWith('Windows')
+    if (isWindows && osArch == 'amd64') {
         os = 'windows-x86_64'
     } else if (osName.startsWith('Linux') && osArch == 'amd64') {
         os = 'linux-x86_64'
@@ -116,6 +117,12 @@ def getCrossCompiler(abi) {
         'x86_64': "x86_64-linux-android${NDK_TOOLCHAIN_VERSION}-clang",
     ]
 
+    def compilerName = abiToCompiler[abi]
+    // On Windows, NDK clang wrappers are .cmd files
+    if (isWindows) {
+        compilerName += '.cmd'
+    }
+
     return Paths.get(
         findNdkDir(),
         'toolchains',
@@ -123,9 +130,10 @@ def getCrossCompiler(abi) {
         'prebuilt',
         os,
         'bin',
-        abiToCompiler[abi],
-    )
+        compilerName,
+    ).toString()
 }
+
 
 def getOutputPath(abi) {
     return Paths.get(OUTPUT_BASE_PATH, abi, 'librclone.so').toString()
@@ -141,17 +149,28 @@ def buildRclone(abi) {
 
     return {
         doLast {
+            // Capture GOROOT at execution time
+            def goRootOutput = new ByteArrayOutputStream()
             exec {
-                environment 'GOPATH', GOPATH
-                def crossCompiler = getCrossCompiler(abi)
-                environment 'CC', crossCompiler
-                environment 'CC_FOR_TARGET', crossCompiler
-                environment 'GOOS', 'android'
-                environment 'CGO_ENABLED', '1'
-                environment 'CGO_LDFLAGS', '-fuse-ld=lld -Wl,--hash-style=both -s'
-                abiToEnv[abi].each {entry -> environment entry.key, entry.value}
+                commandLine 'go', 'env', 'GOROOT'
+                standardOutput = goRootOutput
+            }
+            def goRoot = goRootOutput.toString().trim()
+
+            def commonEnv = [
+                'GOPATH'      : GOPATH,
+                'GOROOT'      : goRoot,
+                'GOOS'        : 'android',
+                'CGO_ENABLED' : '0',
+            ] + abiToEnv[abi]
+
+            // Step 2: Build rclone itself as a static binary
+            // We name it librclone.so because the Android app expects that name
+            // and uses Runtime.exec() to run it as a subprocess.
+            exec {
+                commonEnv.each { k, v -> environment k, v }
                 workingDir CACHE_PATH
-                def ldflags = "-buildid= -X github.com/rclone/rclone/fs.Version=${RCLONE_VERSION}${RCLONE_CUSTOM_VERSION_SUFFIX}"
+                def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${RCLONE_VERSION}${RCLONE_CUSTOM_VERSION_SUFFIX}"
                 commandLine (
                     'go',
                     'build',
@@ -168,6 +187,8 @@ def buildRclone(abi) {
         }
     }
 }
+
+
 
 task createRcloneModule(type: Exec) {
     // We create a dummy go module to be able to checkout our specific rclone
@@ -200,11 +221,41 @@ task checkoutRclone(type: Exec, dependsOn: createRcloneModule) {
     commandLine 'go', 'get', '-v', '-d', "${RCLONE_MODULE}@v${RCLONE_VERSION}"
 }
 
-task buildArm(dependsOn: checkoutRclone) {
+task patchRclone(type: Copy, dependsOn: checkoutRclone) {
+    from 'patches'
+    into "${CACHE_PATH}/gopath/pkg/mod/${RCLONE_MODULE}@v${RCLONE_VERSION}/backend"
+    
+    // We need to make the target directories writable first because Go module cache is read-only.
+    // We also make the directory itself writable (with /D) so new files can be created inside it.
+    doFirst {
+        def backendPath = Paths.get(CACHE_PATH, 'gopath', 'pkg', 'mod', "${RCLONE_MODULE}@v${RCLONE_VERSION}", 'backend').toAbsolutePath().toString()
+        def backendDir = new File(backendPath)
+
+        if (backendDir.exists()) {
+             if (System.properties['os.name'].toLowerCase().contains('windows')) {
+                 // Remove read-only attribute recursively from the backend directory to allow patching
+                 exec {
+                     // Process all files in backend directory and subdirectories
+                     commandLine 'attrib', '-R', backendPath + "\\*", '/S'
+                 }
+                 exec {
+                     // Process the backend directory itself and subdirectories
+                     commandLine 'attrib', '-R', backendPath, '/D', '/S'
+                 }
+             } else {
+                 exec {
+                     commandLine 'chmod', '-R', 'u+w', backendPath
+                 }
+             }
+        }
+    }
+}
+
+task buildArm(dependsOn: patchRclone) {
     configure buildRclone('armeabi-v7a')
 }
 
-task buildArm64(dependsOn: checkoutRclone) {
+task buildArm64(dependsOn: patchRclone) {
     configure buildRclone('arm64-v8a')
 }
 

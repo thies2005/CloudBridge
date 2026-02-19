@@ -337,7 +337,7 @@
     <string name="pref_bugreport_start_summary">点击按钮开始数据收集，然后尝试重新创建问题。完成后停止数据收集。</string>
     <string name="pref_send_sigquit_title">调试：使用 SIGQUIT 停止</string>
     <string name="pref_send_sigquit_summary">使用 kill-SIGQUIT 停止所有 Rclone 进程。需要启用日志记录。</string>
-    <string name="sync_notification_transferred">已转移 %s 共 %s</string>
+    <string name="sync_notification_transferred">已转移 %1$s 共 %2$s</string>
     <string name="sync_notification_speed">速度: %s</string>
     <string name="sync_notification_remaining">剩余: %s</string>
     <string name="sync_notification_errors">错误: %d</string>

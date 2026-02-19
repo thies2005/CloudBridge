@@ -385,6 +385,10 @@
     <string name="pref_send_sigquit_summary">Stops all rclone processes with kill -SIGQUIT. Requires logging enabled.</string>
     <string name="sync_notification_transferred">Transferred %1$s of %2$s</string>
     <string name="sync_notification_speed">"Speed:     %s"</string>
+    <string name="sync_notification_upload_speed">"Upload:    %s"</string>
+    <string name="sync_notification_download_speed">"Download:  %s"</string>
+    <string name="sync_notification_session_uploaded">"Uploaded:  %s"</string>
+    <string name="sync_notification_session_downloaded">"Downloaded: %s"</string>
     <string name="sync_notification_remaining">"Remaining: %s"</string>
     <string name="sync_notification_errors">"Errors:    %d"</string>
     <string name="sync_notification_deletions">"Deletions: %d"</string>
@@ -622,4 +626,19 @@
     <string name="pref_proxy_password">Password</string>
     <string name="intro_update_checks_title">Update Notifications</string>
     <string name="intro_update_checks_description">If you want to recieve updates, you can enable the switch below! We will notify if an update is available, and you can then choose to apply it.</string>
+
+    <!-- Internxt 2FA -->
+    <string name="internxt_2fa_title">Two-Factor Authentication</string>
+    <string name="internxt_2fa_message">Enter the 6-digit code from your authenticator app to complete Internxt login.</string>
+    <string name="internxt_2fa_hint">6-digit code</string>
+
+    <string name="internxt_auth_method_title">Authentication Method</string>
+    <string name="internxt_auth_method_message">Choose your login type:</string>
+    <string name="internxt_auth_option_temp">Login until expire (2FA Code)</string>
+    <string name="internxt_auth_option_perm">Auto-Login (2FA Seed)</string>
+
+    <string name="internxt_totp_secret_title">2FA Secret (Seed)</string>
+    <string name="internxt_totp_secret_message">Enter your 2FA secret (seed) to enable auto-login. This is the code you scanned or typed into your authenticator app.</string>
+    <string name="internxt_totp_secret_hint">Base32 Secret (e.g. JBSWY3DPEHPK3PXP)</string>
 </resources>
+
