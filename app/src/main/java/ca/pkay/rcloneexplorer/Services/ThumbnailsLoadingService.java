@@ -40,21 +40,24 @@ public class ThumbnailsLoadingService extends IntentService {
         int serverPort = intent.getIntExtra(SERVER_PORT, 29179);
         FLog.d(TAG, "onHandleIntent: hiddenPath=%s", hiddenPath);
         process = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, serverPort, false, null, null, remote, "", hiddenPath);
-        if (process != null) {
-            try {
-                if(PreferenceManager.getDefaultSharedPreferences(this).
-                        getBoolean(getString(R.string.pref_key_logs), false)) {
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            rclone.logErrorOutput(process);
-                        }
-                    }.start();
-                }
-                process.waitFor();
-            } catch (InterruptedException e) {
-                FLog.e(TAG, "onHandleIntent: error waiting for process", e);
+        if (process == null) {
+            FLog.e(TAG, "onHandleIntent: failed to start rclone serve process");
+            return;
+        }
+
+        try {
+            if(PreferenceManager.getDefaultSharedPreferences(this).
+                    getBoolean(getString(R.string.pref_key_logs), false)) {
+                new Thread() {
+                    @Override
+                    public void run() {
+                        rclone.logErrorOutput(process);
+                    }
+                }.start();
             }
+            process.waitFor();
+        } catch (InterruptedException e) {
+            FLog.e(TAG, "onHandleIntent: error waiting for process", e);
         }
     }
 
