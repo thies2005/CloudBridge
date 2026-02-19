@@ -421,8 +421,15 @@ public class VirtualContentProvider extends SingleRootProvider {
             String originalParentDocId = parentDocumentId;
             parentDocumentId = parentDocumentId.substring(ROOT_DOC_ID.length() + 1);
             String remoteName = getRemoteName(getShortId(originalParentDocId));
-            // TODO: missing guard if remote name is garbage => IllegalArgumentException
-            RemoteItem remoteItem = getRemoteItem(remoteName);
+            if (remoteName.isEmpty()) {
+                throw new FileNotFoundException("Invalid remote name: " + originalParentDocId);
+            }
+            RemoteItem remoteItem;
+            try {
+                remoteItem = getRemoteItem(remoteName);
+            } catch (IllegalArgumentException e) {
+                throw new FileNotFoundException("Remote not found: " + remoteName);
+            }
             int idx = parentDocumentId.indexOf("/");
             String dirPath = -1 != idx ? parentDocumentId.substring(idx + 1) : "";
 
@@ -951,6 +958,9 @@ public class VirtualContentProvider extends SingleRootProvider {
     @VisibleForTesting
     static String getRemoteName(@NonNull String documentId) {
         int nameEnd = documentId.indexOf(':');
+        if (nameEnd == -1) {
+            return "";
+        }
         // 0 if there is no path separator, or the index of the first path name character
         int nameStart = documentId.lastIndexOf('/') + 1;
         if (nameStart > nameEnd) {
