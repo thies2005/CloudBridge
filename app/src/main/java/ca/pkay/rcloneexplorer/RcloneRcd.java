@@ -9,6 +9,7 @@ import android.util.Base64;
 import android.util.SparseArray;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.PreferenceManager;
 import ca.pkay.rcloneexplorer.util.FLog;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
@@ -245,12 +246,9 @@ public class RcloneRcd {
      * @param remoteName
      * @return
      */
-    private String remoteNameAsFs(String remoteName) {
+    @VisibleForTesting
+    static String remoteNameAsFs(String remoteName) {
         remoteName += ':';
-        // TODO: figure out if this is required or vestigal
-        if (':' != remoteName.charAt(remoteName.length() - 1)) {
-            remoteName += ':';
-        }
         return remoteName;
     }
 

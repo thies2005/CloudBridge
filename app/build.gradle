@@ -134,6 +134,10 @@ android {
 
     }
 
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
     gradle.projectsEvaluated {
         preBuild.dependsOn(':rclone:buildAll')
     }
