@@ -352,7 +352,8 @@ public class VirtualContentProvider extends SingleRootProvider {
                 Context context = Objects.requireNonNull(getContext());
                 bundle.putString(DocumentsContract.EXTRA_ERROR, context.getString(R.string.virtual_content_provider_null_content));
                 bundle.putString(DocumentsContract.EXTRA_INFO, context.getString(R.string.virtual_content_provider_null_content));
-                cursor = new ExtrasMatrixCursor(projection, bundle);
+                cursor = new MatrixCursor(projection);
+                cursor.setExtras(bundle);
             }
             return cursor;
         }
@@ -461,7 +462,9 @@ public class VirtualContentProvider extends SingleRootProvider {
                     }
                     bundle.putString(DocumentsContract.EXTRA_ERROR, extraInfo);
                     bundle.putString(DocumentsContract.EXTRA_INFO, context.getString(R.string.virtual_content_provider_exception_advice));
-                    return new ExtrasMatrixCursor(DEFAULT_DOCUMENT_PROJECTION, bundle);
+                    MatrixCursor cursor = new MatrixCursor(DEFAULT_DOCUMENT_PROJECTION);
+                    cursor.setExtras(bundle);
+                    return cursor;
                 }
                 Arrays.sort(directFiles, decodeSorting(sortOrder));
                 int flags = getFlags(remoteItem);
@@ -1212,7 +1215,9 @@ public class VirtualContentProvider extends SingleRootProvider {
         if (!acquireRcd()) {
             Bundle extras = new Bundle(1);
             extras.putString(DocumentsContract.EXTRA_ERROR, context.getString(R.string.virtual_content_provider_service_error));
-            return new ExtrasMatrixCursor(projection, extras);
+            MatrixCursor cursor = new MatrixCursor(projection);
+            cursor.setExtras(extras);
+            return cursor;
         }
         try (MatrixCursor cursor = new MatrixCursor(projection)) {
             final Uri notificationUri;
@@ -1233,7 +1238,9 @@ public class VirtualContentProvider extends SingleRootProvider {
                 Bundle extras = new Bundle(1);
                 extras.putString(DocumentsContract.EXTRA_INFO, context.getString(R.string.virtual_content_provider_no_remotes));
                 FLog.d(TAG, "getRemotesAsCursor: No remotes, returning empty cursor");
-                return new ExtrasMatrixCursor(projection, extras);
+                MatrixCursor emptyCursor = new MatrixCursor(projection);
+                emptyCursor.setExtras(extras);
+                return emptyCursor;
             }
             for (RemoteItem item : remotes.values()) {
                 // Exclude from results - no need to loop back
@@ -1252,7 +1259,9 @@ public class VirtualContentProvider extends SingleRootProvider {
             Bundle extras = new Bundle(1);
             extras.putString(DocumentsContract.EXTRA_ERROR,
                     context.getString(R.string.virtual_content_provider_exception_error, e.getError()));
-            return new ExtrasMatrixCursor(projection, extras);
+            MatrixCursor cursor = new MatrixCursor(projection);
+            cursor.setExtras(extras);
+            return cursor;
         }
     }
 
@@ -1657,21 +1666,5 @@ public class VirtualContentProvider extends SingleRootProvider {
         }
     }
 
-    // TODO: Remove when target api >= 23, MatrixCursor.setExtras(...)
-    private static final class ExtrasMatrixCursor extends MatrixCursor {
-
-        private final Bundle extras;
-
-        public ExtrasMatrixCursor(String[] columnNames, Bundle extras) {
-            super(columnNames);
-            this.extras = extras;
-        }
-
-        @Override
-        public Bundle getExtras() {
-            return extras;
-        }
-
-    }
 
 }
