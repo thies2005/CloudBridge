@@ -38,6 +38,7 @@ import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RuntimeConfiguration;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
+import ca.pkay.rcloneexplorer.util.FileUtil;
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager;
 import es.dmoral.toasty.Toasty;
 
@@ -233,7 +234,20 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                 }
                 // todo: encrypt external cache
                 File cacheDir = getExternalCacheDir();
-                File outFile = new File(cacheDir, fileName);
+                if (cacheDir == null) {
+                    FLog.e(TAG, "External cache dir not available");
+                    success = false;
+                    continue;
+                }
+                File outFile;
+                try {
+                    outFile = FileUtil.createSafeFile(cacheDir, fileName);
+                } catch (IOException | SecurityException e) {
+                    FLog.e(TAG, "Failed to create safe file", e);
+                    success = false;
+                    continue;
+                }
+
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      FileOutputStream out = new FileOutputStream(outFile)) {
                     if (null == in) {
