@@ -241,34 +241,26 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
                 finish();
             }
         } else {
-            current = current.getParentFile();
-            if (current.equals(root)) {
-                actionBar.setTitle(R.string.file_picker_root_title);
-            } else {
-                actionBar.setTitle(current.getName());
+            File parent = current.getParentFile();
+            if (parent == null) {
+                finish();
+                return;
             }
-            fileList.clear();
-            File[] files = current.listFiles();
-            if (null != files) {
-                fileList.addAll(Arrays.asList(files));
-            }
-            sortDirectory();
-            filePickerAdapter.setNewData(fileList);
-
-            if (destinationPickerType) {
-                speedDialView.show();
-            }
+            navigateTo(parent);
             breadcrumbView.removeLastCrumb();
         }
     }
 
-    @Override
-    public void onDirectoryClicked(File file) {
-        actionBar.setTitle(file.getName());
+    private void navigateTo(File file) {
+        if (file.equals(root)) {
+            actionBar.setTitle(R.string.file_picker_root_title);
+        } else {
+            actionBar.setTitle(file.getName());
+        }
         current = file;
         fileList.clear();
         File[] files = file.listFiles();
-        if(null != files) {
+        if (null != files) {
             fileList.addAll(Arrays.asList(files));
         }
         sortDirectory();
@@ -277,6 +269,11 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
         if (destinationPickerType) {
             speedDialView.show();
         }
+    }
+
+    @Override
+    public void onDirectoryClicked(File file) {
+        navigateTo(file);
         buildCrumbsFromCurrent();
     }
 
@@ -576,7 +573,16 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
 
     @Override
     public void onBreadCrumbClicked(String path) {
-        // todo: implement switching path
-        //breadcrumbView.removeCrumbsUpTo(path);
+        if (path == null || path.isEmpty()) {
+            return;
+        }
+        File file = new File(path);
+        if (!file.exists() || !file.isDirectory() || !file.canRead()) {
+            return;
+        }
+        if (current.equals(file)) {
+            return;
+        }
+        navigateTo(file);
     }
 }
