@@ -424,15 +424,11 @@ class DatabaseHandler(context: Context?) :
     }
 
     fun deleteEveryting() {
-        for (trigger in allTrigger) {
-            deleteTrigger(trigger.id)
-        }
-        for (task in allTasks) {
-            deleteTask(task.id)
-        }
-        for (filter in allFilters) {
-            deleteFilter(filter.id)
-        }
+        val db = writableDatabase
+        db.delete(Trigger.TABLE_NAME, null, null)
+        db.delete(Task.TABLE_NAME, null, null)
+        db.delete(Filter.TABLE_NAME, null, null)
+        db.close()
     }
 
     private fun getBoolean(cursor: Cursor, cursorid: Int): Boolean {
