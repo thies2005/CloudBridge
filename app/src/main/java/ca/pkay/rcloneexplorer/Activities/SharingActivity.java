@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 import ca.pkay.rcloneexplorer.Dialogs.Dialogs;
 import ca.pkay.rcloneexplorer.Dialogs.LoadingDialog;
@@ -47,7 +48,7 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
     private static final String TAG = "SharingActivity";
     private Fragment fragment;
     private ArrayList<String> uploadList;
-    private boolean isDataReady;
+    private CountDownLatch copyLatch;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -134,7 +135,7 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         if (uri == null) {
             finish();
         }
-        isDataReady = false;
+        copyLatch = new CountDownLatch(1);
         new CopyFile(this, uri).execute();
     }
 
@@ -143,7 +144,7 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         if (uris == null) {
             finish();
         }
-        isDataReady = false;
+        copyLatch = new CountDownLatch(1);
         new CopyFile(this, uris).execute();
     }
 
@@ -174,12 +175,10 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
 
         @Override
         protected Void doInBackground(Void... voids) {
-            while (!isDataReady) {
-                try {
-                    Thread.sleep(3000);
-                } catch (InterruptedException e) {
-                    FLog.e(TAG, "UploadTask/doInBackground: error waiting for data", e);
-                }
+            try {
+                copyLatch.await();
+            } catch (InterruptedException e) {
+                FLog.e(TAG, "UploadTask/doInBackground: error waiting for data", e);
             }
             return null;
         }
@@ -283,7 +282,7 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                 Toasty.error(context, getString(R.string.error_retrieving_files), Toast.LENGTH_LONG, true).show();
                 finish();
             }
-            isDataReady = true;
+            copyLatch.countDown();
         }
     }
 }
