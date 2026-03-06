@@ -18,6 +18,7 @@ import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.NotificationUtils;
 
+import java.io.IOException;
 
 public class StreamingService extends IntentService {
 
@@ -96,28 +97,32 @@ public class StreamingService extends IntentService {
 
         startForeground(PERSISTENT_NOTIFICATION_ID, builder.build());
 
-        switch (protocol) {
-            case SERVE_FTP:
-                runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_FTP, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
-                break;
-            case SERVE_WEBDAV:
-                runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_WEBDAV, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
-                break;
-            case SERVE_DLNA:
-                runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_DLNA, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
-                break;
-            case SERVE_HTTP:
-            default:
-                runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
-                break;
-        }
-
-        if (runningProcess != null) {
-            try {
-                runningProcess.waitFor();
-            } catch (InterruptedException e) {
-                FLog.e(TAG, "onHandleIntent: error waiting for process", e);
+        try {
+            switch (protocol) {
+                case SERVE_FTP:
+                    runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_FTP, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
+                    break;
+                case SERVE_WEBDAV:
+                    runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_WEBDAV, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
+                    break;
+                case SERVE_DLNA:
+                    runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_DLNA, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
+                    break;
+                case SERVE_HTTP:
+                default:
+                    runningProcess = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, port, allowRemoteAccess, authenticationUsername, authenticationPassword, remote, servePath);
+                    break;
             }
+
+            if (runningProcess != null) {
+                try {
+                    runningProcess.waitFor();
+                } catch (InterruptedException e) {
+                    FLog.e(TAG, "onHandleIntent: error waiting for process", e);
+                }
+            }
+        } catch (IOException e) {
+            FLog.e(TAG, "serve: error starting rclone", e);
         }
 
         if (runningProcess != null && runningProcess.exitValue() != 0) {

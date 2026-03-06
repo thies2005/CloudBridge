@@ -601,7 +601,7 @@ public class Rclone {
 
     public Process serve(int protocol, int port, boolean allowRemoteAccess, @Nullable String user,
                          @Nullable String password, @NonNull RemoteItem remote, @Nullable String servePath,
-                         @Nullable String baseUrl) {
+                         @Nullable String baseUrl) throws IOException {
         String remoteName = remote.getName();
         String localRemotePath = (remote.isRemoteType(RemoteItem.LOCAL)) ? getLocalRemotePathPrefix(remote, context)  + "/" : "";
         String path = (servePath.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath : remoteName + ":" + localRemotePath + servePath;
@@ -656,16 +656,10 @@ public class Rclone {
 
         String[] env = getRcloneEnv();
         String[] command = params.toArray(new String[0]);
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "serve: error starting rclone", e);
-            // todo: guard callers against null result
-            return null;
-        }
+        return getRuntimeProcess(command, env);
     }
 
-    public Process serve(int protocol, int port, boolean allowRemoteAccess, String user, String password, RemoteItem remote, String servePath) {
+    public Process serve(int protocol, int port, boolean allowRemoteAccess, String user, String password, RemoteItem remote, String servePath) throws IOException {
         return serve(protocol, port, allowRemoteAccess, user, password, remote, servePath, null);
     }
 

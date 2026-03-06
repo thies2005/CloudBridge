@@ -9,6 +9,8 @@ import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.util.FLog;
 
+import java.io.IOException;
+
 public class ThumbnailsLoadingService extends IntentService {
 
     private static final String TAG = "ThumbnailsLoadingSvc";
@@ -39,22 +41,26 @@ public class ThumbnailsLoadingService extends IntentService {
         String hiddenPath = "/" + intent.getStringExtra(HIDDEN_PATH) + '/' + remote.getName();
         int serverPort = intent.getIntExtra(SERVER_PORT, 29179);
         FLog.d(TAG, "onHandleIntent: hiddenPath=%s", hiddenPath);
-        process = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, serverPort, false, null, null, remote, "", hiddenPath);
-        if (process != null) {
-            try {
-                if(PreferenceManager.getDefaultSharedPreferences(this).
-                        getBoolean(getString(R.string.pref_key_logs), false)) {
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            rclone.logErrorOutput(process);
-                        }
-                    }.start();
+        try {
+            process = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, serverPort, false, null, null, remote, "", hiddenPath);
+            if (process != null) {
+                try {
+                    if(PreferenceManager.getDefaultSharedPreferences(this).
+                            getBoolean(getString(R.string.pref_key_logs), false)) {
+                        new Thread() {
+                            @Override
+                            public void run() {
+                                rclone.logErrorOutput(process);
+                            }
+                        }.start();
+                    }
+                    process.waitFor();
+                } catch (InterruptedException e) {
+                    FLog.e(TAG, "onHandleIntent: error waiting for process", e);
                 }
-                process.waitFor();
-            } catch (InterruptedException e) {
-                FLog.e(TAG, "onHandleIntent: error waiting for process", e);
             }
+        } catch (IOException e) {
+            FLog.e(TAG, "serve: error starting rclone", e);
         }
     }
 
