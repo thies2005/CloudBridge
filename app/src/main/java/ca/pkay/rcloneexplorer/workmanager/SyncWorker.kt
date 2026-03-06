@@ -280,9 +280,13 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
     }
 
     private fun showSuccessNotification(notificationId: Int) {
-        //Todo: Show sync-errors in notification. Also see line 169
-
         var message = generateSuccessMessage(statusObject)
+
+        val errors = statusObject.getAllErrorMessages()
+        if (errors.isNotEmpty()) {
+            message += "\n\n$errors"
+        }
+
         mNotificationManager.showSuccessNotificationOrReport(
             mTitle,
             message,

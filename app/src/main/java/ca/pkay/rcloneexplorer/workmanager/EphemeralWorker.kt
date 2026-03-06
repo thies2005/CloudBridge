@@ -306,11 +306,15 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
     }
 
     private fun showSuccessNotification(notificationId: Int) {
-        //Todo: Show sync-errors in notification. Also see line 169
         //Todo: This should be context dependend on the type. It is currently not!
 
 
         var message = mNotificationManager?.generateSuccessMessage(statusObject, getCurrentFile())?: "error"
+
+        val errors = statusObject.getAllErrorMessages()
+        if (errors.isNotEmpty()) {
+            message += "\n\n$errors"
+        }
 
         mNotificationManager?.showSuccessNotification(
             mTitle,
