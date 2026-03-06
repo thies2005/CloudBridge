@@ -331,19 +331,17 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
 
         remoteDropdown.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parentView: AdapterView<*>?, selectedItemView: View, position: Int, id: Long) {
-                remotePath.setText("")
                 val remotename = remoteDropdown.selectedItem.toString()
                 if(existingTask?.remoteId.equals(remotename)) {
                     remotePath.setText(remotePathHolder)
+                } else {
+                    remotePath.setText("")
                 }
-
             }
 
             override fun onNothingSelected(parentView: AdapterView<*>?) {}
         }
 
-        // Todo: This will break if the remote changed, but the path did not.
-        //       Catch this issue by forcing the path to be emtpy
         remotePath.onFocusChangeListener = object : View.OnFocusChangeListener {
             override fun onFocusChange(p0: View?, p1: Boolean) {
                 startRemotePicker(
