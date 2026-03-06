@@ -17,15 +17,18 @@ class SyncManager(private var mContext: Context) {
         queue(trigger.triggerTarget)
     }
 
-    fun queue(task: Task) {
-        queue(task.id)
+    @JvmOverloads
+    fun queue(task: Task, isSilent: Boolean = false) {
+        queue(task.id, isSilent)
     }
 
-    fun queue(taskID: Long) {
+    @JvmOverloads
+    fun queue(taskID: Long, isSilent: Boolean = false) {
         val uploadWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
 
         val data = Data.Builder()
         data.putLong(SyncWorker.TASK_ID, taskID)
+        data.putBoolean(SyncWorker.EXTRA_TASK_SILENT, isSilent)
 
         uploadWorkRequest.setInputData(data.build())
         uploadWorkRequest.addTag(taskID.toString())

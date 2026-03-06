@@ -49,7 +49,6 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
         const val TASK_CANCEL_ACTION = "CANCEL_TASK"
         const val EXTRA_TASK_ID = "task"
 
-        // Todo: Allow SyncWorker to run in silent mode, or remove this!
         const val EXTRA_TASK_SILENT = "notification"
     }
 
@@ -89,6 +88,10 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
 
 
     override fun doWork(): Result {
+
+        if(inputData.keyValueMap.containsKey(EXTRA_TASK_SILENT)) {
+            silentRun = inputData.getBoolean(EXTRA_TASK_SILENT, false)
+        }
 
         prepareNotifications()
         registerBroadcastReceivers()
