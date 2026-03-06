@@ -1268,10 +1268,6 @@ public class VirtualContentProvider extends SingleRootProvider {
         if (documentId.startsWith(ROOT_DOC_PREFIX)) {
             documentId = getNoRootId(documentId);
         }
-        // Note 2020-06-07: Unclear why the remoteItem was retrieved here, commented out
-        // String remoteName = getRemoteName(documentId);
-        // TODO: missing guard if remote name is garbage => IllegalArgumentException
-        // RemoteItem remoteItem = getRemoteItem(remoteName);
         ListItem document = getFileItem(documentId);
         // Some misbehaved client apps just don't understand that openDocument() does not work on directories
         if (document == null || document.isDir) {
