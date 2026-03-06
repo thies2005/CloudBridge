@@ -116,10 +116,6 @@ class EphemeralTaskManager(private var mContext: Context) {
     }
     fun cancel(tag: String) {
 
-        //Intent syncIntent = new Intent(context, SyncService.class);
-        //syncIntent.setAction(TASK_CANCEL_ACTION);
-        //syncIntent.putExtra(EXTRA_TASK_ID, intent.getLongExtra(EXTRA_TASK_ID, -1));
-        //context.startService(syncIntent);
         Log.e("TAG", "CANCEL"+tag)
         WorkManager
             .getInstance(mContext)
