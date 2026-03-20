@@ -53,8 +53,9 @@ jobs:
       # Step 2: Read Go version from gradle.properties
       - name: Read Go version
         id: read-go-version
+        shell: bash
         run: |
-          GO_VERSION=$(grep -E "^de\.felixnuesse\.extract\.goVersion=" gradle.properties | cut -d'=' -f2")
+          GO_VERSION=$(grep '^de\.felixnuesse\.extract\.goVersion=' gradle.properties | cut -d'=' -f2)
           echo "GO_VERSION=$GO_VERSION" >> $GITHUB_ENV
           echo "Go version to build: $GO_VERSION"
 
