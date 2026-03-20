@@ -1156,6 +1156,47 @@ public class Rclone {
         return stats;
     }
 
+    public String configDump() {
+        String[] command = createCommand("config", "dump");
+        StringBuilder output = new StringBuilder();
+        Process process;
+
+        try {
+            process = getRuntimeProcess(command);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line);
+            }
+
+            process.waitFor();
+            if (process.exitValue() != 0) {
+                FLog.e(TAG, "configDump: rclone error, exit(%d)", process.exitValue());
+                logErrorOutput(process);
+                return null;
+            }
+
+            return output.toString();
+        } catch (IOException | InterruptedException e) {
+            FLog.e(TAG, "configDump: unexpected error", e);
+            return null;
+        }
+    }
+
+    public int listDirectories(String remoteName, int maxDepth) {
+        String[] command = createCommand("lsd", "--max-depth", String.valueOf(maxDepth), remoteName + ":");
+        Process process;
+
+        try {
+            process = getRuntimeProcess(command);
+            process.waitFor();
+            return process.exitValue();
+        } catch (IOException | InterruptedException e) {
+            FLog.e(TAG, "listDirectories: error for remote " + remoteName, e);
+            return -1;
+        }
+    }
+
     public class AboutResult {
         private final long used;
         private final long total;

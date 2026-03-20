@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	mrand "math/rand"
 	"strings"
 	"time"
 
@@ -179,13 +180,52 @@ func (f *Fs) reLogin(ctx context.Context) (*internxtauth.AccessResponse, error) 
 				return nil, fmt.Errorf("couldn't decrypt TOTP secret: %w", err)
 			}
 
-			// Generate TOTP code
-			code, err := generateTOTP(totpSecret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate TOTP code: %w", err)
+			// Generate TOTP code with time window retries for clock skew
+			// Try current time (T), T-1 (30 seconds ago), and T+1 (30 seconds ahead)
+			timeOffsets := []int64{0, -1, 1}
+			var lastErr error
+
+			for i, offset := range timeOffsets {
+				var code string
+				if offset == 0 {
+					// Current time
+					code, err = generateTOTP(totpSecret)
+				} else {
+					// T-1 or T+1 time window
+					code, err = generateTOTPWithOffset(totpSecret, offset)
+				}
+
+				if err != nil {
+					return nil, fmt.Errorf("failed to generate TOTP code: %w", err)
+				}
+
+				twoAuthCode = code
+				if offset != 0 {
+					fs.Debugf(f, "Generated TOTP code for 2FA with time offset %d (attempt %d/3)", offset, i+1)
+				} else {
+					fs.Debugf(f, "Generated TOTP code for 2FA (attempt 1/3)")
+				}
+
+				resp, loginErr := internxtauth.DoLogin(ctx, cfg, f.opt.Email, password, twoAuthCode)
+				if loginErr != nil {
+					// Check if it's a 401/403 error indicating bad TOTP code
+					var httpErr *sdkerrors.HTTPError
+					if errors.As(loginErr, &httpErr) && (httpErr.StatusCode() == 401 || httpErr.StatusCode() == 403) {
+						lastErr = loginErr
+						fs.Debugf(f, "2FA failed with time offset %d, trying next window", offset)
+						continue
+					}
+					// Other error, return immediately
+					return nil, fmt.Errorf("re-login failed: %w", loginErr)
+				}
+
+				// Success!
+				fs.Debugf(f, "2FA succeeded with time offset %d", offset)
+				return resp, nil
 			}
-			twoAuthCode = code
-			fs.Debugf(f, "Generated TOTP code for 2FA")
+
+			// All three attempts failed
+			return nil, fmt.Errorf("re-login failed (all TOTP time windows failed): %w", lastErr)
 		} else {
 			return nil, errors.New("account requires 2FA but no totp_secret configured")
 		}
@@ -258,24 +298,64 @@ func (f *Fs) refreshOrReLogin(ctx context.Context) error {
 	return fmt.Errorf("refresh failed: %w", refreshErr)
 }
 
+// getBackoffDuration returns the backoff duration for a given attempt number with jitter.
+// Backoff steps: 1m, 5m, 15m, 1h, 1h (maxed at 1h after attempt 5)
+// Adds ±10% random jitter.
+func getBackoffDuration(attempt int) time.Duration {
+	var baseDuration time.Duration
+	switch {
+	case attempt == 1:
+		baseDuration = time.Minute
+	case attempt == 2:
+		baseDuration = 5 * time.Minute
+	case attempt == 3:
+		baseDuration = 15 * time.Minute
+	case attempt >= 4:
+		baseDuration = time.Hour
+	default:
+		baseDuration = time.Minute
+	}
+
+	// Add ±10% jitter
+	jitter := float64(time.Duration(rand.Int63n(int64(baseDuration) / 10)))
+	return baseDuration - time.Duration(jitter)
+}
+
 // reAuthorize is called after getting 401 from the server.
-// It serializes re-auth attempts and uses a circuit-breaker to avoid infinite loops.
+// It serializes re-auth attempts and uses a soft circuit-breaker with exponential backoff.
 func (f *Fs) reAuthorize(ctx context.Context) error {
 	f.authMu.Lock()
 	defer f.authMu.Unlock()
 
-	if f.authFailed {
-		return errors.New("re-authorization permanently failed")
+	// Check if circuit breaker is open
+	if !time.Now().After(f.nextAuthAllowed) {
+		return fmt.Errorf("re-authorization blocked until %v (attempt %d/5)", f.nextAuthAllowed, f.authFailCount)
+	}
+
+	// Check if we've exceeded max retries
+	if f.authFailCount >= 5 {
+		return errors.New("auth exceeded max retries: manual re-auth required")
 	}
 
 	err := f.refreshOrReLogin(ctx)
 	if err != nil {
-		// Only mark as failed if it's strictly not retryable?
-		// For now, if re-login fails, we are stuck.
-		f.authFailed = true
+		// Increment failure count and set backoff
+		f.authFailCount++
+		backoff := getBackoffDuration(f.authFailCount)
+		f.nextAuthAllowed = time.Now().Add(backoff)
+		fs.Debugf(f, "Re-authorization failed (attempt %d/5), backing off %v until %v", f.authFailCount, backoff, f.nextAuthAllowed)
+
+		// Check if this was the 5th failure
+		if f.authFailCount >= 5 {
+			return errors.New("auth exceeded max retries: manual re-auth required")
+		}
 		return err
 	}
 
+	// Success - reset failure count
+	f.authFailCount = 0
+	f.nextAuthAllowed = time.Time{}
+	fs.Debugf(f, "Re-authorization succeeded, failure count reset to 0")
 	return nil
 }
 
@@ -283,6 +363,12 @@ func (f *Fs) reAuthorize(ctx context.Context) error {
 // using the given secret (base32 encoded), current time, and defaults (30s period, 6 digits).
 // It implements RFC 6238.
 func generateTOTP(secret string) (string, error) {
+	return generateTOTPWithOffset(secret, 0)
+}
+
+// generateTOTPWithOffset generates a TOTP code for a specific time offset.
+// offset: number of 30-second periods offset from current time (e.g., -1 = 30 seconds ago, +1 = 30 seconds ahead)
+func generateTOTPWithOffset(secret string, offset int64) (string, error) {
 	// Clean up input
 	secret = strings.TrimSpace(strings.ToUpper(secret))
 
@@ -297,9 +383,9 @@ func generateTOTP(secret string) (string, error) {
 		}
 	}
 
-	// Calculate time step
+	// Calculate time step with offset
 	period := 30
-	t := time.Now().Unix() / int64(period)
+	t := (time.Now().Unix() / int64(period)) + offset
 
 	// Pack time step into 8 bytes (big endian)
 	buf := make([]byte, 8)

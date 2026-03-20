@@ -53,15 +53,12 @@ func (f *Fs) shouldRetry(ctx context.Context, err error) (bool, error) {
 	if errors.As(err, &httpErr) {
 		switch httpErr.StatusCode() {
 		case 401:
-			if !f.authFailed {
-				authErr := f.reAuthorize(ctx)
-				if authErr != nil {
-					fs.Debugf(f, "Re-authorization failed: %v", authErr)
-					return false, err
-				}
-				return true, err
+			authErr := f.reAuthorize(ctx)
+			if authErr != nil {
+				fs.Debugf(f, "Re-authorization failed: %v", authErr)
+				return false, err
 			}
-			return false, err
+			return true, err
 		case 429:
 			delay := httpErr.RetryAfter()
 			if delay <= 0 {
@@ -216,10 +213,11 @@ type Fs struct {
 	features     *fs.Features
 	pacer        *fs.Pacer
 	tokenRenewer *oauthutil.Renew
-	bridgeUser   string
-	userID       string
-	authMu       sync.Mutex
-	authFailed   bool
+	bridgeUser     string
+	userID         string
+	authMu         sync.Mutex
+	authFailCount  int
+	nextAuthAllowed time.Time
 }
 
 // Object holds the data for a remote file object
