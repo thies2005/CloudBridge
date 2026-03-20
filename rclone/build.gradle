@@ -153,10 +153,10 @@ def getOutputPath(abi) {
 
 def buildRclone(abi) {
     def abiToEnv = [
-        'armeabi-v7a': ['GOARCH': 'arm', 'GOARM': '7', 'CC': getCC('armeabi-v7a')],
-        'arm64-v8a': ['GOARCH': 'arm64', 'CC': getCC('arm64-v8a')],
-        'x86': ['GOARCH': '386', 'CC': getCC('x86')],
-        'x86_64': ['GOARCH': 'amd64', 'CC': getCC('x86_64')],
+        'armeabi-v7a': ['GOARCH': 'arm', 'GOARM': '7'],
+        'arm64-v8a': ['GOARCH': 'arm64'],
+        'x86': ['GOARCH': '386'],
+        'x86_64': ['GOARCH': 'amd64'],
     ]
 
     return {
@@ -173,40 +173,20 @@ def buildRclone(abi) {
                 'GOPATH'      : GOPATH,
                 'GOROOT'      : goRoot,
                 'GOOS'        : 'android',
-                'CGO_ENABLED' : '1',
-            ]
-
-            // Add CC environment variable only if cross-compiler is available
-            def ccPath = getCC(abi)
-            if (ccPath != null) {
-                commonEnv += ['CC': ccPath]
-            }
-
-            def buildEnv = commonEnv + abiToEnv[abi]
-
-            // Step 1: Build Go standard library for Android (required for CGO cross-compilation)
-            try {
-                exec {
-                    buildEnv.each { k, v -> environment k, v }
-                    commandLine 'go', 'install', 'std'
-                    ignoreExitValue true
-                }
-            } catch (Exception e) {
-                println "Warning: Failed to build Go standard library for Android: ${e.message}"
-                println "Continuing with rclone build..."
-            }
+                'CGO_ENABLED' : '0',
+            ] + abiToEnv[abi]
 
             // Step 2: Build rclone itself as a static binary
             // We name it librclone.so because the Android app expects.
             exec {
-                buildEnv.each { k, v -> environment k, v }
+                commonEnv.each { k, v -> environment k, v }
                 workingDir CACHE_PATH
                 def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${RCLONE_VERSION}${RCLONE_CUSTOM_VERSION_SUFFIX}"
                 commandLine (
                     'go',
                     'build',
                     '-tags',
-                    'noselfupdate',
+                    'android noselfupdate',
                     '-trimpath',
                     '-ldflags',
                     ldflags,
