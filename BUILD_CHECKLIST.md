@@ -74,7 +74,7 @@ REM Full build (all architectures, first build = 15-20 min)
 
 REM ARM64 only for Pixel 9 (faster = 5-8 min)
 .\gradlew.bat :rclone:buildArm64
-.\gradlew.bat assembleOssDebug -x assembleOssDebugArmeabiV7a -x assembleOssDebugX86 -x assembleOssDebugX8664
+.\gradlew.bat :app:assembleOssDebugArm64-v8a
 
 REM Clean caches
 .\gradlew.bat clean
