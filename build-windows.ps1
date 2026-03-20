@@ -92,17 +92,36 @@ switch ($choice) {
         .\gradlew.bat :rclone:buildArm64
 
         Write-Host ""
-        Write-Host "[6/6] Building APK for ARM64..." -ForegroundColor Yellow
-        .\gradlew.bat assembleOssDebug -x assembleOssDebugArmeabiV7a -x assembleOssDebugX86 -x assembleOssDebugX8664
+        Write-Host "[5/6] Building rclone for ARM64..." -ForegroundColor Yellow
+        .\gradlew.bat :rclone:buildArm64
 
         Write-Host ""
-        Write-Host "=======================================" -ForegroundColor Green
-        Write-Host "BUILD COMPLETE!" -ForegroundColor Green
-        Write-Host "=======================================" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "APK for Pixel 9:" -ForegroundColor Cyan
-        Get-ChildItem ".\app\build\outputs\apk\oss\debug\*arm64-v8a*.apk" | ForEach-Object {
-            Write-Host "  $($_.Name)" -ForegroundColor White
+        Write-Host "[6/6] Building APK for ARM64..." -ForegroundColor Yellow
+        .\gradlew.bat :app:assembleOssDebugArm64-v8a
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ""
+            Write-Host "=======================================" -ForegroundColor Green
+            Write-Host "BUILD COMPLETE!" -ForegroundColor Green
+            Write-Host "=======================================" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "APK for Pixel 9:" -ForegroundColor Cyan
+
+            $apkFiles = Get-ChildItem ".\app\build\outputs\apk\oss\debug\*arm64-v8a*.apk" -ErrorAction SilentlyContinue
+            if ($apkFiles) {
+                $apkFiles | ForEach-Object {
+                    Write-Host "  $($_.Name)" -ForegroundColor White
+                }
+            } else {
+                Write-Host "  WARNING: No APK files found!" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host ""
+            Write-Host "=======================================" -ForegroundColor Red
+            Write-Host "BUILD FAILED!" -ForegroundColor Red
+            Write-Host "=======================================" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Please check the error messages above." -ForegroundColor Yellow
         }
     }
 
