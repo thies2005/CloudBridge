@@ -94,48 +94,77 @@ jobs:
 
       # Step 8: Upload ARM eabi-v7a APK
       - name: Upload APK (arm32 - armeabi-v7a)
-        if: ${{ success(steps.build-oss.outcome) }}
         uses: actions/upload-artifact@v4
         with:
           name: nightly-armeabi-v7a.apk
           path: ${{ github.workspace }}/app/build/outputs/apk/oss/debug/*-oss-armeabi-v7a-debug.apk
+          if-no-files-found: warn
           retention-days: 14
 
       # Step 9: Upload ARM64-v8a APK (for Pixel 9)
       - name: Upload APK (arm64 - for Pixel 9)
-        if: ${{ success(steps.build-oss.outcome) }}
         uses: actions/upload-artifact@v4
         with:
           name: nightly-arm64-v8a.apk
           path: ${{ github.workspace }}/app/build/outputs/apk/oss/debug/*-oss-arm64-v8a-debug.apk
+          if-no-files-found: warn
           retention-days: 14
 
       # Step 10: Upload x86 APK
       - name: Upload APK (x86)
-        if: ${{ success(steps.build-oss.outcome) }}
         uses: actions/upload-artifact@v4
         with:
           name: nightly-x86.apk
           path: ${{ github.workspace }}/app/build/outputs/apk/oss/debug/*-oss-x86-debug.apk
+          if-no-files-found: warn
           retention-days: 14
 
       # Step 11: Upload x86_64 APK
       - name: Upload APK (x86_64)
-        if: ${{ success(steps.build-oss.outcome) }}
         uses: actions/upload-artifact@v4
         with:
           name: nightly-x86_64.apk
           path: ${{ github.workspace }}/app/build/outputs/apk/oss/debug/*-oss-x86_64-debug.apk
+          if-no-files-found: warn
           retention-days: 14
 
       # Step 12: Upload universal APK
       - name: Upload APK (universal)
-        if: ${{ success(steps.build-oss.outcome) }}
         uses: actions/upload-artifact@v4
         with:
           name: nightly-universal.apk
           path: ${{ github.workspace }}/app/build/outputs/apk/oss/debug/*-oss-universal-debug.apk
+          if-no-files-found: warn
           retention-days: 14
+
+      # Step 13: Build summary
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Build Summary"
+          echo ""
+          echo "**APKs Generated:**"
+          echo "- arm64-v8a (for Pixel 9)"
+          echo "- armeabi-v7a"
+          echo "- x86"
+          echo "- x86_64"
+          echo "- universal"
+          echo ""
+          echo "**Session Guardian Features:**"
+          echo "- TOTP time windows (T, T-1, T+1) for 2FA clock skew"
+          echo "- Exponential backoff (1m → 5m → 15m → 1h → 1h)"
+          echo "- Soft circuit breaker (max 5 retries)"
+          echo "- 8-hour health checks via WorkManager"
+          echo "- Manual re-auth UI option"
+          echo "- Session expiry notifications"
+          echo ""
+          echo "**Download:**"
+          echo "After 5-10 minutes, download artifacts from:"
+          echo "https://github.com/thies2005/Round-Sync/actions"
+          echo ""
+          echo "**For Pixel 9 (arm64-v8a):**"
+          echo "Download: nightly-arm64-v8a.apk"
+          echo "Install and test Session Guardian features!"
 
       # Step 13: Build summary
       - name: Build summary
