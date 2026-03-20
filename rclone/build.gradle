@@ -173,7 +173,7 @@ def buildRclone(abi) {
                 'GOPATH'      : GOPATH,
                 'GOROOT'      : goRoot,
                 'GOOS'        : 'android',
-                'CGO_ENABLED' : '1',
+                'CGO_ENABLED' : '0',
             ]
             
             // Add CC environment variable only if cross-compiler is available
