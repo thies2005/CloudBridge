@@ -206,7 +206,7 @@ def buildRclone(abi) {
                     'go',
                     'build',
                     '-tags',
-                    'android noselfupdate',
+                    'noselfupdate',
                     '-trimpath',
                     '-ldflags',
                     ldflags,
