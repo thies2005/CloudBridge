@@ -4,36 +4,26 @@ name: Android CI - APK Builds for Round-Sync
 # Session Guardian Build Workflow
 # =============================================================================
 #
-# This workflow builds APKs for all Android architectures on Ubuntu runners.
+# Simple, reliable workflow that builds APKs on Ubuntu runners
 # GitHub Actions provides 2000 free minutes/month for public repos.
 #
-# What This Workflow Does:
-# 1. Checks out the Round-Sync code
-# 2. Reads Go and NDK versions from gradle.properties
-# 3. Installs JDK 17 (required for Android Gradle Plugin)
-# 4. Installs Go 1.25.6+ (auto-upgraded from 1.24)
-# 5. Installs Android SDK and NDK r29.0.14206865
-# 6. Builds the Android app using Gradle
-# 7. Uploads APK artifacts for all architectures
-#
 # Session Guardian Features Built:
-# - TOTP time window retry (T, T-1, T+1) for Internxt 2FA
+# - TOTP time windows (T, T-1, T+1) for Internxt 2FA
 # - Exponential backoff (1m, 5m, 15m, 1h, 1h) with jitter
 # - Soft circuit breaker (max 5 retries, resets on success)
 # - 8-hour periodic health checks via WorkManager
 # - Manual re-auth option in remote menu
 # - Session expiry notifications
-# - Windows build compatibility (skip CC on native CGO)
 #
 # =============================================================================
 
-# Triggers
+# Triggers: Push commits, tags, or manual workflow_dispatch
 on:
   push:
-    branches: [master]  # Build on any push to master
+    branches: [master]
     tags:
-      - '*'            # Build on any tag
-  workflow_dispatch:        # Allow manual triggering
+      - '*'
+  workflow_dispatch:
     inputs:
       reason:
         description: 'Reason for triggering build (e.g., "Test Session Guardian")'
@@ -53,7 +43,6 @@ jobs:
       # Step 2: Read Go version from gradle.properties
       - name: Read Go version
         id: read-go-version
-        shell: bash
         run: |
           GO_VERSION=$(grep '^de\.felixnuesse\.extract\.goVersion=' gradle.properties | cut -d'=' -f2)
           echo "GO_VERSION=$GO_VERSION" >> $GITHUB_ENV
@@ -81,7 +70,7 @@ jobs:
       # Step 6: Install NDK (from gradle.properties)
       - name: Install NDK
         run: |
-          NDK_VERSION="$(grep -E "^de\.felixnuesse\.extract\.ndkVersion=" gradle.properties | cut -d'=' -f2)"
+          NDK_VERSION="$(grep '^de\.felixnuesse\.extract\.ndkVersion=' gradle.properties | cut -d'=' -f2)"
           echo "Installing NDK version: $NDK_VERSION"
           sdkmanager "ndk;${NDK_VERSION}"
 
@@ -95,6 +84,7 @@ jobs:
 
       # Step 8: Upload ARM eabi-v7a APK
       - name: Upload APK (arm32 - armeabi-v7a)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nightly-armeabi-v7a.apk
@@ -104,6 +94,7 @@ jobs:
 
       # Step 9: Upload ARM64-v8a APK (for Pixel 9)
       - name: Upload APK (arm64 - for Pixel 9)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nightly-arm64-v8a.apk
@@ -113,6 +104,7 @@ jobs:
 
       # Step 10: Upload x86 APK
       - name: Upload APK (x86)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nightly-x86.apk
@@ -122,6 +114,7 @@ jobs:
 
       # Step 11: Upload x86_64 APK
       - name: Upload APK (x86_64)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nightly-x86_64.apk
@@ -131,6 +124,7 @@ jobs:
 
       # Step 12: Upload universal APK
       - name: Upload APK (universal)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nightly-universal.apk
@@ -164,34 +158,5 @@ jobs:
           echo "https://github.com/thies2005/Round-Sync/actions"
           echo ""
           echo "**For Pixel 9 (arm64-v8a):**"
-          echo "Download: nightly-arm64-v8a.apk"
-          echo "Install and test Session Guardian features!"
-
-      # Step 13: Build summary
-      - name: Build summary
-        if: ${{ always() }}
-        run: |
-          echo "## Build Summary"
-          echo ""
-          echo "**APKs Generated:**"
-          echo "- arm64-v8a (for Pixel 9)"
-          echo "- armeabi-v7a"
-          echo "- x86"
-          echo "- x86_64"
-          echo "- universal"
-          echo ""
-          echo "**Session Guardian Features:**"
-          echo "- TOTP time windows (T, T-1, T+1) for 2FA clock skew"
-          echo "- Exponential backoff (1m → 5m → 15m → 1h → 1h)"
-          echo "- Soft circuit breaker (max 5 retries)"
-          echo "- 8-hour health checks via WorkManager"
-          echo "- Manual re-auth UI option"
-          echo "- Session expiry notifications"
-          echo ""
-          echo "**Download:**"
-          echo "After 5-10 minutes, download artifacts from:"
-          echo "https://github.com/thies2005/Round-Sync/actions"
-          echo ""
-          echo "**For Pixel 9:**"
           echo "Download: nightly-arm64-v8a.apk"
           echo "Install and test Session Guardian features!"
