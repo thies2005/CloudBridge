@@ -317,7 +317,7 @@ func getBackoffDuration(attempt int) time.Duration {
 	}
 
 	// Add ±10% jitter
-	jitter := float64(time.Duration(rand.Int63n(int64(baseDuration) / 10)))
+	jitter := float64(time.Duration(mrand.Int63n(int64(baseDuration) / 10)))
 	return baseDuration - time.Duration(jitter)
 }
 
@@ -397,8 +397,8 @@ func generateTOTPWithOffset(secret string, offset int64) (string, error) {
 	sum := mac.Sum(nil)
 
 	// Dynamic truncation
-	offset := sum[len(sum)-1] & 0xf
-	binCode := binary.BigEndian.Uint32(sum[offset : offset+4])
+	truncationOffset := sum[len(sum)-1] & 0xf
+	binCode := binary.BigEndian.Uint32(sum[truncationOffset : truncationOffset+4])
 
 	// Remove most significant bit
 	binCode &= 0x7fffffff
