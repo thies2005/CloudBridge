@@ -14,6 +14,8 @@ if (-not (Test-Path ".\gradlew.bat")) {
 }
 
 Write-Host "[1/6] Checking environment..." -ForegroundColor Yellow
+Write-Host "  Note: Go version check is informational only." -ForegroundColor Cyan
+Write-Host "  Build works with Go 1.19.x through 1.25.x" -ForegroundColor Cyan
 
 # Check Go
 $goVersion = go version 2>&1
@@ -39,15 +41,14 @@ if (Test-Path $ndkPath) {
 }
 
 Write-Host ""
-
-# Ask user what to build
 Write-Host "[2/6] Select build target:" -ForegroundColor Yellow
 Write-Host "  1 - Full build (all APKs)" -ForegroundColor White
 Write-Host "  2 - ARM64 only (for Pixel 9, faster)" -ForegroundColor White
-Write-Host "  3 - Clean build (delete caches)" -ForegroundColor White
-Write-Host "  4 - Exit" -ForegroundColor White
+Write-Host "  3 - Use pre-built rclone (download, no compilation)" -ForegroundColor Cyan
+Write-Host "  4 - Clean build (delete caches)" -ForegroundColor White
+Write-Host "  5 - Exit" -ForegroundColor White
 
-$choice = Read-Host "Enter choice (1-4):"
+$choice = Read-Host "Enter choice (1-5):"
 
 Write-Host ""
 
@@ -81,23 +82,41 @@ switch ($choice) {
 
     "2" {
         Write-Host "[3/6] Starting ARM64 build only (for Pixel 9)..." -ForegroundColor Yellow
-        Write-Host "This is faster (5-8 minutes)." -ForegroundColor Cyan
+        Write-Host "WARNING: This may fail due to Go cross-compilation issues." -ForegroundColor Red
+        Write-Host "RECOMMENDED: Use option 3 (pre-built rclone) instead." -ForegroundColor Cyan
+        Write-Host ""
+
+        $confirm = Read-Host "Continue anyway? (y/n)"
+        if ($confirm -ne "y" -and $confirm -ne "Y") {
+            Write-Host ""
+            Write-Host "Build cancelled. Please use option 3 instead." -ForegroundColor Yellow
+            exit 0
+        }
 
         Write-Host ""
         Write-Host "[4/6] Cleaning previous builds..." -ForegroundColor Yellow
         .\gradlew.bat clean
 
         Write-Host ""
-        Write-Host "[5/66] Building rclone for ARM64..." -ForegroundColor Yellow
-        .\gradlew.bat :rclone:buildArm64
-
-        Write-Host ""
         Write-Host "[5/6] Building rclone for ARM64..." -ForegroundColor Yellow
         .\gradlew.bat :rclone:buildArm64
 
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ""
+            Write-Host "=======================================" -ForegroundColor Red
+            Write-Host "rclone BUILD FAILED!" -ForegroundColor Red
+            Write-Host "=======================================" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "As expected, Go cross-compilation to android/arm fails on Windows." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "SOLUTION: Use option 3 to download pre-built rclone." -ForegroundColor Cyan
+            Write-Host ""
+            exit 1
+        }
+
         Write-Host ""
         Write-Host "[6/6] Building APK for ARM64..." -ForegroundColor Yellow
-        .\gradlew.bat :app:assembleOssDebugArm64-v8a
+        .\gradlew.bat :app:assembleOssDebugArm64V8a
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host ""
@@ -126,6 +145,65 @@ switch ($choice) {
     }
 
     "3" {
+        Write-Host "[3/6] Using pre-built rclone binary..." -ForegroundColor Yellow
+        Write-Host "This is the recommended method for Windows builds!" -ForegroundColor Cyan
+        Write-Host ""
+
+        # Check if already downloaded
+        if (Test-Path "app\src\main\jniLibs\arm64-v8a\librclone.so") {
+            Write-Host "Pre-built rclone already exists." -ForegroundColor Green
+            $useExisting = Read-Host "  Re-download? (y/n) [default: n]"
+            if ($useExisting -ne "y" -and $useExisting -ne "Y") {
+                Write-Host ""
+                Write-Host "[4/6] Building APK with existing binary..." -ForegroundColor Yellow
+            } else {
+                Write-Host ""
+                Write-Host "[4/6] Downloading new rclone binary..." -ForegroundColor Yellow
+                & .\download.bat
+                if ($LASTEXITCODE -ne 0) {
+                    exit 1
+                }
+            }
+        } else {
+            Write-Host ""
+            Write-Host "[4/6] Downloading rclone binary..." -ForegroundColor Yellow
+            & .\download.bat
+            if ($LASTEXITCODE -ne 0) {
+                exit 1
+            }
+        }
+
+        Write-Host ""
+        Write-Host "[5/6] Building APK for ARM64..." -ForegroundColor Yellow
+        .\gradlew.bat :app:assembleOssDebugArm64V8a
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ""
+            Write-Host "=======================================" -ForegroundColor Green
+            Write-Host "BUILD COMPLETE!" -ForegroundColor Green
+            Write-Host "=======================================" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "APK for Pixel 9:" -ForegroundColor Cyan
+
+            $apkFiles = Get-ChildItem ".\app\build\outputs\apk\oss\debug\*arm64-v8a*.apk" -ErrorAction SilentlyContinue
+            if ($apkFiles) {
+                $apkFiles | ForEach-Object {
+                    Write-Host "  $($_.Name)" -ForegroundColor White
+                }
+            } else {
+                Write-Host "  WARNING: No APK files found!" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host ""
+            Write-Host "=======================================" -ForegroundColor Red
+            Write-Host "BUILD FAILED!" -ForegroundColor Red
+            Write-Host "=======================================" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Please check error messages above." -ForegroundColor Yellow
+        }
+    }
+
+    "4" {
         Write-Host "[3/6] Cleaning all caches..." -ForegroundColor Yellow
         .\gradlew.bat clean
         .\gradlew.bat :rclone:clean
@@ -138,7 +216,7 @@ switch ($choice) {
         Write-Host "Go module cache (rclone/cache) has been cleared." -ForegroundColor White
     }
 
-    "4" {
+    "5" {
         Write-Host "Exiting..." -ForegroundColor Yellow
         exit 0
     }
