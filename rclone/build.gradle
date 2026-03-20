@@ -138,6 +138,11 @@ def getCrossCompiler(abi) {
 }
 
 def getCC(abi) {
+    // On Windows, let Go handle CGO natively without custom compiler
+    def osName = System.properties['os.name']
+    if (osName.startsWith('Windows')) {
+        return null
+    }
     return getCrossCompiler(abi)
 }
 
@@ -169,13 +174,21 @@ def buildRclone(abi) {
                 'GOROOT'      : goRoot,
                 'GOOS'        : 'android',
                 'CGO_ENABLED' : '1',
-            ] + abiToEnv[abi]
+            ]
+            
+            // Add CC environment variable only if cross-compiler is available
+            def ccPath = getCC(abi)
+            if (ccPath != null) {
+                commonEnv += ['CC': ccPath]
+            }
+            
+            def buildEnv = commonEnv + abiToEnv[abi]
 
             // Step 2: Build rclone itself as a static binary
             // We name it librclone.so because the Android app expects that name
             // and uses Runtime.exec() to run it as a subprocess.
             exec {
-                commonEnv.each { k, v -> environment k, v }
+                buildEnv.each { k, v -> environment k, v }
                 workingDir CACHE_PATH
                 def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${RCLONE_VERSION}${RCLONE_CUSTOM_VERSION_SUFFIX}"
                 commandLine (
