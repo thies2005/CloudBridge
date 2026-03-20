@@ -93,18 +93,21 @@ def findNdkDir() {
 
 def getCrossCompiler(abi) {
     def osName = System.properties['os.name']
-    def osArch = System.properties['os.arch']
+    def osArch = System.getProperty('os.arch')
     def os = null
     def isWindows = osName.startsWith('Windows')
     if (isWindows && osArch == 'amd64') {
         os = 'windows-x86_64'
-    } else if (osName.startsWith('Linux') && osArch == 'amd64') {
+    } else if (osName.startsWith('Linux') && (osArch == 'amd64' || osArch == 'aarch64' || osArch == 'arm64')) {
         os = 'linux-x86_64'
     } else if (osName.startsWith('Mac') && ['aarch64', 'amd64'].contains(osArch)) {
         // Note that despite what the name suggests, the clang binary shipped
         // with the NDK is a universal object file which should work on both
         // x86_64 and arm64 (Silicon-based) architectures.
         os = 'darwin-x86_64'
+    }
+    if (os == null) {
+        throw new GradleException('Unsupported host OS or architecture.')
     }
     if (os == null) {
         throw new GradleException('Unsupported host OS or architecture.')
@@ -134,6 +137,10 @@ def getCrossCompiler(abi) {
     ).toString()
 }
 
+def getCC(abi) {
+    return getCrossCompiler(abi)
+}
+
 
 def getOutputPath(abi) {
     return Paths.get(OUTPUT_BASE_PATH, abi, 'librclone.so').toString()
@@ -141,10 +148,10 @@ def getOutputPath(abi) {
 
 def buildRclone(abi) {
     def abiToEnv = [
-        'armeabi-v7a': ['GOARCH': 'arm', 'GOARM': '7'],
-        'arm64-v8a': ['GOARCH': 'arm64'],
-        'x86': ['GOARCH': '386'],
-        'x86_64': ['GOARCH': 'amd64'],
+        'armeabi-v7a': ['GOARCH': 'arm', 'GOARM': '7', 'CC': getCC('armeabi-v7a')],
+        'arm64-v8a': ['GOARCH': 'arm64', 'CC': getCC('arm64-v8a')],
+        'x86': ['GOARCH': '386', 'CC': getCC('x86')],
+        'x86_64': ['GOARCH': 'amd64', 'CC': getCC('x86_64')],
     ]
 
     return {
@@ -161,7 +168,7 @@ def buildRclone(abi) {
                 'GOPATH'      : GOPATH,
                 'GOROOT'      : goRoot,
                 'GOOS'        : 'android',
-                'CGO_ENABLED' : '0',
+                'CGO_ENABLED' : '1',
             ] + abiToEnv[abi]
 
             // Step 2: Build rclone itself as a static binary
