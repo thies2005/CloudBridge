@@ -95,7 +95,9 @@ app/lib/arm64-v8a/librclone.so
 ./gradlew assembleOssDebug
 
 # Or build only ARM64 (faster)
-./gradlew assembleOssDebug -x assembleOssDebugArm64
+```bash
+./gradlew.bat :rclone:buildArm64
+./gradlew.bat :app:assembleOssDebugArm64-v8a
 ```
 
 **APK output location:**
