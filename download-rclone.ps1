@@ -49,11 +49,15 @@ try {
     New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 
     # Move and rename rclone to librclone.so
-    if (Test-Path "rclone") {
+    $extractedFile = "rclone-v$version-linux-arm64\rclone"
+    if (Test-Path $extractedFile) {
+        Move-Item -Force $extractedFile "$targetDir\librclone.so"
+        Write-Host "  Installed: $targetDir\librclone.so" -ForegroundColor Green
+    } elseif (Test-Path "rclone") {
         Move-Item -Force "rclone" "$targetDir\librclone.so"
         Write-Host "  Installed: $targetDir\librclone.so" -ForegroundColor Green
     } else {
-        Write-Host "ERROR: rclone binary not found in archive!" -ForegroundColor Red
+        Write-Host "ERROR: rclone binary not found in archive or $extractedFile!" -ForegroundColor Red
         exit 1
     }
 

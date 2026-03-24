@@ -16,6 +16,7 @@ object SessionGuardianScheduler {
     /**
      * Schedule the Session Guardian Worker to run every 8 hours.
      */
+    @JvmStatic
     fun schedule(context: Context) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -46,6 +47,7 @@ object SessionGuardianScheduler {
     /**
      * Cancel the Session Guardian Worker.
      */
+    @JvmStatic
     fun cancel(context: Context) {
         WorkManager.getInstance(context)
             .cancelAllWorkByTag(WORK_NAME)
@@ -54,6 +56,7 @@ object SessionGuardianScheduler {
     /**
      * Check if the worker is scheduled.
      */
+    @JvmStatic
     fun isScheduled(context: Context): Boolean {
         val workInfos = WorkManager.getInstance(context)
             .getWorkInfosByTagLiveData(WORK_NAME)

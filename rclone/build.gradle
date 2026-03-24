@@ -235,7 +235,7 @@ task checkoutRclone(type: Exec, dependsOn: createRcloneModule) {
 task patchRclone(type: Copy, dependsOn: checkoutRclone) {
     from 'patches'
     into "${CACHE_PATH}/gopath/pkg/mod/${RCLONE_MODULE}@v${RCLONE_VERSION}/backend"
-    
+
     // We need to make the target directories writable first because Go module cache is read-only.
     // We also make the directory itself writable (with /D) so new files can be created inside it.
     doFirst {
@@ -279,7 +279,19 @@ task buildx64(dependsOn: checkoutRclone) {
 }
 
 task buildAll {
-    dependsOn buildArm, buildArm64, buildx86, buildx64
+    // If all pre-built .so files already exist in app/lib, skip the Go compilation.
+    def abis = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
+    def allExist = abis.every { abi ->
+        def f = new File(OUTPUT_BASE_PATH, "${abi}/librclone.so")
+        f.exists() && !f.isDirectory()
+    }
+    if (!allExist) {
+        dependsOn buildArm, buildArm64, buildx86, buildx64
+    } else {
+        doLast {
+            logger.lifecycle("Pre-built rclone .so files found in app/lib — skipping Go compilation.")
+        }
+    }
 }
 
 task clean {
