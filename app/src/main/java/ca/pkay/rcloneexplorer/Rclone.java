@@ -185,6 +185,10 @@ public class Rclone {
         // ref: https://github.com/rclone/rclone/issues/2446
         environmentValues.add("RCLONE_LOCAL_NO_SET_MODTIME=true");
 
+        // The pre-built linux rclone binaries do not know how to find the Android certificate store.
+        // We set SSL_CERT_DIR to Android's native certificate store path.
+        environmentValues.add("SSL_CERT_DIR=/system/etc/security/cacerts");
+
         // Allow the caller to overwrite any option for special cases
         Iterator<String> envVarIter = environmentValues.iterator();
         while(envVarIter.hasNext()){
