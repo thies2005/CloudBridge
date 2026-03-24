@@ -161,17 +161,8 @@ def buildRclone(abi) {
 
     return {
         doLast {
-            // Capture GOROOT at execution time
-            def goRootOutput = new ByteArrayOutputStream()
-            exec {
-                commandLine 'go', 'env', 'GOROOT'
-                standardOutput = goRootOutput
-            }
-            def goRoot = goRootOutput.toString().trim()
-
             def commonEnv = [
                 'GOPATH'      : GOPATH,
-                'GOROOT'      : goRoot,
                 'GOOS'        : 'linux',
                 'CGO_ENABLED' : '0',
             ] + abiToEnv[abi]
@@ -180,7 +171,7 @@ def buildRclone(abi) {
             // We name it librclone.so because the Android app expects.
             exec {
                 commonEnv.each { k, v -> environment k, v }
-                workingDir CACHE_PATH
+                workingDir Paths.get(CACHE_PATH, 'rclone-src').toString()
                 def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${RCLONE_VERSION}${RCLONE_CUSTOM_VERSION_SUFFIX}"
                 commandLine (
                     'go',
@@ -192,7 +183,7 @@ def buildRclone(abi) {
                     ldflags,
                     '-o',
                     getOutputPath(abi),
-                    RCLONE_MODULE
+                    '.'
                 )
             }
         }
@@ -229,17 +220,19 @@ task checkoutRclone(type: Exec, dependsOn: createRcloneModule) {
     }
     println "You are building rclone v${RCLONE_VERSION}"
 
-    commandLine 'go', 'get', '-v', '-d', "${RCLONE_MODULE}@v${RCLONE_VERSION}"
+    // Use git clone instead of go get to avoid Go module cache integrity errors
+    onlyIf { !Paths.get(CACHE_PATH, 'rclone-src').toFile().exists() }
+    commandLine 'git', 'clone', '--depth', '1', '--branch', "v${RCLONE_VERSION}", 'https://github.com/rclone/rclone.git', 'rclone-src'
 }
 
 task patchRclone(type: Copy, dependsOn: checkoutRclone) {
     from 'patches'
-    into "${CACHE_PATH}/gopath/pkg/mod/${RCLONE_MODULE}@v${RCLONE_VERSION}/backend"
-
+    into "${CACHE_PATH}/rclone-src/backend"
+    
     // We need to make the target directories writable first because Go module cache is read-only.
     // We also make the directory itself writable (with /D) so new files can be created inside it.
     doFirst {
-        def backendPath = Paths.get(CACHE_PATH, 'gopath', 'pkg', 'mod', "${RCLONE_MODULE}@v${RCLONE_VERSION}", 'backend').toAbsolutePath().toString()
+        def backendPath = Paths.get(CACHE_PATH, 'rclone-src', 'backend').toAbsolutePath().toString()
         def backendDir = new File(backendPath)
 
         if (backendDir.exists()) {
@@ -258,6 +251,21 @@ task patchRclone(type: Copy, dependsOn: checkoutRclone) {
                      commandLine 'chmod', '-R', 'u+w', backendPath
                  }
              }
+        }
+    }
+
+    doLast {
+        // Fix CRLF to LF for patched Go files on Windows
+        // The Go compiler fails if imports contain \r (e.g. "crypto/hmac\r")
+        def internxtDir = new File(CACHE_PATH, 'rclone-src/backend/internxt')
+        if (internxtDir.exists()) {
+            internxtDir.eachFile { file ->
+                if (file.name.endsWith('.go')) {
+                    def content = file.getText("UTF-8")
+                    content = content.replaceAll(/\r\n/, "\n")
+                    file.write(content, "UTF-8")
+                }
+            }
         }
     }
 }
@@ -279,19 +287,7 @@ task buildx64(dependsOn: checkoutRclone) {
 }
 
 task buildAll {
-    // If all pre-built .so files already exist in app/lib, skip the Go compilation.
-    def abis = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']
-    def allExist = abis.every { abi ->
-        def f = new File(OUTPUT_BASE_PATH, "${abi}/librclone.so")
-        f.exists() && !f.isDirectory()
-    }
-    if (!allExist) {
-        dependsOn buildArm, buildArm64, buildx86, buildx64
-    } else {
-        doLast {
-            logger.lifecycle("Pre-built rclone .so files found in app/lib — skipping Go compilation.")
-        }
-    }
+    dependsOn buildArm, buildArm64, buildx86, buildx64
 }
 
 task clean {
