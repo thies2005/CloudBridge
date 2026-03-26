@@ -88,9 +88,11 @@ class ConfigCreate internal constructor(
             android.util.Log.e(TAG, "Added totp_secret to options")
         }
         
-        // Step 1: Create the remote entry (this just saves email/pass, no auth)
-        android.util.Log.e(TAG, "Step 1: Running config create...")
-        process = mRclone.configCreate(options)
+        // Step 1: Create the remote entry with --no-interaction so the backend's Config()
+        // function (which does interactive login) is NOT triggered. We just save email/pass/
+        // totp_secret as raw key-value pairs. The real interactive login happens in Step 2.
+        android.util.Log.e(TAG, "Step 1: Running config create (no-interaction)...")
+        process = mRclone.configCreateNoInteract(options)
         if (process == null) {
             android.util.Log.e(TAG, "Step 1 FAILED: process is null")
             return false
@@ -193,7 +195,9 @@ class ConfigCreate internal constructor(
                         }
                         
                         // Check for mnemonic confirmation (various patterns)
-                        if (!confirmHandled && (output.contains("Keep this") || output.contains("y/n"))) {
+                        // Old rclone: "Keep this", "y/n"
+                        // New rclone 1.73+: "y/e/d>"
+                        if (!confirmHandled && (output.contains("Keep this") || output.contains("y/n") || output.contains("y/e/d"))) {
                             android.util.Log.e(TAG, "Confirmation detected, sending 'y'")
                             confirmHandled = true
                             proc.outputStream.write("y\n".toByteArray())

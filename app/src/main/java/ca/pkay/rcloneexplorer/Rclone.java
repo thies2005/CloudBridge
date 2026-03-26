@@ -502,6 +502,19 @@ public class Rclone {
         return config("create" , options);
     }
 
+    /**
+     * Like configCreate but passes --non-interactive and --no-output so the backend's Config()
+     * function is invoked but exits immediately returning no JSON questions. Only the
+     * key/value pairs are saved to rclone.conf. Use this when a separate `config reconnect`
+     * step will handle the interactive auth.
+     */
+    public Process configCreateNoInteract(List<String> options) {
+        options.add("--obscure");
+        options.add("--non-interactive");
+        options.add("--no-output");
+        return config("create", options);
+    }
+
     @Nullable
     public Process configUpdate(List<String> options) {
         return configCreate(options);

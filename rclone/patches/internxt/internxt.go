@@ -212,7 +212,6 @@ type Fs struct {
 	cfg          *config.Config
 	features     *fs.Features
 	pacer        *fs.Pacer
-	tokenRenewer *oauthutil.Renew
 	bridgeUser     string
 	userID         string
 	authMu         sync.Mutex
@@ -276,15 +275,6 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		return nil, fmt.Errorf("failed to get token - please run: rclone config reconnect %s: - %w", name, err)
 	}
 
-	oauthConfig := &oauthutil.Config{
-		TokenURL: "https://gateway.internxt.com/drive/users/refresh",
-	}
-
-	_, ts, err := oauthutil.NewClient(ctx, name, m, oauthConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create oauth client: %w", err)
-	}
-
 	cfg := config.NewDefaultToken(oauthToken.AccessToken)
 	cfg.Mnemonic = opt.Mnemonic
 	cfg.SkipHashValidation = opt.SkipHashValidation
@@ -300,10 +290,10 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 
 	f.pacer = fs.NewPacer(ctx, pacer.NewDefault(pacer.MinSleep(minSleep), pacer.MaxSleep(maxSleep), pacer.DecayConstant(decayConstant)))
 
-	var userInfo *userInfo
+	var info *userInfo
 	const maxRetries = 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		userInfo, err = getUserInfo(ctx, &userInfoConfig{Token: f.cfg.Token})
+		info, err = getUserInfo(ctx, &userInfoConfig{Token: f.cfg.Token})
 		if err == nil {
 			break
 		}
@@ -313,13 +303,17 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 			fs.Debugf(f, "getUserInfo returned 401, attempting re-auth")
 			authErr := f.refreshOrReLogin(ctx)
 			if authErr != nil {
-				return nil, fmt.Errorf("failed to fetch user info (re-auth failed): %w", err)
+				return nil, fmt.Errorf("failed to fetch user info (re-auth failed): %w", authErr)
 			}
-			userInfo, err = getUserInfo(ctx, &userInfoConfig{Token: f.cfg.Token})
-			if err == nil {
-				break
+			
+			// refreshOrReLogin populates f.cfg and f.bridgeUser/userID successfully
+			info = &userInfo{
+				RootFolderID: f.cfg.RootFolderID,
+				Bucket:       f.cfg.Bucket,
+				BridgeUser:   f.bridgeUser,
+				UserID:       f.userID,
 			}
-			return nil, fmt.Errorf("failed to fetch user info after re-auth: %w", err)
+			break
 		}
 
 		if fserrors.ShouldRetry(err) && attempt < maxRetries {
@@ -331,24 +325,15 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		return nil, fmt.Errorf("failed to fetch user info: %w", err)
 	}
 
-	f.cfg.RootFolderID = userInfo.RootFolderID
-	f.cfg.Bucket = userInfo.Bucket
-	f.cfg.BasicAuthHeader = computeBasicAuthHeader(userInfo.BridgeUser, userInfo.UserID)
-	f.bridgeUser = userInfo.BridgeUser
-	f.userID = userInfo.UserID
+	f.cfg.RootFolderID = info.RootFolderID
+	f.cfg.Bucket = info.Bucket
+	f.cfg.BasicAuthHeader = computeBasicAuthHeader(info.BridgeUser, info.UserID)
+	f.bridgeUser = info.BridgeUser
+	f.userID = info.UserID
 
 	f.features = (&fs.Features{
 		CanHaveEmptyDirectories: true,
 	}).Fill(ctx, f)
-
-	if ts != nil {
-		f.tokenRenewer = oauthutil.NewRenew(f.String(), ts, func() error {
-			f.authMu.Lock()
-			defer f.authMu.Unlock()
-			return f.refreshOrReLogin(ctx)
-		})
-		f.tokenRenewer.Start()
-	}
 
 	f.dirCache = dircache.New(f.root, cfg.RootFolderID, f)
 
@@ -357,16 +342,15 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		// Assume it might be a file
 		newRoot, remote := dircache.SplitPath(f.root)
 		tempF := &Fs{
-			name:         f.name,
-			root:         newRoot,
-			opt:          f.opt,
-			m:            f.m,
-			cfg:          f.cfg,
-			features:     f.features,
-			pacer:        f.pacer,
-			tokenRenewer: f.tokenRenewer,
-			bridgeUser:   f.bridgeUser,
-			userID:       f.userID,
+			name:       f.name,
+			root:       newRoot,
+			opt:        f.opt,
+			m:          f.m,
+			cfg:        f.cfg,
+			features:   f.features,
+			pacer:      f.pacer,
+			bridgeUser: f.bridgeUser,
+			userID:     f.userID,
 		}
 		tempF.dirCache = dircache.New(newRoot, f.cfg.RootFolderID, tempF)
 
@@ -800,14 +784,7 @@ func (f *Fs) About(ctx context.Context) (*fs.Usage, error) {
 	return usage, nil
 }
 
-// Shutdown the backend, closing any background tasks and any cached
-// connections.
 func (f *Fs) Shutdown(ctx context.Context) error {
-	buckets.WaitForPendingThumbnails()
-
-	if f.tokenRenewer != nil {
-		f.tokenRenewer.Shutdown()
-	}
 	return nil
 }
 

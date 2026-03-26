@@ -22,7 +22,6 @@ import (
 	internxtconfig "github.com/internxt/rclone-adapter/config"
 	sdkerrors "github.com/internxt/rclone-adapter/errors"
 	"github.com/rclone/rclone/fs"
-	"github.com/rclone/rclone/fs/config/configmap"
 	"github.com/rclone/rclone/fs/config/obscure"
 	"github.com/rclone/rclone/fs/fshttp"
 	"github.com/rclone/rclone/lib/oauthutil"
@@ -120,38 +119,48 @@ func computeBasicAuthHeader(bridgeUser, userID string) string {
 }
 
 // refreshJWTToken refreshes the token using Internxt's refresh endpoint
-func refreshJWTToken(ctx context.Context, name string, m configmap.Mapper) error {
-	currentToken, err := oauthutil.GetToken(name, m)
+func (f *Fs) refreshJWTToken(ctx context.Context) error {
+	currentToken, err := oauthutil.GetToken(f.name, f.m)
 	if err != nil {
-		return fmt.Errorf("failed to get current token: %w", err)
+		return fmt.Errorf("failed to get current token from config: %w", err)
 	}
 
 	cfg := internxtconfig.NewDefaultToken(currentToken.AccessToken)
 	resp, err := internxtauth.RefreshToken(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("refresh request failed: %w", err)
+		return err
 	}
 
-	if resp.NewToken == "" {
-		return errors.New("refresh response missing newToken")
+	useToken := resp.NewToken
+	if useToken == "" {
+		useToken = resp.Token
+	}
+
+	if useToken == "" {
+		return errors.New("refresh response missing token")
 	}
 
 	// Convert JWT to oauth2.Token format
-	token, err := jwtToOAuth2Token(resp.NewToken)
+	token, err := jwtToOAuth2Token(useToken)
 	if err != nil {
 		return fmt.Errorf("failed to parse refreshed token: %w", err)
 	}
 
-	err = oauthutil.PutToken(name, m, token, false)
+	err = oauthutil.PutToken(f.name, f.m, token, false)
 	if err != nil {
-		return fmt.Errorf("failed to save token: %w", err)
+		return fmt.Errorf("failed to save token to config: %w", err)
 	}
 
+	f.cfg.Token = useToken
 	if resp.User.Bucket != "" {
-		m.Set("bucket", resp.User.Bucket)
+		f.m.Set("bucket", resp.User.Bucket)
+		f.cfg.Bucket = resp.User.Bucket
+	}
+	if resp.User.RootFolderID != "" {
+		f.cfg.RootFolderID = resp.User.RootFolderID
 	}
 
-	fs.Debugf(name, "Token refreshed successfully, new expiry: %v", token.Expiry)
+	fs.Debugf(f.name, "Token refreshed successfully, new expiry: %v", token.Expiry)
 	return nil
 }
 
@@ -166,136 +175,111 @@ func (f *Fs) reLogin(ctx context.Context) (*internxtauth.AccessResponse, error) 
 	cfg := internxtconfig.NewDefaultToken("")
 	cfg.HTTPClient = fshttp.NewClient(ctx)
 
-	loginResp, err := internxtauth.Login(ctx, cfg, f.opt.Email)
-	if err != nil {
-		return nil, fmt.Errorf("re-login check failed: %w", err)
+	fs.Debugf(f, "Triggering DoLogin fallback for email: %q (password length: %d)", f.opt.Email, len(password))
+
+	// Call DoLogin directly — it handles Login+hash+Access atomically internally.
+	// We must NOT pre-call Login ourselves, because DoLogin always calls Login again
+	// to get a fresh sKey. A double-Login fetches two different sKeys, making the
+	// password hash produced by DoLogin's internal Login mismatch what Access expects.
+	resp, loginErr := internxtauth.DoLogin(ctx, cfg, f.opt.Email, password, "")
+	if loginErr == nil {
+		return resp, nil
+	}
+	if loginErr.Error() != "2FA code required" {
+		return nil, fmt.Errorf("re-login failed: %w", loginErr)
 	}
 
-	twoAuthCode := ""
-	if loginResp.TFA {
-		if f.opt.TOTPSecret != "" {
-			// Decrypt TOTP secret if needed (assuming it is stored obscured like password/mnemonic)
-			totpSecret, err := obscure.Reveal(f.opt.TOTPSecret)
-			if err != nil {
-				return nil, fmt.Errorf("couldn't decrypt TOTP secret: %w", err)
-			}
+	// Account requires 2FA
+	if f.opt.TOTPSecret == "" {
+		return nil, errors.New("account requires 2FA but no totp_secret configured")
+	}
 
-			// Generate TOTP code with time window retries for clock skew
-			// Try current time (T), T-1 (30 seconds ago), and T+1 (30 seconds ahead)
-			timeOffsets := []int64{0, -1, 1}
-			var lastErr error
+	// Try to reveal (decrypt) TOTP secret; fall back to plaintext if not obscured
+	totpSecret, err := obscure.Reveal(f.opt.TOTPSecret)
+	if err != nil {
+		fs.Debugf(f, "TOTP secret is not obscured, using as plaintext")
+		totpSecret = f.opt.TOTPSecret
+	}
 
-			for i, offset := range timeOffsets {
-				var code string
-				if offset == 0 {
-					// Current time
-					code, err = generateTOTP(totpSecret)
-				} else {
-					// T-1 or T+1 time window
-					code, err = generateTOTPWithOffset(totpSecret, offset)
-				}
+	// Try TOTP with T, T-1, T+1 time windows to handle clock skew
+	timeOffsets := []int64{0, -1, 1}
+	var lastErr error
 
-				if err != nil {
-					return nil, fmt.Errorf("failed to generate TOTP code: %w", err)
-				}
-
-				twoAuthCode = code
-				if offset != 0 {
-					fs.Debugf(f, "Generated TOTP code for 2FA with time offset %d (attempt %d/3)", offset, i+1)
-				} else {
-					fs.Debugf(f, "Generated TOTP code for 2FA (attempt 1/3)")
-				}
-
-				resp, loginErr := internxtauth.DoLogin(ctx, cfg, f.opt.Email, password, twoAuthCode)
-				if loginErr != nil {
-					// Check if it's a 401/403 error indicating bad TOTP code
-					var httpErr *sdkerrors.HTTPError
-					if errors.As(loginErr, &httpErr) && (httpErr.StatusCode() == 401 || httpErr.StatusCode() == 403) {
-						lastErr = loginErr
-						fs.Debugf(f, "2FA failed with time offset %d, trying next window", offset)
-						continue
-					}
-					// Other error, return immediately
-					return nil, fmt.Errorf("re-login failed: %w", loginErr)
-				}
-
-				// Success!
-				fs.Debugf(f, "2FA succeeded with time offset %d", offset)
-				return resp, nil
-			}
-
-			// All three attempts failed
-			return nil, fmt.Errorf("re-login failed (all TOTP time windows failed): %w", lastErr)
+	for i, offset := range timeOffsets {
+		var code string
+		if offset == 0 {
+			code, err = generateTOTP(totpSecret)
 		} else {
-			return nil, errors.New("account requires 2FA but no totp_secret configured")
+			code, err = generateTOTPWithOffset(totpSecret, offset)
 		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate TOTP code: %w", err)
+		}
+
+		if offset != 0 {
+			fs.Debugf(f, "Generated TOTP code for 2FA with time offset %d (attempt %d/3)", offset, i+1)
+		} else {
+			fs.Debugf(f, "Generated TOTP code for 2FA (attempt 1/3)")
+		}
+
+		resp, loginErr = internxtauth.DoLogin(ctx, cfg, f.opt.Email, password, code)
+		if loginErr != nil {
+			var httpErr *sdkerrors.HTTPError
+			if errors.As(loginErr, &httpErr) && (httpErr.StatusCode() == 401 || httpErr.StatusCode() == 403) {
+				lastErr = loginErr
+				fs.Debugf(f, "2FA failed with time offset %d, trying next window", offset)
+				continue
+			}
+			return nil, fmt.Errorf("re-login failed: %w", loginErr)
+		}
+
+		fs.Debugf(f, "2FA succeeded with time offset %d", offset)
+		return resp, nil
 	}
 
-	resp, err := internxtauth.DoLogin(ctx, cfg, f.opt.Email, password, twoAuthCode)
-	if err != nil {
-		return nil, fmt.Errorf("re-login failed: %w", err)
-	}
-
-	return resp, nil
+	return nil, fmt.Errorf("re-login failed (all TOTP time windows failed): %w", lastErr)
 }
 
-// refreshOrReLogin tries to refresh the JWT token first; if that fails with 401,
+// refreshOrReLogin tries to refresh the JWT token first; if that fails (usually with 401),
 // it falls back to a full re-login using stored credentials.
 func (f *Fs) refreshOrReLogin(ctx context.Context) error {
-	refreshErr := refreshJWTToken(ctx, f.name, f.m)
+	refreshErr := f.refreshJWTToken(ctx)
 	if refreshErr == nil {
-		newToken, err := oauthutil.GetToken(f.name, f.m)
-		if err != nil {
-			return fmt.Errorf("failed to get refreshed token: %w", err)
-		}
-		f.cfg.Token = newToken.AccessToken
 		f.cfg.BasicAuthHeader = computeBasicAuthHeader(f.bridgeUser, f.userID)
 		fs.Debugf(f, "Token refresh succeeded")
 		return nil
 	}
 
-	// Check if it's a 401 Unauthorized error
-	isUnauthorized := false
-	var httpErr *sdkerrors.HTTPError
-	if errors.As(refreshErr, &httpErr) && httpErr.StatusCode() == 401 {
-		isUnauthorized = true
-	} else {
-		// Fallback string check if error wrapped peculiarly
-		errStr := refreshErr.Error()
-		if strings.Contains(errStr, "401") || strings.Contains(errStr, "Unauthorized") {
-			isUnauthorized = true
-		}
+	fs.Debugf(f, "Token refresh failed (%v), attempting re-login with stored credentials", refreshErr)
+
+	resp, err := f.reLogin(ctx)
+	if err != nil {
+		return fmt.Errorf("re-login fallback failed: %w (original refresh error: %v)", err, refreshErr)
 	}
 
-	if isUnauthorized {
-		fs.Debugf(f, "Token refresh failed (%v), attempting re-login with stored credentials", refreshErr)
-
-		resp, err := f.reLogin(ctx)
-		if err != nil {
-			return fmt.Errorf("re-login fallback failed (original refresh error: %v): %w", refreshErr, err)
-		}
-
-		oauthToken, err := jwtToOAuth2Token(resp.NewToken)
-		if err != nil {
-			return fmt.Errorf("failed to parse re-login token: %w", err)
-		}
-		err = oauthutil.PutToken(f.name, f.m, oauthToken, true)
-		if err != nil {
-			return fmt.Errorf("failed to save re-login token: %w", err)
-		}
-
-		f.cfg.Token = oauthToken.AccessToken
-		f.bridgeUser = resp.User.BridgeUser
-		f.userID = resp.User.UserID
-		f.cfg.BasicAuthHeader = computeBasicAuthHeader(f.bridgeUser, f.userID)
-		f.cfg.Bucket = resp.User.Bucket
-		f.cfg.RootFolderID = resp.User.RootFolderID
-
-		fs.Debugf(f, "Re-login succeeded, new token expiry: %v", oauthToken.Expiry)
-		return nil
+	useToken := resp.NewToken
+	if useToken == "" {
+		useToken = resp.Token
 	}
 
-	return fmt.Errorf("refresh failed: %w", refreshErr)
+	oauthToken, err := jwtToOAuth2Token(useToken)
+	if err != nil {
+		return fmt.Errorf("failed to parse re-login token: %w", err)
+	}
+	err = oauthutil.PutToken(f.name, f.m, oauthToken, true)
+	if err != nil {
+		return fmt.Errorf("failed to save re-login token: %w", err)
+	}
+
+	f.cfg.Token = oauthToken.AccessToken
+	f.bridgeUser = resp.User.BridgeUser
+	f.userID = resp.User.UserID
+	f.cfg.BasicAuthHeader = computeBasicAuthHeader(f.bridgeUser, f.userID)
+	f.cfg.Bucket = resp.User.Bucket
+	f.cfg.RootFolderID = resp.User.RootFolderID
+
+	fs.Debugf(f, "Re-login succeeded, new token expiry: %v", oauthToken.Expiry)
+	return nil
 }
 
 // getBackoffDuration returns the backoff duration for a given attempt number with jitter.
