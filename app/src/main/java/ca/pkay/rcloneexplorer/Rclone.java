@@ -529,8 +529,9 @@ public class Rclone {
 
         System.arraycopy(opt, 0, commandWithOptions, command.length, opt.length);
 
+        String[] env = getRcloneEnv();
         try {
-            return getRuntimeProcess(commandWithOptions);
+            return getRuntimeProcess(commandWithOptions, env);
         } catch (IOException e) {
             FLog.e(TAG, "configCreate: error starting rclone", e);
             return null;
@@ -1118,8 +1119,7 @@ public class Rclone {
     }
 
     public Process reconnectRemote(RemoteItem remoteItem) {
-        String remoteName = remoteItem.getName() + ':';
-        String[] command = createCommand("config", "reconnect", remoteName);
+        String[] command = createCommand("config", "update", remoteItem.getName());
 
         try {
             return getRuntimeProcess(command, getRcloneEnv());

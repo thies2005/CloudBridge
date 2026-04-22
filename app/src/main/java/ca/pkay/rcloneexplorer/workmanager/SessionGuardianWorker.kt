@@ -1,7 +1,6 @@
 package ca.pkay.rcloneexplorer.workmanager
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -43,7 +42,7 @@ class SessionGuardianWorker(
             }
 
             var oauthRemotesChecked = 0
-            var sessionsHealed = 0
+            var failedHealthChecks = 0
 
             // Dump config to find OAuth-enabled remotes
             val configDump = rclone.configDump()
@@ -82,13 +81,11 @@ class SessionGuardianWorker(
 
                     if (exitCode == 0) {
                         Log.d(TAG, "Session healthy for remote: $remoteName")
-                    } else if (exitCode == 401 || exitCode == 403) {
-                        // Authentication error - the Go backend will have attempted to reAuthorize
-                        // and save the new token to config if it succeeded
-                        Log.w(TAG, "Auth error detected for remote: $remoteName. Go backend attempted silent healing.")
-                        sessionsHealed++
                     } else {
-                        Log.w(TAG, "Health check failed for remote: $remoteName (exit code: $exitCode)")
+                        // rclone returns process exit codes (0/1/...) rather than HTTP status codes.
+                        // A non-zero result means the probe failed after backend retry/re-auth attempts.
+                        Log.w(TAG, "Health check failed for remote: $remoteName (exit code: $exitCode). Manual reconnect may be required.")
+                        failedHealthChecks++
                     }
 
                 } catch (e: Exception) {
@@ -97,8 +94,8 @@ class SessionGuardianWorker(
                 }
             }
 
-            Log.d(TAG, "Session Guardian completed. Checked $oauthRemotesChecked OAuth remotes, potentially healed $sessionsHealed sessions")
-            FLog.d(TAG, "Session Guardian completed. Checked: $oauthRemotesChecked, Healed: $sessionsHealed")
+            Log.d(TAG, "Session Guardian completed. Checked $oauthRemotesChecked OAuth remotes, failed checks: $failedHealthChecks")
+            FLog.d(TAG, "Session Guardian completed. Checked: $oauthRemotesChecked, Failed: $failedHealthChecks")
 
         } catch (e: Exception) {
             Log.e(TAG, "Session Guardian failed: ${e.message}", e)

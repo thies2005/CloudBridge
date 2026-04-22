@@ -98,7 +98,7 @@ class ConfigCreate internal constructor(
             return false
         }
         
-        var createProc = process!!
+        val createProc = process!!
         android.util.Log.e(TAG, "Step 1: Waiting for config create to finish...")
         
         // Drain output to prevent blocking
@@ -116,8 +116,13 @@ class ConfigCreate internal constructor(
         
         try {
             val finished = createProc.waitFor(1, java.util.concurrent.TimeUnit.MINUTES)
-            android.util.Log.e(TAG, "Step 1 finished=$finished, exitCode=${if (finished) createProc.exitValue() else -1}")
+            val exitCode = if (finished) createProc.exitValue() else -1
+            android.util.Log.e(TAG, "Step 1 finished=$finished, exitCode=$exitCode")
             android.util.Log.e(TAG, "Step 1 output: $createOutput")
+            if (exitCode != 0) {
+                android.util.Log.e(TAG, "Step 1 failed! Aborting configuration.")
+                return false
+            }
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Step 1 EXCEPTION: ${e.message}")
             createProc.destroyForcibly()
@@ -140,97 +145,118 @@ class ConfigCreate internal constructor(
      * Handles both 2FA and mnemonic confirmation interactively.
      */
     private fun runConfigReconnect(remoteName: String): Boolean {
-        // rclone config reconnect expects format: remoteName:
-        val reconnectOptions = arrayListOf("$remoteName:")
-        android.util.Log.e(TAG, "Starting config reconnect for: $remoteName:")
-        process = mRclone.config("reconnect", reconnectOptions)
-        
-        if (process == null) {
-            android.util.Log.e(TAG, "Failed to start config reconnect")
-            return false
-        }
-        
-        val proc = process!!
-        var twoFactorHandled = false
-        var confirmHandled = false
-        var processOutput = ""
-        
-        val outputReader = Thread {
-            try {
-                val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.inputStream))
-                val errorReader = java.io.BufferedReader(java.io.InputStreamReader(proc.errorStream))
-                val buffer = StringBuilder()
-                
-                while (!Thread.currentThread().isInterrupted) {
-                    var readSomething = false
-                    while (errorReader.ready()) {
-                        val char = errorReader.read()
-                        if (char == -1) break
-                        buffer.append(char.toChar())
-                        readSomething = true
-                    }
-                    while (reader.ready()) {
-                        val char = reader.read()
-                        if (char == -1) break
-                        buffer.append(char.toChar())
-                        readSomething = true
-                    }
-                    
-                    if (readSomething) {
-                        val output = buffer.toString()
-                        processOutput = output
-                        android.util.Log.e(TAG, "Reconnect buffer: $output")
-                        
-                        // Check for 2FA prompt
-                        if (!twoFactorHandled && output.contains("Two-factor authentication code")) {
-                            android.util.Log.e(TAG, "2FA prompt detected, showing dialog")
-                            twoFactorHandled = true
-                            val code = getTwoFactorCodeFromUser()
-                            if (code.isNotEmpty()) {
-                                proc.outputStream.write("$code\n".toByteArray())
-                                proc.outputStream.flush()
-                                android.util.Log.e(TAG, "2FA code sent")
-                            }
-                            buffer.clear()
-                        }
-                        
-                        // Check for mnemonic confirmation (various patterns)
-                        // Old rclone: "Keep this", "y/n"
-                        // New rclone 1.73+: "y/e/d>"
-                        if (!confirmHandled && (output.contains("Keep this") || output.contains("y/n") || output.contains("y/e/d"))) {
-                            android.util.Log.e(TAG, "Confirmation detected, sending 'y'")
-                            confirmHandled = true
-                            proc.outputStream.write("y\n".toByteArray())
-                            proc.outputStream.flush()
-                        }
-                    }
-                    Thread.sleep(50)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e(TAG, "Reader thread ended: ${e.message}")
+        var state = ""
+        var result = ""
+        var isDone = false
+
+        while (!isDone) {
+            val options = arrayListOf(remoteName, "--non-interactive", "--no-obscure")
+            if (state.isNotEmpty()) {
+                options.add("--continue")
+                options.add("--state")
+                options.add(state)
+                options.add("--result")
+                options.add(result)
             }
-        }
-        outputReader.start()
-        
-        return try {
-            val completed = proc.waitFor(5, java.util.concurrent.TimeUnit.MINUTES)
-            outputReader.interrupt()
+
+            android.util.Log.e(TAG, "Running config update with state: '$state', result: '$result'")
+            val proc = mRclone.config("update", options) ?: return false
+
+            val jsonOutput = java.lang.StringBuilder()
+            val errorOutput = java.lang.StringBuilder()
+
+            // Read stdout (JSON output from rclone)
+            val outputReader = Thread {
+                val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.inputStream))
+                try {
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        jsonOutput.append(line).append("\n")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Output reader error", e)
+                }
+            }
+
+            // Read stderr for debugging
+            val errorReader = Thread {
+                val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.errorStream))
+                try {
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        errorOutput.append(line).append("\n")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Error reader error", e)
+                }
+            }
+
+            outputReader.start()
+            errorReader.start()
+
+            val completed = proc.waitFor(2, java.util.concurrent.TimeUnit.MINUTES)
             outputReader.join(1000)
-            
+            errorReader.join(1000)
+
             if (!completed) {
-                FLog.e(TAG, "Config reconnect timed out")
+                android.util.Log.e(TAG, "Config update timed out")
                 proc.destroyForcibly()
                 return false
             }
-            
+
             val exitCode = proc.exitValue()
-            FLog.d(TAG, "Config reconnect exited with code: $exitCode")
-            exitCode == 0
-        } catch (e: Exception) {
-            FLog.e(TAG, "Config reconnect failed", e)
-            proc.destroyForcibly()
-            false
+            if (errorOutput.isNotEmpty()) {
+                android.util.Log.e(TAG, "rclone config update error output:\n$errorOutput")
+            }
+
+            if (exitCode != 0) {
+                android.util.Log.e(TAG, "rclone config update failed with exit code $exitCode")
+                return false
+            }
+
+            val jsonStr = jsonOutput.toString().trim()
+            if (jsonStr.isEmpty()) {
+                // Empty JSON means complete
+                isDone = true
+                android.util.Log.e(TAG, "Config state machine finished successfully")
+                break
+            }
+
+            try {
+                android.util.Log.e(TAG, "rclone returned JSON: $jsonStr")
+                val json = org.json.JSONObject(jsonStr)
+                state = json.optString("State", "")
+                
+                if (state.isEmpty()) {
+                    isDone = true
+                    android.util.Log.e(TAG, "Config state machine reached terminal state")
+                    break
+                }
+
+                val optionObj = json.optJSONObject("Option")
+                if (optionObj != null) {
+                    val helpText = optionObj.optString("Help", "")
+                    
+                    if (helpText.contains("Two-factor authentication code", ignoreCase = true)) {
+                        android.util.Log.e(TAG, "JSON requested 2FA")
+                        result = getTwoFactorCodeFromUser()
+                    } else if (helpText.contains("password", ignoreCase = true)) {
+                        result = "" 
+                        android.util.Log.e(TAG, "JSON requested password/unknown: $helpText")
+                    } else {
+                        // Any other prompt, default to empty
+                        result = ""
+                    }
+                } else {
+                    // No Option object, meaning it's a Goto State (like {"State": "login"}).
+                    result = ""
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Failed to parse rclone JSON output: $jsonStr", e)
+                return false
+            }
         }
+        return true
     }
 
     private fun getAuthPreferenceFromUser(): String {
@@ -240,6 +266,7 @@ class ConfigCreate internal constructor(
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(mContext)
             builder.setTitle(R.string.internxt_auth_method_title)
+            builder.setMessage(R.string.internxt_auth_method_message)
 
             
             val options = arrayOf(

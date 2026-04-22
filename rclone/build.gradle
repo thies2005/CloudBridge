@@ -14,11 +14,14 @@
 //  - windows x64
 //
 // Prerequisites:
-//  - go 1.20+
+//  - go 1.25+
 //  - Either Android SDK command-line tools, or the expected NDK version (see gradle.properties).
+//
+// rclone source:
+//  Cloned from the URL and ref specified in gradle.properties
+//  (de.felixnuesse.extract.rCloneRepoUrl and rCloneRef).
+//  To upgrade: change rCloneRef (or rCloneRepoUrl) and rebuild.
 
-
-import groovy.json.JsonSlurper
 
 import java.nio.file.Paths
 
@@ -27,8 +30,9 @@ ext {
     NDK_TOOLCHAIN_VERSION = project.properties['de.felixnuesse.extract.ndkToolchainVersion']
     RCLONE_VERSION = project.properties['de.felixnuesse.extract.rCloneVersion']
     GO_REQ_VERSION = project.properties['de.felixnuesse.extract.goVersion']
-    RCLONE_MODULE = 'github.com/rclone/rclone'
-    RCLONE_CUSTOM_VERSION_SUFFIX = '-extract'
+
+    RCLONE_REPO_URL = project.findProperty('de.felixnuesse.extract.rCloneRepoUrl') ?: 'https://github.com/rclone/rclone.git'
+    RCLONE_REF = project.findProperty('de.felixnuesse.extract.rCloneRef') ?: "v${RCLONE_VERSION}"
 
     PROJECT_DIR = projectDir.absolutePath
     CACHE_PATH = Paths.get(PROJECT_DIR, 'cache').toString()
@@ -63,7 +67,6 @@ def findNdkDir() {
     def sdkDir = findSdkDir()
     def ndkPath = Paths.get(sdkDir, 'ndk', NDK_VERSION).toAbsolutePath()
     if (!ndkPath.toFile().exists()) {
-        // NDK not found. Let's try to install it.
         def sdkManagerPath = Paths.get(
             sdkDir,
             'cmdline-tools',
@@ -80,7 +83,6 @@ def findNdkDir() {
             }
         } catch (exc) {
             logger.error(exc.toString())
-            // NDK installation failed. Just raise an error.
             throw new GradleException(
                 "Couldn't find a ndk bundle in ${ndkPath.toString()}. Make sure that you have the"
                 + " proper version installed in Android Studio's SDK Manager or run"
@@ -101,13 +103,7 @@ def getCrossCompiler(abi) {
     } else if (osName.startsWith('Linux') && (osArch == 'amd64' || osArch == 'aarch64' || osArch == 'arm64')) {
         os = 'linux-x86_64'
     } else if (osName.startsWith('Mac') && ['aarch64', 'amd64'].contains(osArch)) {
-        // Note that despite what the name suggests, the clang binary shipped
-        // with the NDK is a universal object file which should work on both
-        // x86_64 and arm64 (Silicon-based) architectures.
         os = 'darwin-x86_64'
-    }
-    if (os == null) {
-        throw new GradleException('Unsupported host OS or architecture.')
     }
     if (os == null) {
         throw new GradleException('Unsupported host OS or architecture.')
@@ -121,7 +117,6 @@ def getCrossCompiler(abi) {
     ]
 
     def compilerName = abiToCompiler[abi]
-    // On Windows, NDK clang wrappers are .cmd files
     if (isWindows) {
         compilerName += '.cmd'
     }
@@ -138,7 +133,6 @@ def getCrossCompiler(abi) {
 }
 
 def getCC(abi) {
-    // On Windows, let Go handle CGO natively without custom compiler
     def osName = System.properties['os.name']
     if (osName.startsWith('Windows')) {
         return null
@@ -146,9 +140,16 @@ def getCC(abi) {
     return getCrossCompiler(abi)
 }
 
-
 def getOutputPath(abi) {
     return Paths.get(OUTPUT_BASE_PATH, abi, 'librclone.so').toString()
+}
+
+def getSourceVersion() {
+    def versionFile = Paths.get(CACHE_PATH, 'rclone-src', 'VERSION').toFile()
+    if (versionFile.exists()) {
+        return versionFile.text.trim()
+    }
+    return RCLONE_VERSION
 }
 
 def buildRclone(abi) {
@@ -167,12 +168,10 @@ def buildRclone(abi) {
                 'CGO_ENABLED' : '0',
             ] + abiToEnv[abi]
 
-            // Step 2: Build rclone itself as a static binary
-            // We name it librclone.so because the Android app expects.
             exec {
                 commonEnv.each { k, v -> environment k, v }
                 workingDir Paths.get(CACHE_PATH, 'rclone-src').toString()
-                def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${RCLONE_VERSION}${RCLONE_CUSTOM_VERSION_SUFFIX}"
+                def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${getSourceVersion()}"
                 commandLine (
                     'go',
                     'build',
@@ -190,91 +189,71 @@ def buildRclone(abi) {
     }
 }
 
-
-
-task createRcloneModule(type: Exec) {
-    // We create a dummy go module to be able to checkout our specific rclone
-    // version later on.
+task createRcloneModule {
     onlyIf { !Paths.get(CACHE_PATH, 'go.mod').toFile().exists() }
-    Paths.get(CACHE_PATH).toFile().mkdirs()
-    workingDir CACHE_PATH
-    environment 'GOPATH', GOPATH
-    commandLine 'go', 'mod', 'init', 'rclone'
-}
-
-task checkoutRclone(type: Exec, dependsOn: createRcloneModule) {
-    workingDir CACHE_PATH
-    environment 'GOPATH', GOPATH
-
-    def goVersionOutput = new ByteArrayOutputStream()
-    exec{
-        commandLine 'go', 'version'
-        standardOutput = goVersionOutput;
-    }
-
-    if (goVersionOutput.toString().contains(GO_REQ_VERSION)) {
-        println "You are running the required go version."
-    } else {
-        logger.error("The requred go version is: ${GO_REQ_VERSION}")
-        logger.error( "You are running: ${goVersionOutput}")
-    }
-    println "You are building rclone v${RCLONE_VERSION}"
-
-    // Use git clone instead of go get to avoid Go module cache integrity errors
-    onlyIf { !Paths.get(CACHE_PATH, 'rclone-src').toFile().exists() }
-    commandLine 'git', 'clone', '--depth', '1', '--branch', "v${RCLONE_VERSION}", 'https://github.com/rclone/rclone.git', 'rclone-src'
-}
-
-task patchRclone(type: Copy, dependsOn: checkoutRclone) {
-    from 'patches'
-    into "${CACHE_PATH}/rclone-src/backend"
-    
-    // We need to make the target directories writable first because Go module cache is read-only.
-    // We also make the directory itself writable (with /D) so new files can be created inside it.
-    doFirst {
-        def backendPath = Paths.get(CACHE_PATH, 'rclone-src', 'backend').toAbsolutePath().toString()
-        def backendDir = new File(backendPath)
-
-        if (backendDir.exists()) {
-             if (System.properties['os.name'].toLowerCase().contains('windows')) {
-                 // Remove read-only attribute recursively from the backend directory to allow patching
-                 exec {
-                     // Process all files in backend directory and subdirectories
-                     commandLine 'attrib', '-R', backendPath + "\\*", '/S'
-                 }
-                 exec {
-                     // Process the backend directory itself and subdirectories
-                     commandLine 'attrib', '-R', backendPath, '/D', '/S'
-                 }
-             } else {
-                 exec {
-                     commandLine 'chmod', '-R', 'u+w', backendPath
-                 }
-             }
+    doLast {
+        Paths.get(CACHE_PATH).toFile().mkdirs()
+        exec {
+            workingDir CACHE_PATH
+            environment 'GOPATH', GOPATH
+            commandLine 'go', 'mod', 'init', 'rclone'
         }
     }
+}
 
+task checkoutRclone(dependsOn: createRcloneModule) {
     doLast {
-        // Fix CRLF to LF for patched Go files on Windows
-        // The Go compiler fails if imports contain \r (e.g. "crypto/hmac\r")
-        def internxtDir = new File(CACHE_PATH, 'rclone-src/backend/internxt')
-        if (internxtDir.exists()) {
-            internxtDir.eachFile { file ->
-                if (file.name.endsWith('.go')) {
-                    def content = file.getText("UTF-8")
-                    content = content.replaceAll(/\r\n/, "\n")
-                    file.write(content, "UTF-8")
-                }
+        def goVersionOutput = new ByteArrayOutputStream()
+        exec {
+            commandLine 'go', 'version'
+            standardOutput = goVersionOutput
+        }
+
+        if (goVersionOutput.toString().contains(GO_REQ_VERSION)) {
+            println "You are running the required go version."
+        } else {
+            logger.error("The required go version is: ${GO_REQ_VERSION}")
+            logger.error("You are running: ${goVersionOutput}")
+        }
+
+        def srcDir = Paths.get(CACHE_PATH, 'rclone-src').toFile()
+
+        if (!srcDir.exists()) {
+            println "Cloning rclone from ${RCLONE_REPO_URL} (ref: ${RCLONE_REF}) ..."
+            exec {
+                workingDir CACHE_PATH
+                commandLine 'git', 'clone', '--no-tags', RCLONE_REPO_URL, 'rclone-src'
             }
         }
+
+        // Always sync to the requested ref so upgrades work without manual cache clears
+        println "Syncing rclone source to ref: ${RCLONE_REF}"
+        exec {
+            workingDir srcDir.absolutePath
+            commandLine 'git', 'fetch', 'origin'
+        }
+        exec {
+            workingDir srcDir.absolutePath
+            commandLine 'git', 'checkout', RCLONE_REF
+        }
+
+        // Print resolved commit and version for traceability
+        def commitOut = new ByteArrayOutputStream()
+        exec {
+            workingDir srcDir.absolutePath
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = commitOut
+        }
+        def version = getSourceVersion()
+        println "rclone source: commit=${commitOut.toString().trim()} version=${version} (from ${RCLONE_REPO_URL})"
     }
 }
 
-task buildArm(dependsOn: patchRclone) {
+task buildArm(dependsOn: checkoutRclone) {
     configure buildRclone('armeabi-v7a')
 }
 
-task buildArm64(dependsOn: patchRclone) {
+task buildArm64(dependsOn: checkoutRclone) {
     configure buildRclone('arm64-v8a')
 }
 
