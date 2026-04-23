@@ -2222,7 +2222,7 @@
     <issue
         id="MissingTranslation"
         message="&quot;session_expired_notification_title&quot; is not translated in &quot;de&quot; (German), &quot;ca&quot; (Catalan), &quot;zh&quot; (Chinese)"
-        errorLine1="    &lt;string name=&quot;session_expired_notification_title&quot;>Round-Sync: Session expired&lt;/string>"
+        errorLine1="    &lt;string name=&quot;session_expired_notification_title&quot;>CloudBridge: Session expired&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"

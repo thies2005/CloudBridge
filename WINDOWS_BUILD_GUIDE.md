@@ -37,8 +37,8 @@
 
 ```bash
 cd C:\Projects
-git clone https://github.com/thies2005/Round-Sync.git
-cd Round-Sync
+git clone https://github.com/thies2005/CloudBridge.git
+cd CloudBridge
 git pull origin master
 ```
 

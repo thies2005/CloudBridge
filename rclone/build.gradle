@@ -19,20 +19,20 @@
 //
 // rclone source:
 //  Cloned from the URL and ref specified in gradle.properties
-//  (de.felixnuesse.extract.rCloneRepoUrl and rCloneRef).
+//  (de.schuelken.cloudbridge.rCloneRepoUrl and rCloneRef).
 //  To upgrade: change rCloneRef (or rCloneRepoUrl) and rebuild.
 
 
 import java.nio.file.Paths
 
 ext {
-    NDK_VERSION = project.properties['de.felixnuesse.extract.ndkVersion']
-    NDK_TOOLCHAIN_VERSION = project.properties['de.felixnuesse.extract.ndkToolchainVersion']
-    RCLONE_VERSION = project.properties['de.felixnuesse.extract.rCloneVersion']
-    GO_REQ_VERSION = project.properties['de.felixnuesse.extract.goVersion']
+    NDK_VERSION = project.properties['de.schuelken.cloudbridge.ndkVersion']
+    NDK_TOOLCHAIN_VERSION = project.properties['de.schuelken.cloudbridge.ndkToolchainVersion']
+    RCLONE_VERSION = project.properties['de.schuelken.cloudbridge.rCloneVersion']
+    GO_REQ_VERSION = project.properties['de.schuelken.cloudbridge.goVersion']
 
-    RCLONE_REPO_URL = project.findProperty('de.felixnuesse.extract.rCloneRepoUrl') ?: 'https://github.com/rclone/rclone.git'
-    RCLONE_REF = project.findProperty('de.felixnuesse.extract.rCloneRef') ?: "v${RCLONE_VERSION}"
+    RCLONE_REPO_URL = project.findProperty('de.schuelken.cloudbridge.rCloneRepoUrl') ?: 'https://github.com/rclone/rclone.git'
+    RCLONE_REF = project.findProperty('de.schuelken.cloudbridge.rCloneRef') ?: "v${RCLONE_VERSION}"
 
     PROJECT_DIR = projectDir.absolutePath
     CACHE_PATH = Paths.get(PROJECT_DIR, 'cache').toString()

@@ -1,15 +1,15 @@
 # Windows Build Script for Session Guardian
-# Run from Round-Sync directory in PowerShell
+# Run from CloudBridge directory in PowerShell
 
 Write-Host "=======================================" -ForegroundColor Cyan
-Write-Host "Round-Sync Build Script" -ForegroundColor Cyan
+Write-Host "CloudBridge Build Script" -ForegroundColor Cyan
 Write-Host "Session Guardian Edition" -ForegroundColor Cyan
 Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Check if we're in the right directory
 if (-not (Test-Path ".\gradlew.bat")) {
-    Write-Host "ERROR: gradlew.bat not found. Run this script from Round-Sync directory." -ForegroundColor Red
+    Write-Host "ERROR: gradlew.bat not found. Run this script from CloudBridge directory." -ForegroundColor Red
     exit 1
 }
 

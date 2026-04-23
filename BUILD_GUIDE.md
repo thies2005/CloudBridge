@@ -17,7 +17,7 @@ git commit --allow-empty -m "Trigger build"
 git push origin master
 
 # Or use the web interface:
-# Visit: https://github.com/thies2005/Round-Sync/actions
+# Visit: https://github.com/thies2005/CloudBridge/actions
 # Click "Run workflow" on the "android-ci" workflow
 ```
 
@@ -97,4 +97,4 @@ Once GitHub Actions completes, download:
 gh workflow run android.yml -f
 ```
 
-**Or visit:** https://github.com/thies2005/Round-Sync/actions
+**Or visit:** https://github.com/thies2005/CloudBridge/actions

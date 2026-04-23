@@ -1,4 +1,4 @@
-# Round Sync — Agent Notes
+# CloudBridge — Agent Notes
 
 Android cloud file manager wrapping [rclone](https://rclone.org). Fork of RCX / rcloneExplorer.
 
@@ -62,8 +62,8 @@ No instrumented/androidTest runner is wired in CI.
 ## Architecture / source layout
 
 - **Package namespace**: `ca.pkay.rcloneexplorer` (legacy from rcloneExplorer fork)
-- **Application ID**: `de.felixnuesse.extract`
-- Newer code lives under `de.felixnuesse.extract.*`
+- **Application ID**: `de.schuelken.cloudbridge`
+- Newer code lives under `de.schuelken.cloudbridge.*`
 - `app/src/rcx/` — additional source set (RCX-specific utilities)
 - `rclone/patches/` — **DEPRECATED**, no longer used. Fork already contains Internxt backend.
 - The rclone binary is statically compiled with `CGO_ENABLED=0` and shipped as `librclone.so` per ABI in `app/lib/`.
@@ -72,12 +72,12 @@ No instrumented/androidTest runner is wired in CI.
 
 | Property | What it controls |
 |---|---|
-| `de.felixnuesse.extract.goVersion` | Go toolchain version (informational) |
-| `de.felixnuesse.extract.rCloneVersion` | Fallback rclone version (if VERSION file unreadable) |
-| `de.felixnuesse.extract.rCloneRepoUrl` | Git URL for the rclone fork |
-| `de.felixnuesse.extract.rCloneRef` | Git ref (branch/tag/commit) to build from |
-| `de.felixnuesse.extract.ndkVersion` | Android NDK version for cross-compilation |
-| `de.felixnuesse.extract.ndkToolchainVersion` | NDK toolchain API level |
+| `de.schuelken.cloudbridge.goVersion` | Go toolchain version (informational) |
+| `de.schuelken.cloudbridge.rCloneVersion` | Fallback rclone version (if VERSION file unreadable) |
+| `de.schuelken.cloudbridge.rCloneRepoUrl` | Git URL for the rclone fork |
+| `de.schuelken.cloudbridge.rCloneRef` | Git ref (branch/tag/commit) to build from |
+| `de.schuelken.cloudbridge.ndkVersion` | Android NDK version for cross-compilation |
+| `de.schuelken.cloudbridge.ndkToolchainVersion` | NDK toolchain API level |
 
 ## CI workflows
 
@@ -91,5 +91,6 @@ No instrumented/androidTest runner is wired in CI.
 - **Windows builds**: The rclone module handles Windows-specific NDK paths (`.cmd` suffixes, CRLF→LF conversion on patched Go files).
 - **Debug applicationId**: Debug builds append `.debug` to the application ID, so debug and release can coexist on a device.
 - **`versionCode`**: Last digit is reserved for ABI multiplier — version codes end in `0`.
+- **Version Updates**: Always update the small versions (patch version and `versionCode`) with each build.
 - **`local.properties`** with `sdk.dir` or `ANDROID_HOME` env var is required for rclone cross-compilation.
 - Translations are managed via Weblate and Crowdin — don't manually edit localized `strings.xml` unless adding a new language.
