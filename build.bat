@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo Round-Sync Build Script
+echo CloudBridge Build Script
 echo Session Guardian Edition
 echo ========================================
 echo.

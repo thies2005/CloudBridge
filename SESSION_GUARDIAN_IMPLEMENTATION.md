@@ -181,7 +181,7 @@ if (exitCode == 0) {
 #### Changes Made:
 - **Added string resources**:
   - `<string name="reauthenticate">Re-authenticate</string>` (Line 331)
-  - `<string name="session_expired_notification_title">Round-Sync: Session expired</string>` (Line 332)
+  - `<string name="session_expired_notification_title">CloudBridge: Session expired</string>` (Line 332)
   - `<string name="session_expired_notification_text">Session for %1$s expired. Tap to manually re-authenticate.</string>` (Line 333)
 
 ### Modified File: `app/src/main/java/ca/pkay/rcloneexplorer/Fragments/RemotesFragment.java`

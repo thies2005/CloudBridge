@@ -30,16 +30,16 @@ Before building, verify each item below:
   - Download: https://git-scm.com/download/win
 
 - [ ] **Repository cloned**
-  - Navigate to: `C:\Projects\Round-Sync` (or your preferred location)
+  - Navigate to: `C:\Projects\CloudBridge` (or your preferred location)
   - Run: `git pull` if already cloned
-  - Or: `git clone https://github.com/thies2005/Round-Sync.git`
+  - Or: `git clone https://github.com/thies2005/CloudBridge.git`
 
 ## Quick Environment Test
 
 Open a **new** Command Prompt or PowerShell and run:
 
 ```batch
-cd C:\Projects\Round-Sync
+cd C:\Projects\CloudBridge
 .\gradlew.bat --version
 ```
 
@@ -58,7 +58,7 @@ Kotlin:       1.x.x
 
 ### Method 1: Automated Script (Recommended)
 
-Double-click `build.bat` in Round-Sync directory.
+Double-click `build.bat` in CloudBridge directory.
 
 This provides:
 1. Environment verification
@@ -84,7 +84,7 @@ REM Clean caches
 ### Method 3: Using Android Studio
 
 1. Open Android Studio
-2. File > Open > Navigate to Round-Sync directory
+2. File > Open > Navigate to CloudBridge directory
 3. Wait for Gradle sync
 4. Build > Build Bundle(s) / APK(s) > Build APK(s)
 5. Select debug variant
@@ -135,7 +135,7 @@ When you install the APK, you'll have:
    - Opens RemoteConfig activity for token refresh
 
 ✅ **Session Expiry Notifications**
-   - Shows notification: "Round-Sync: Session for [Remote] expired"
+   - Shows notification: "CloudBridge: Session for [Remote] expired"
    - Taps open MainActivity to remote list
    - Direct access to re-auth menu
 
@@ -164,8 +164,8 @@ When you install the APK, you'll have:
 
 ### Issue: "gradlew.bat not recognized"
 ```
-Solution: Run from Round-Sync directory or use full path:
-C:\Projects\Round-Sync\gradlew.bat
+Solution: Run from CloudBridge directory or use full path:
+C:\Projects\CloudBridge\gradlew.bat
 ```
 
 ### Issue: "Could not determine java version"
@@ -220,4 +220,4 @@ If build fails:
 2. Read detailed guide: `WINDOWS_BUILD_GUIDE.md`
 3. Check Session Guardian implementation: `SESSION_GUARDIAN_IMPLEMENTATION.md`
 4. Review build log: `app/build/reports/`
-5. Check GitHub issues: https://github.com/thies2005/Round-Sync/issues
+5. Check GitHub issues: https://github.com/thies2005/CloudBridge/issues
