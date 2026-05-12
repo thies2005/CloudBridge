@@ -44,7 +44,7 @@ jobs:
       - name: Read Go version
         id: read-go-version
         run: |
-          GO_VERSION=$(grep '^de\.felixnuesse\.extract\.goVersion=' gradle.properties | cut -d'=' -f2)
+          GO_VERSION=$(grep '^de\.schuelken\.cloudbridge\.goVersion=' gradle.properties | cut -d'=' -f2)
           echo "GO_VERSION=$GO_VERSION" >> $GITHUB_ENV
           echo "Go version to build: $GO_VERSION"
 
@@ -70,7 +70,7 @@ jobs:
       # Step 6: Install NDK (from gradle.properties)
       - name: Install NDK
         run: |
-          NDK_VERSION="$(grep '^de\.felixnuesse\.extract\.ndkVersion=' gradle.properties | cut -d'=' -f2)"
+          NDK_VERSION="$(grep '^de\.schuelken\.cloudbridge\.ndkVersion=' gradle.properties | cut -d'=' -f2)"
           echo "Installing NDK version: $NDK_VERSION"
           sdkmanager "ndk;${NDK_VERSION}"
 
