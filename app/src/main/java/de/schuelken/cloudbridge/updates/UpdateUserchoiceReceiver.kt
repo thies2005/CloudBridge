@@ -62,6 +62,7 @@ class UpdateUserchoiceReceiver : BroadcastReceiver() {
                     )
                 }
             }
+                }
             AppUpdateNotification(context).cancelNotification()
         }
     }

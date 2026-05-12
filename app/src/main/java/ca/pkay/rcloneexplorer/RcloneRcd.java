@@ -2,6 +2,9 @@ package ca.pkay.rcloneexplorer;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.StrictMode;
@@ -32,6 +35,7 @@ import okhttp3.Response;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -178,7 +182,30 @@ public class RcloneRcd {
         // We set SSL_CERT_DIR to Android's native certificate store path.
         environmentValues.add("SSL_CERT_DIR=/system/etc/security/cacerts");
 
+        environmentValues.add("RCLONE_DNS_SERVERS=" + getDnsServers());
+
         return environmentValues.toArray(new String[0]);
+    }
+
+    private String getDnsServers() {
+        String fallback = "8.8.8.8:53,8.8.4.4:53";
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return fallback;
+            Network network = cm.getActiveNetwork();
+            if (network == null) return fallback;
+            LinkProperties lp = cm.getLinkProperties(network);
+            if (lp == null) return fallback;
+            StringBuilder sb = new StringBuilder();
+            for (InetAddress dns : lp.getDnsServers()) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append(dns.getHostAddress()).append(":53");
+            }
+            return sb.length() > 0 ? sb.toString() : fallback;
+        } catch (Exception e) {
+            FLog.e(TAG, "Failed to detect DNS servers, using fallback", e);
+            return fallback;
+        }
     }
 
     /**
