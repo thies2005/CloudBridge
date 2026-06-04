@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import ca.pkay.rcloneexplorer.Rclone
+import ca.pkay.rcloneexplorer.notifications.AppErrorNotificationManager
 import ca.pkay.rcloneexplorer.util.FLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,15 +78,22 @@ class SessionGuardianWorker(
 
                     // Probe health using lsd with max-depth 1
                     // This is a lightweight operation that will trigger reAuthorize in Go backend if needed
-                    val exitCode = rclone.listDirectories(remoteName, 1)
+                    val result = rclone.listDirectories(remoteName, 1)
 
-                    if (exitCode == 0) {
+                    if (result.isSuccess) {
                         Log.d(TAG, "Session healthy for remote: $remoteName")
+                    } else if (result.isNetworkError) {
+                        // DNS failure, timeout, connection refused — NOT an auth problem.
+                        // Don't alarm the user; the next periodic run will retry.
+                        Log.w(TAG, "Network error checking remote: $remoteName (exit code: ${result.exitCode}), skipping notification. stderr: ${result.stderr.take(200)}")
+                        FLog.w(TAG, "Network error for $remoteName, not a session issue")
                     } else {
                         // rclone returns process exit codes (0/1/...) rather than HTTP status codes.
-                        // A non-zero result means the probe failed after backend retry/re-auth attempts.
-                        Log.w(TAG, "Health check failed for remote: $remoteName (exit code: $exitCode). Manual reconnect may be required.")
+                        // A non-zero, non-network result means the probe failed after backend retry/re-auth attempts.
+                        Log.w(TAG, "Health check failed for remote: $remoteName (exit code: ${result.exitCode}). Manual reconnect may be required. stderr: ${result.stderr.take(200)}")
                         failedHealthChecks++
+                        val notifyManager = AppErrorNotificationManager(mContext)
+                        notifyManager.showSessionExpiredNotification(remoteName)
                     }
 
                 } catch (e: Exception) {

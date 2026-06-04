@@ -1227,17 +1227,71 @@ public class Rclone {
         }
     }
 
-    public int listDirectories(String remoteName, int maxDepth) {
+    public DirectoryProbeResult listDirectories(String remoteName, int maxDepth) {
         String[] command = createCommand("lsd", "--max-depth", String.valueOf(maxDepth), remoteName + ":");
         Process process;
 
         try {
             process = getRuntimeProcess(command);
+
+            // Capture stderr so callers can classify the error type
+            StringBuilder stderrBuilder = new StringBuilder();
+            try (BufferedReader errReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = errReader.readLine()) != null) {
+                    stderrBuilder.append(line).append("\n");
+                }
+            }
+
             process.waitFor();
-            return process.exitValue();
+            return new DirectoryProbeResult(process.exitValue(), stderrBuilder.toString());
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "listDirectories: error for remote " + remoteName, e);
-            return -1;
+            return new DirectoryProbeResult(-1, e.getMessage() != null ? e.getMessage() : "process error");
+        }
+    }
+
+    /**
+     * Result of a directory probe (lsd) operation, including both the exit code
+     * and any stderr output for error classification.
+     */
+    public static class DirectoryProbeResult {
+        private final int exitCode;
+        private final String stderr;
+
+        public DirectoryProbeResult(int exitCode, String stderr) {
+            this.exitCode = exitCode;
+            this.stderr = stderr != null ? stderr : "";
+        }
+
+        public int getExitCode() {
+            return exitCode;
+        }
+
+        public String getStderr() {
+            return stderr;
+        }
+
+        public boolean isSuccess() {
+            return exitCode == 0;
+        }
+
+        /**
+         * Returns true if the error is a transient network issue (DNS failure,
+         * connection refused, timeout) rather than an authentication problem.
+         */
+        public boolean isNetworkError() {
+            if (exitCode == 0) return false;
+            String lower = stderr.toLowerCase();
+            return lower.contains("dial tcp")
+                || lower.contains("connection refused")
+                || lower.contains("no such host")
+                || lower.contains("i/o timeout")
+                || lower.contains("network is unreachable")
+                || lower.contains("tls handshake timeout")
+                || lower.contains("dns")
+                || lower.contains("lookup")
+                || lower.contains("no address associated");
         }
     }
 
