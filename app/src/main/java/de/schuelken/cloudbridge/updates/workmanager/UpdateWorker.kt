@@ -48,7 +48,7 @@ class UpdateWorker (private var mContext: Context, workerParams: WorkerParameter
         }
 
         val source =  GithubTagSource(
-            ownerUsername = "newhinton",
+            ownerUsername = "thies2005",
             repoName = "CloudBridge",
             currentVersion = BuildConfig.VERSION_NAME
         )

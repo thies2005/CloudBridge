@@ -39,9 +39,14 @@ type userInfoConfig struct {
 	Token string
 }
 
-// getUserInfo fetches user metadata from the refresh endpoint
-func getUserInfo(ctx context.Context, cfg *userInfoConfig) (*userInfo, error) {
-	// Call the refresh endpoint to get all user metadata
+type userInfoResult struct {
+	Info       *userInfo
+	NewToken   string
+}
+
+// getUserInfo fetches user metadata from the refresh endpoint.
+// It also returns the refreshed JWT token so the caller can persist it.
+func getUserInfo(ctx context.Context, cfg *userInfoConfig) (*userInfoResult, error) {
 	refreshCfg := internxtconfig.NewDefaultToken(cfg.Token)
 	resp, err := internxtauth.RefreshToken(ctx, refreshCfg)
 	if err != nil {
@@ -68,10 +73,15 @@ func getUserInfo(ctx context.Context, cfg *userInfoConfig) (*userInfo, error) {
 		UserID:       resp.User.UserID,
 	}
 
+	useToken := resp.NewToken
+	if useToken == "" {
+		useToken = resp.Token
+	}
+
 	fs.Debugf(nil, "User info: rootFolderId=%s, bucket=%s",
 		info.RootFolderID, info.Bucket)
 
-	return info, nil
+	return &userInfoResult{Info: info, NewToken: useToken}, nil
 }
 
 // parseJWTExpiry extracts the expiry time from a JWT token string
@@ -169,7 +179,8 @@ func (f *Fs) refreshJWTToken(ctx context.Context) error {
 func (f *Fs) reLogin(ctx context.Context) (*internxtauth.AccessResponse, error) {
 	password, err := obscure.Reveal(f.opt.Pass)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't decrypt password: %w", err)
+		fs.Debugf(f, "Password is not obscured, using as plaintext")
+		password = f.opt.Pass
 	}
 
 	cfg := internxtconfig.NewDefaultToken("")

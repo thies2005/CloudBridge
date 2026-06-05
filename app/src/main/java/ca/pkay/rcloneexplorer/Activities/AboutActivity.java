@@ -53,6 +53,7 @@ public class AboutActivity extends AppCompatActivity {
         findViewById(R.id.report_bug).setOnClickListener(v -> reportBug());
         findViewById(R.id.author_github_link).setOnClickListener(v -> openAuthorGitHubLink());
         findViewById(R.id.maintainer_github_link).setOnClickListener(v -> openMaintainerGithubLink());
+        findViewById(R.id.previous_maintainer_github_link).setOnClickListener(v -> openPreviousMaintainerGithubLink());
         findViewById(R.id.old_maintainer_github_link).setOnClickListener(v -> openOldMaintainerGithubLink());
     }
 
@@ -102,8 +103,13 @@ public class AboutActivity extends AppCompatActivity {
         tryStartActivity(this, browserIntent);
     }
 
+    private void openPreviousMaintainerGithubLink() {
+        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.github_previous_maintainer_url)));
+        tryStartActivity(this, browserIntent);
+    }
+
     private void openOldMaintainerGithubLink() {
-        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.github_maintainer_url)));
+        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.github_old_maintainer_url)));
         tryStartActivity(this, browserIntent);
     }
 }

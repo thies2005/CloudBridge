@@ -266,7 +266,6 @@ class ConfigCreate internal constructor(
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(mContext)
             builder.setTitle(R.string.internxt_auth_method_title)
-            builder.setMessage(R.string.internxt_auth_method_message)
 
             
             val options = arrayOf(
