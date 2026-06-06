@@ -46,6 +46,7 @@ import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.RemotesRecyclerViewAdapter;
+import ca.pkay.rcloneexplorer.RemoteConfig.InternxtReauth;
 import ca.pkay.rcloneexplorer.RemoteConfig.RemoteConfig;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import jp.wasabeef.recyclerview.animators.LandingAnimator;
@@ -513,6 +514,11 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
     }
 
     private void reauthenticateRemote(final RemoteItem remoteItem) {
+        if ("internxt".equalsIgnoreCase(remoteItem.getTypeReadable())) {
+            new InternxtReauth(context, rclone, remoteItem.getName()).execute();
+            return;
+        }
+
         Intent intent = new Intent(context, RemoteConfig.class);
         intent.putExtra(CONFIG_EDIT_TARGET, remoteItem.getName());
         startActivityForResult(intent, CONFIG_EDIT_CODE);

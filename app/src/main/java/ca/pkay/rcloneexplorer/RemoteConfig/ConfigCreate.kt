@@ -68,7 +68,6 @@ class ConfigCreate internal constructor(
      */
     private fun createInternxtWithTwoFactor(): Boolean {
         android.util.Log.e(TAG, "=== INTERNXT AUTH START ===")
-        android.util.Log.e(TAG, "Options: $options")
 
         // Step 0: Ask for Auth Method (Temporary vs Auto-Login)
         val authMethod = getAuthPreferenceFromUser()
@@ -102,15 +101,14 @@ class ConfigCreate internal constructor(
         android.util.Log.e(TAG, "Step 1: Waiting for config create to finish...")
         
         // Drain output to prevent blocking
-        val createOutput = StringBuilder()
         Thread {
             try {
-                createProc.inputStream.bufferedReader().forEachLine { createOutput.appendLine(it) }
+                createProc.inputStream.bufferedReader().forEachLine { }
             } catch (e: Exception) {}
         }.start()
         Thread {
             try {
-                createProc.errorStream.bufferedReader().forEachLine { createOutput.appendLine(it) }
+                createProc.errorStream.bufferedReader().forEachLine { }
             } catch (e: Exception) {}
         }.start()
         
@@ -118,7 +116,6 @@ class ConfigCreate internal constructor(
             val finished = createProc.waitFor(1, java.util.concurrent.TimeUnit.MINUTES)
             val exitCode = if (finished) createProc.exitValue() else -1
             android.util.Log.e(TAG, "Step 1 finished=$finished, exitCode=$exitCode")
-            android.util.Log.e(TAG, "Step 1 output: $createOutput")
             if (exitCode != 0) {
                 android.util.Log.e(TAG, "Step 1 failed! Aborting configuration.")
                 return false
@@ -159,12 +156,10 @@ class ConfigCreate internal constructor(
                 options.add(result)
             }
 
-            android.util.Log.e(TAG, "Running config update with state: '$state', result: '$result'")
+            android.util.Log.e(TAG, "Running Internxt config update")
             val proc = mRclone.config("update", options) ?: return false
 
             val jsonOutput = java.lang.StringBuilder()
-            val errorOutput = java.lang.StringBuilder()
-
             // Read stdout (JSON output from rclone)
             val outputReader = Thread {
                 val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.inputStream))
@@ -178,13 +173,13 @@ class ConfigCreate internal constructor(
                 }
             }
 
-            // Read stderr for debugging
+            // Drain stderr without retaining sensitive auth output.
             val errorReader = Thread {
                 val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.errorStream))
                 try {
                     var line: String?
                     while (reader.readLine().also { line = it } != null) {
-                        errorOutput.append(line).append("\n")
+                        // Keep draining so rclone cannot block on a full pipe.
                     }
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "Error reader error", e)
@@ -205,10 +200,6 @@ class ConfigCreate internal constructor(
             }
 
             val exitCode = proc.exitValue()
-            if (errorOutput.isNotEmpty()) {
-                android.util.Log.e(TAG, "rclone config update error output:\n$errorOutput")
-            }
-
             if (exitCode != 0) {
                 android.util.Log.e(TAG, "rclone config update failed with exit code $exitCode")
                 return false
@@ -223,7 +214,6 @@ class ConfigCreate internal constructor(
             }
 
             try {
-                android.util.Log.e(TAG, "rclone returned JSON: $jsonStr")
                 val json = org.json.JSONObject(jsonStr)
                 state = json.optString("State", "")
                 
@@ -252,7 +242,7 @@ class ConfigCreate internal constructor(
                     result = ""
                 }
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Failed to parse rclone JSON output: $jsonStr", e)
+                android.util.Log.e(TAG, "Failed to parse rclone JSON output", e)
                 return false
             }
         }
@@ -403,4 +393,3 @@ class ConfigCreate internal constructor(
         mContext.startActivity(intent)
     }
 }
-

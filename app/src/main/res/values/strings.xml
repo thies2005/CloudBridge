@@ -191,6 +191,7 @@
     <string name="serve_dlna">DLNA</string>
     <string name="provider_webdav">Webdav</string>
     <string name="error_creating_remote">Error creating remote</string>
+    <string name="cancelled">Cancelled</string>
     <string name="remote_creation_success">Remote created successfully</string>
     <string name="next">Next</string>
     <string name="title_activity_remote_config">Select type</string>
@@ -646,6 +647,11 @@
     <string name="internxt_auth_option_temp">Login until expire (2FA Code)</string>
     <string name="internxt_auth_option_perm">Auto-Login (2FA Seed)</string>
 
+    <string name="internxt_reauth_title">Re-authenticate Internxt</string>
+    <string name="internxt_reauth_message">Choose how to refresh this Internxt session. A one-time code logs in until the next expiry. A 2FA seed enables automatic re-authentication.</string>
+    <string name="internxt_reauth_progress">Re-authenticating Internxt...</string>
+    <string name="internxt_reauth_success">Internxt re-authenticated successfully</string>
+
     <string name="internxt_totp_secret_title">2FA Secret (Seed)</string>
     <string name="internxt_totp_secret_message">Enter your 2FA secret (seed) to enable auto-login. This is the code you scanned or typed into your authenticator app.</string>
     <string name="internxt_totp_secret_hint">Base32 Secret (e.g. JBSWY3DPEHPK3PXP)</string>
@@ -658,4 +664,3 @@
     <string name="reset_app_confirm_message">This will delete ALL remotes, tasks, triggers, preferences and cached data. This action cannot be undone.\n\nThe app will restart after reset.</string>
     <string name="reset_app_success">App data cleared. Restarting…</string>
 </resources>
-
