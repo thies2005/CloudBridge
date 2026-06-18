@@ -301,11 +301,12 @@ public class Rclone {
             FLog.d(TAG, "getDirectoryContent[ENV]: %s", Arrays.toString(env));
             process = getRuntimeProcess(command, env);
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
             StringBuilder output = new StringBuilder();
-            while ((line = reader.readLine()) != null) {
-                output.append(line);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
             }
 
             process.waitFor();
@@ -370,10 +371,11 @@ public class Rclone {
 
         try {
             process = getRuntimeProcess(command);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
             }
 
             process.waitFor();
@@ -452,12 +454,6 @@ public class Rclone {
     }
 
     private Process getRuntimeProcess(String[] command, String[] env) throws IOException {
-        try{
-            Runtime.getRuntime().exec(rclone);
-        } catch (IOException e){
-            FLog.e("rclone", "Error executing rclone!" +e.getMessage());
-            throw new IOException("Error executing rclone!" +e.getMessage());
-        }
         return Runtime.getRuntime().exec(command, env);
     }
 
@@ -576,10 +572,11 @@ public class Rclone {
 
         try {
             process = getRuntimeProcess(command);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
             }
 
             process.waitFor();
@@ -593,7 +590,13 @@ public class Rclone {
             FLog.e(TAG, "getRemotes: error retrieving remotes", e);
         }
 
+        if (configs == null) {
+            return options;
+        }
         JSONObject selectedConfig = configs.optJSONObject(name);
+        if (selectedConfig == null) {
+            return options;
+        }
         Iterator<String> keys = selectedConfig.keys();
 
         while(keys.hasNext()) {
@@ -635,8 +638,9 @@ public class Rclone {
                 return null;
             }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            return  reader.readLine();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                return reader.readLine();
+            }
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "obscure: error starting rclone", e);
             // TODO: guard callers against null result
@@ -667,7 +671,10 @@ public class Rclone {
                 commandProtocol = "webdav";
         }
 
-        if (allowRemoteAccess) {
+        if (allowRemoteAccess && (user == null || user.length() == 0 || password == null || password.length() == 0)) {
+            FLog.w(TAG, "serve: remote access requested without credentials, binding to localhost");
+            address = "127.0.0.1:" + String.valueOf(port);
+        } else if (allowRemoteAccess) {
             address = ":" + String.valueOf(port);
         } else {
             address = "127.0.0.1:" + String.valueOf(port);
@@ -1037,8 +1044,9 @@ public class Rclone {
                 return null;
             }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-             return reader.readLine();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                return reader.readLine();
+            }
 
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "link: error running rclone", e);
@@ -1069,13 +1077,17 @@ public class Rclone {
                 return context.getString(R.string.hash_error);
             }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line = reader.readLine();
-            String[] split = line.split("\\s+");
-            if (split[0].trim().isEmpty()) {
-                return context.getString(R.string.hash_unsupported);
-            } else {
-                return split[0];
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line = reader.readLine();
+                if (line == null || line.trim().isEmpty()) {
+                    return context.getString(R.string.hash_error);
+                }
+                String[] split = line.split("\\s+");
+                if (split[0].trim().isEmpty()) {
+                    return context.getString(R.string.hash_unsupported);
+                } else {
+                    return split[0];
+                }
             }
         } catch (IOException e) {
             FLog.e(TAG, "calculateMD5: error running rclone", e);
@@ -1106,13 +1118,17 @@ public class Rclone {
                 return context.getString(R.string.hash_error);
             }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line = reader.readLine();
-            String[] split = line.split("\\s+");
-            if (split[0].trim().isEmpty()) {
-                return context.getString(R.string.hash_unsupported);
-            } else {
-                return split[0];
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line = reader.readLine();
+                if (line == null || line.trim().isEmpty()) {
+                    return context.getString(R.string.hash_error);
+                }
+                String[] split = line.split("\\s+");
+                if (split[0].trim().isEmpty()) {
+                    return context.getString(R.string.hash_unsupported);
+                } else {
+                    return split[0];
+                }
             }
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "calculateSHA1: error running rclone", e);
@@ -1131,17 +1147,24 @@ public class Rclone {
                 return "-1";
             }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                result.add(line);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    result.add(line);
+                }
             }
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "getRcloneVersion: error running rclone", e);
             return "-1";
         }
 
+        if (result.isEmpty()) {
+            return "-1";
+        }
         String[] version = result.get(0).split("\\s+");
+        if (version.length < 2) {
+            return "-1";
+        }
         return version[1];
     }
 
@@ -1207,10 +1230,11 @@ public class Rclone {
 
         try {
             process = getRuntimeProcess(command);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
             }
 
             process.waitFor();
@@ -1365,9 +1389,8 @@ public class Rclone {
         }
 
         ArrayList<String> result = new ArrayList<>();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String line;
-        try {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
             while ((line = reader.readLine()) != null) {
                 result.add(line);
             }
@@ -1675,10 +1698,11 @@ public class Rclone {
 
             try {
                 process = getRuntimeProcess(command, getRcloneEnv());
-                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line);
+                    }
                 }
 
                 process.waitFor();

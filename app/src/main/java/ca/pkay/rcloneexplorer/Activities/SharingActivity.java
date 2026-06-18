@@ -133,6 +133,7 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
         if (uri == null) {
             finish();
+            return;
         }
         isDataReady = false;
         new CopyFile(this, uri).execute();
@@ -142,6 +143,7 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         ArrayList<Uri> uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
         if (uris == null) {
             finish();
+            return;
         }
         isDataReady = false;
         new CopyFile(this, uris).execute();

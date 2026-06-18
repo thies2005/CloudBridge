@@ -12,6 +12,9 @@ import java.util.Random
 
 class SyncManager(private var mContext: Context) {
 
+    companion object {
+        private val SYNC_WORK_TAG = "sync_work"
+    }
 
     fun queue(trigger: Trigger) {
         queue(trigger.triggerTarget)
@@ -29,6 +32,7 @@ class SyncManager(private var mContext: Context) {
 
         uploadWorkRequest.setInputData(data.build())
         uploadWorkRequest.addTag(taskID.toString())
+        uploadWorkRequest.addTag(SYNC_WORK_TAG)
         work(uploadWorkRequest.build())
     }
 
@@ -42,6 +46,7 @@ class SyncManager(private var mContext: Context) {
 
         uploadWorkRequest.setInputData(data.build())
         uploadWorkRequest.addTag(task.id.toString())
+        uploadWorkRequest.addTag(SYNC_WORK_TAG)
         work(uploadWorkRequest.build())
     }
 
@@ -52,7 +57,7 @@ class SyncManager(private var mContext: Context) {
 
     fun cancel() {
         WorkManager.getInstance(mContext)
-            .cancelAllWork()
+            .cancelAllWorkByTag(SYNC_WORK_TAG)
     }
     fun cancel(tag: String) {
 

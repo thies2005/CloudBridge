@@ -93,13 +93,15 @@ public class OauthHelper {
         UrlAuthThread currentAuth = new OauthHelper.UrlAuthThread(process, context);
         oauthProcessToken.acquire(currentAuth);
         currentAuth.start();
+        boolean exitedNormally = false;
         try {
             process.waitFor();
+            exitedNormally = true;
         } catch (InterruptedException e) {
             FLog.d(TAG, "Auth stopped by process interrupt");
             currentAuth.forceStop();
         }
-        return 0 == process.exitValue();
+        return exitedNormally && 0 == process.exitValue();
     }
 
     /**

@@ -3,24 +3,19 @@ package de.schuelken.cloudbridge.updates.workmanager
 import android.content.Context
 import android.util.Log
 import androidx.preference.PreferenceManager
-import androidx.work.Worker
+import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import ca.pkay.rcloneexplorer.BuildConfig
 import ca.pkay.rcloneexplorer.R
 import com.sharkaboi.appupdatechecker.AppUpdateChecker
-import com.sharkaboi.appupdatechecker.models.AppUpdateCheckerException
 import com.sharkaboi.appupdatechecker.models.UpdateResult
 import com.sharkaboi.appupdatechecker.sources.github.GithubTagSource
 import com.sharkaboi.appupdatechecker.versions.DefaultStringVersionComparator
 import com.sharkaboi.appupdatechecker.versions.VersionComparator
 import de.schuelken.cloudbridge.extensions.tag
 import de.schuelken.cloudbridge.notifications.AppUpdateNotification
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
-class UpdateWorker (private var mContext: Context, workerParams: WorkerParameters): Worker(mContext, workerParams) {
+class UpdateWorker (private var mContext: Context, workerParams: WorkerParameters): CoroutineWorker(mContext, workerParams) {
 
     private val preferenceManager = PreferenceManager.getDefaultSharedPreferences(mContext)
 
@@ -29,7 +24,7 @@ class UpdateWorker (private var mContext: Context, workerParams: WorkerParameter
     private val lastFoundVersion = preferenceManager.getString(mContext.getString(R.string.pref_key_app_updates_found_update_for_version), BuildConfig.VERSION_NAME)?:BuildConfig.VERSION_NAME
 
 
-    override fun doWork(): Result {
+    override suspend fun doWork(): Result {
 
         Log.e(tag(), "Try to check updates...")
 
@@ -63,12 +58,7 @@ class UpdateWorker (private var mContext: Context, workerParams: WorkerParameter
         }
         source.setCustomVersionComparator(customVersionComparator)
 
-
-        CoroutineScope(Dispatchers.IO).launch( CoroutineExceptionHandler { _, throwable ->
-            if (throwable is AppUpdateCheckerException) {
-                Log.e(tag(), "Error: ${throwable.message}")
-            }
-        }) {
+        try {
             when (val result = AppUpdateChecker(source).checkUpdate()) {
                 UpdateResult.NoUpdate -> setFoundVersion(BuildConfig.VERSION_NAME)
                 is UpdateResult.UpdateAvailable<*> -> {
@@ -78,6 +68,8 @@ class UpdateWorker (private var mContext: Context, workerParams: WorkerParameter
                     notifyIfRequired()
                 }
             }
+        } catch (e: Exception) {
+            Log.e(tag(), "Error: ${e.message}")
         }
 
         // Indicate whether the work finished successfully with the Result

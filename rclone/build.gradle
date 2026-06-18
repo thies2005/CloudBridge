@@ -230,7 +230,7 @@ task checkoutRclone(dependsOn: createRcloneModule) {
         println "Syncing rclone source to ref: ${RCLONE_REF}"
         exec {
             workingDir srcDir.absolutePath
-            commandLine 'git', 'fetch', 'origin'
+            commandLine 'git', 'fetch', 'origin', '--tags'
         }
         exec {
             workingDir srcDir.absolutePath

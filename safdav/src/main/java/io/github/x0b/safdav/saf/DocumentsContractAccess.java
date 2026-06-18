@@ -312,7 +312,7 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
     private String getDisplayNameCompat(Uri uri) {
         String[] projection = new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME};
         try (Cursor cursor = context.getContentResolver().query(uri, projection, null, null, null)) {
-            if (cursor.moveToFirst() && cursor.isNull(0)) {
+            if (cursor.moveToFirst() && !cursor.isNull(0)) {
                 return cursor.getString(0);
             } else {
                 return null;

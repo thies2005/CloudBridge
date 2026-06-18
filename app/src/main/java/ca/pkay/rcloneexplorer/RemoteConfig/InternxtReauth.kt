@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.ProgressDialog
 import android.content.Context
 import android.os.AsyncTask
+import android.os.Build
 import android.text.InputType
 import android.widget.Toast
 import ca.pkay.rcloneexplorer.R
@@ -124,7 +125,7 @@ class InternxtReauth(
             errorReader.join(1000)
 
             if (!completed) {
-                proc.destroyForcibly()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) proc.destroyForcibly() else proc.destroy()
                 errorMessage = context.getString(R.string.error_creating_remote)
                 FLog.e(TAG, "Internxt reauth timed out")
                 return false
@@ -271,7 +272,20 @@ class InternxtReauth(
 
 private fun Process.waitForQuietly(timeout: Long, unit: TimeUnit): Boolean {
     return try {
-        waitFor(timeout, unit)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            waitFor(timeout, unit)
+        } else {
+            val deadlineMs = System.currentTimeMillis() + unit.toMillis(timeout)
+            while (System.currentTimeMillis() < deadlineMs) {
+                try {
+                    exitValue()
+                    return true
+                } catch (e: IllegalThreadStateException) {
+                    Thread.sleep(50)
+                }
+            }
+            false
+        }
     } catch (e: InterruptedException) {
         destroy()
         false

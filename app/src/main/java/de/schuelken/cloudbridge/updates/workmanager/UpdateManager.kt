@@ -34,6 +34,6 @@ class UpdateManager(private var mContext: Context) {
     }
 
     fun cancelAll() {
-        WorkManager.getInstance(mContext).cancelAllWork()
+        WorkManager.getInstance(mContext).cancelUniqueWork(TAG_REPEATING)
     }
 }

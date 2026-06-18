@@ -30,6 +30,7 @@ import android.provider.DocumentsContract.Root;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.util.LruCache;
+import android.webkit.MimeTypeMap;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
@@ -771,13 +772,7 @@ public class VirtualContentProvider extends SingleRootProvider {
     public void deleteDocument(String rawDocumentId) throws FileNotFoundException {
         FLog.v(TAG, "deleteDocument: %s", rawDocumentId);
 
-        // TODO: bug: remotes/remotes/... instead of remotes/...
-        final String rootedDocumentId;
-        if (getNoRootId(rawDocumentId).startsWith(ROOT_DOC_PREFIX)) {
-            rootedDocumentId = getNoRootId(rawDocumentId);
-        } else {
-            rootedDocumentId = rawDocumentId;
-        }
+        final String rootedDocumentId = getRootedDocumentId(getShortId(rawDocumentId));
 
         if (isRemoteDocument(rootedDocumentId)) {
             FLog.e(TAG, "deleteDocument: deleting remotes not supported");
@@ -932,11 +927,17 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     @Override
     public String getDocumentType(String documentId) throws FileNotFoundException {
-        // TODO: NetworkOnMainThreadException in case of cache miss, e.g. when the directory
-        //          not browsed previously
-        ListItem item = getFileItem(getNoRootId(documentId));
+        ListItem item = remoteState.get(getNoRootId(documentId)).item;
         if (null == item) {
-            throw new FileNotFoundException();
+            int lastSlash = documentId.lastIndexOf('/');
+            String name = lastSlash >= 0 ? documentId.substring(lastSlash + 1) : documentId;
+            int lastDot = name.lastIndexOf('.');
+            if (lastDot < 0 || lastDot == name.length() - 1) {
+                return "application/octet-stream";
+            }
+            String extension = name.substring(lastDot + 1).toLowerCase();
+            String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+            return mimeType != null ? mimeType : "application/octet-stream";
         }
         return item.mimeType;
     }

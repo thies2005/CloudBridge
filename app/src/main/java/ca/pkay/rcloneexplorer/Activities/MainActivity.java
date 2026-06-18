@@ -120,6 +120,7 @@ public class MainActivity extends AppCompatActivity
         if(!allPermissionsGranted || !completedIntroOnce) {
             startActivity(new Intent(this, OnboardingActivity.class));
             finish();
+            return;
         }
 
 
@@ -267,22 +268,28 @@ public class MainActivity extends AppCompatActivity
             Uri uri;
             if (data != null) {
                 uri = data.getData();
-                new CopyConfigFile().execute(uri);
+                if (uri != null) {
+                    new CopyConfigFile().execute(uri);
+                }
             }
         } else if (requestCode == SETTINGS_CODE && resultCode == RESULT_OK) {
-            boolean themeChanged = data.getBooleanExtra(SettingsActivity.THEME_CHANGED, false);
-            if (themeChanged) {
-                recreate();
+            if (data != null) {
+                boolean themeChanged = data.getBooleanExtra(SettingsActivity.THEME_CHANGED, false);
+                if (themeChanged) {
+                    recreate();
+                }
             }
         } else if (requestCode == WRITE_REQUEST_CODE && resultCode == RESULT_OK) {
             Uri uri;
             if (data != null) {
                 uri = data.getData();
-                try {
-                    rclone.exportConfigFile(uri);
-                } catch (IOException e) {
-                    FLog.e(TAG, "Could not export config file to %s", e, uri);
-                    Toasty.error(this, getString(R.string.error_exporting_config_file), Toast.LENGTH_SHORT, true).show();
+                if (uri != null) {
+                    try {
+                        rclone.exportConfigFile(uri);
+                    } catch (IOException e) {
+                        FLog.e(TAG, "Could not export config file to %s", e, uri);
+                        Toasty.error(this, getString(R.string.error_exporting_config_file), Toast.LENGTH_SHORT, true).show();
+                    }
                 }
             }
         } else if (requestCode == FileExplorerFragment.STREAMING_INTENT_RESULT) {

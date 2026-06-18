@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Read Go version from project
         run: |
-          GO_VERSION=$(grep -E "^de\.felixnuesse\.extract\.goVersion=" gradle.properties | cut -d'=' -f2)
+          GO_VERSION=$(grep -E "^de\.schuelken\.cloudbridge\.goVersion=" gradle.properties | cut -d'=' -f2)
           echo "GO_VERSION=$GO_VERSION" >> $GITHUB_ENV
           echo "Go version: $GO_VERSION"
       - name: Set up JDK 17
@@ -52,7 +52,7 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Install NDK from gradle.properties
         run: |
-          NDK_VERSION="$(grep -E "^de\.felixnuesse\.extract\.ndkVersion=" gradle.properties | cut -d'=' -f2)"
+          NDK_VERSION="$(grep -E "^de\.schuelken\.cloudbridge\.ndkVersion=" gradle.properties | cut -d'=' -f2)"
           sdkmanager "ndk;${NDK_VERSION}"
       - name: Build app
         run: ./gradlew assembleOssDebug
@@ -70,7 +70,7 @@ jobs:
           mv apktool* repo/lib/radar/tool
           chmod u+x repo/lib/radar/tool/apktool
           mv repo/lib/radar/tool/apktool_$apktoolVersion.jar repo/lib/radar/tool/apktool.jar
-          repo/bin/scanapk.php app/build/outputs/apk/oss/debug/roundsync_v*-oss-universal-debug.apk
+          repo/bin/scanapk.php app/build/outputs/apk/oss/debug/cloudbridge_v*-oss-universal-debug.apk
         env:
           apktoolVersion: "2.9.3"
       - name: 'Get Commit Hash'

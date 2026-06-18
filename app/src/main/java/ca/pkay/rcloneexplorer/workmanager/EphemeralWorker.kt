@@ -30,11 +30,17 @@ import de.schuelken.cloudbridge.notifications.implementations.DownloadWorkerNoti
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.InterruptedIOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import kotlin.random.Random
 import android.util.Log
+import android.webkit.MimeTypeMap
 import de.schuelken.cloudbridge.notifications.implementations.DeleteWorkerNotification
 import de.schuelken.cloudbridge.notifications.implementations.MoveWorkerNotification
 import de.schuelken.cloudbridge.notifications.implementations.UploadWorkerNotification
@@ -453,14 +459,25 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                 val pathAndName = inputData.getString(UPLOAD_FILE) ?: ""
                 val name = pathAndName.substring(pathAndName.lastIndexOf("/")+1, pathAndName.length)
                 val path = pathAndName.substring(0, pathAndName.lastIndexOf("/")+1)
-                // TODO: Make this work properly! All the params are guessed!
+                val localFile = File(pathAndName)
+                val size = localFile.length()
+                val rfc3339 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
+                rfc3339.timeZone = TimeZone.getTimeZone("UTC")
+                val modTime = rfc3339.format(Date(localFile.lastModified()))
+                val dotIndex = name.lastIndexOf('.')
+                val mimeType = if (dotIndex >= 0 && dotIndex < name.length - 1) {
+                    val extension = name.substring(dotIndex + 1).lowercase()
+                    MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+                } else {
+                    "application/octet-stream"
+                }
                 FileItem(
                         RemoteItem("", ""),
                         path,
                         name,
-                        0L,
-                        "modTime",
-                        "mimeType",
+                        size,
+                        modTime,
+                        mimeType,
                         false,
                         false)
             }

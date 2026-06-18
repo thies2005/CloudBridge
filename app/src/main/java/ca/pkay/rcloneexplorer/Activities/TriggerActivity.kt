@@ -99,6 +99,7 @@ class TriggerActivity : AppCompatActivity() {
                         this.resources.getString(R.string.triggeractivity_trigger_not_found)
                     ).show()
                     finish()
+                    return
                 }
                 mTrigger = notNullTrigger!!
             }

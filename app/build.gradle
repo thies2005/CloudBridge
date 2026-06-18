@@ -17,8 +17,8 @@ android {
         vectorDrawables.generatedDensities = []
         applicationId 'de.schuelken.cloudbridge'
         minSdkVersion 23
-        compileSdk 34
-        targetSdkVersion 34
+        compileSdk 35
+        targetSdkVersion 35
         versionCode 20 // last digit is reserved for ABI, only ever end on 0!
         versionName '1.0.1'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
