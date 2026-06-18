@@ -98,7 +98,7 @@ If you want to add more translations, see our [weblate-project](https://hosted.w
 
 You should first make sure you have:
 
-- Go 1.20+ installed and in your PATH
+- Go 1.25+ installed and in your PATH
 - Java installed and in your PATH
 - Android SDK command-line tools installed OR the NDK version specified in `gradle.properties`
   installed
@@ -115,7 +115,7 @@ You can then build the app normally from Android Studio or from CLI by running:
 
 
 ## License
-This app is released under the terms of the [GPLv3 license](https://github.com/newhinton/extract/blob/master/LICENSE). Community contributions are licensed under the MIT license, and [CLA Assistant](https://cla-assistant.io/) will ask you to confirm [a CLA stating that](https://gist.githubusercontent.com/x0b/889f037d76706fc9e3ab8ee1c047841b/raw/67c028b19e33111428904558cfda0c01039d1574/rcloneExplorer-cla-202001) if create a PR.
+This app is released under the terms of the [GPLv3 license](https://github.com/thies2005/CloudBridge/blob/master/LICENSE). Community contributions are licensed under the MIT license, and [CLA Assistant](https://cla-assistant.io/) will ask you to confirm [a CLA stating that](https://gist.githubusercontent.com/x0b/889f037d76706fc9e3ab8ee1c047841b/raw/67c028b19e33111428904558cfda0c01039d1574/rcloneExplorer-cla-202001) if create a PR.
 
 
 ## About this app

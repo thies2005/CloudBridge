@@ -46,7 +46,7 @@
             android:exported="true"
             android:label="@string/app_short_name"
             android:launchMode="singleTop"
-            android:theme="@style/AppTheme.NoActionBar">
+            android:theme="@style/Theme.App.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -100,17 +100,17 @@
         <receiver android:name=".BroadcastReceivers.ServeCancelAction" />
         <receiver android:name=".Services.RcdService$RcdServiceAction" />
         <receiver
-            android:name=".BroadcastReceivers.BootReciever"
+            android:name=".BroadcastReceivers.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
         <receiver
-            android:name=".BroadcastReceivers.TriggerReciever"
+            android:name=".BroadcastReceivers.TriggerReceiver"
             android:exported="false" />
         <receiver
-            android:name=".BroadcastReceivers.ClearReportBroadcastReciever"
+            android:name=".BroadcastReceivers.ClearReportBroadcastReceiver"
             android:exported="false" />
         <receiver
             android:name=".BroadcastReceivers.SyncRestartAction"

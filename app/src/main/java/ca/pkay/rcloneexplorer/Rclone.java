@@ -79,6 +79,8 @@ public class Rclone {
     private String rclone;
     private String rcloneConf;
     private Log2File log2File;
+    // RC-38: cache of the parsed `rclone config dump` JSON, invalidated on config mutation.
+    private JSONObject cachedRemotesConfig;
 
     public Rclone(Context context) {
         this.context = context;
@@ -361,36 +363,18 @@ public class Rclone {
     }
 
     public List<RemoteItem> getRemotes() {
-        String[] command = createCommand("config", "dump");
-        StringBuilder output = new StringBuilder();
-        Process process = null;
-        JSONObject remotesJSON;
+        // RC-38: avoid spawning an rclone process (and parsing its JSON) on every UI-thread call.
+        // The expensive config-dump result is cached and only re-read after the config is mutated
+        // via config()/deleteRemote() or an explicit invalidateRemotesCache(). Pin/favorite state
+        // is re-applied from SharedPreferences on every call so it stays fresh.
+        JSONObject remotesJSON = getCachedRemotesConfig();
+        if (remotesJSON == null) {
+            return new ArrayList<>();
+        }
+
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
         Set<String> pinnedRemotes = sharedPreferences.getStringSet(context.getString(R.string.shared_preferences_pinned_remotes), new HashSet<>());
         Set<String> favoriteRemotes = sharedPreferences.getStringSet(context.getString(R.string.shared_preferences_drawer_pinned_remotes), new HashSet<>());
-
-        try {
-            process = getRuntimeProcess(command);
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line);
-                }
-            }
-
-            process.waitFor();
-            if (process.exitValue() != 0) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
-                logErrorOutput(process);
-                return new ArrayList<>();
-            }
-
-            remotesJSON = new JSONObject(output.toString());
-        } catch (IOException | InterruptedException | JSONException e) {
-            logErrorOutput(process);
-            FLog.e(TAG, "getRemotes: error retrieving remotes", e);
-            return new ArrayList<>();
-        }
 
         List<RemoteItem> remoteItemList = new ArrayList<>();
         Iterator<String> iterator = remotesJSON.keys();
@@ -429,13 +413,48 @@ public class Rclone {
 
                 remoteItemList.add(newRemote);
             } catch (JSONException e) {
-                logErrorOutput(process);
                 FLog.e(TAG, "getRemotes: error decoding remotes", e);
                 return new ArrayList<>();
             }
         }
 
         return remoteItemList;
+    }
+
+    /** Returns the cached rclone config dump, fetching and caching it on first use. */
+    private JSONObject getCachedRemotesConfig() {
+        if (cachedRemotesConfig != null) {
+            return cachedRemotesConfig;
+        }
+        String[] command = createCommand("config", "dump");
+        StringBuilder output = new StringBuilder();
+        Process process = null;
+        try {
+            process = getRuntimeProcess(command);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
+            }
+            process.waitFor();
+            if (process.exitValue() != 0) {
+                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                logErrorOutput(process);
+                return null;
+            }
+            cachedRemotesConfig = new JSONObject(output.toString());
+        } catch (IOException | InterruptedException | JSONException e) {
+            logErrorOutput(process);
+            FLog.e(TAG, "getRemotes: error retrieving remotes", e);
+            return null;
+        }
+        return cachedRemotesConfig;
+    }
+
+    /** Drop the cached config dump so the next getRemotes() re-reads it from rclone. */
+    public void invalidateRemotesCache() {
+        cachedRemotesConfig = null;
     }
 
     public RemoteItem getRemoteItemFromName(String remoteName) {
@@ -544,6 +563,7 @@ public class Rclone {
     }
     
     public Process config(String task, List<String> options) {
+        invalidateRemotesCache();
         String[] command = createCommand("config", task);
         String[] opt = options.toArray(new String[0]);
         String[] commandWithOptions = new String[command.length + options.size()];
@@ -616,6 +636,7 @@ public class Rclone {
     }
 
     public void deleteRemote(String remoteName) {
+        invalidateRemotesCache();
         String[] command = createCommandWithOptions("config", "delete", remoteName);
         Process process;
 

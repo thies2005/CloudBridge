@@ -8,13 +8,13 @@ import android.os.Build;
 import ca.pkay.rcloneexplorer.Services.TriggerService;
 import ca.pkay.rcloneexplorer.util.FLog;
 
-public class TriggerReciever extends BroadcastReceiver {
+public class TriggerReceiver extends BroadcastReceiver {
 
-    private static final String TAG = "TriggerReciever";
+    private static final String TAG = "TriggerReceiver";
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        FLog.e(TAG, "Recieved Intent");
+        FLog.e(TAG, "Received Intent");
 
         assert intent != null;
         if(intent.getAction().equals(TriggerService.TRIGGER_RECIEVE)){

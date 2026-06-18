@@ -13,7 +13,7 @@ import de.schuelken.cloudbridge.extensions.tag
  * the ability to start a task.
  * Do not actually implement any sync changes, they only belong in the SyncManager/Worker!
  */
-class SyncService: IntentService("ca.pkay.rcexplorer.SYNC_SERCVICE"){
+class SyncService: IntentService("ca.pkay.rcexplorer.SYNC_SERVICE"){
     override fun onHandleIntent(intent: Intent?) {
         if(intent == null){
             return

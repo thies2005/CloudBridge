@@ -17,10 +17,6 @@ buildscript {
     }
 }
 
-ext {
-    targetCompatibility = JavaVersion.VERSION_11
-}
-
 allprojects {
     repositories {
         google()

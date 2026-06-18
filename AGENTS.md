@@ -83,8 +83,8 @@ Run the checks that match the change. Before any commit or push, required checks
 
 ## CI Workflows
 
-- `android.yml`: Builds debug APKs on push to `master`; uploads per-ABI artifacts.
-- `lint.yml`: Runs lint on every PR, not on `master`.
+- `android.yml`: Builds **release** APKs on push to `master`; uploads per-ABI beta-release artifacts.
+- `lint.yml`: Runs unit tests + lint on every PR, not on `master`.
 - `dependencies.yml`: Rebuilds on `build.gradle` changes and runs FOSS library scan.
 - `translations.yml`: Profanity-checks translated `strings.xml` on PRs.
 

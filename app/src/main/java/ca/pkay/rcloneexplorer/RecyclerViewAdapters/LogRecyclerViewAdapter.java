@@ -73,7 +73,7 @@ public class LogRecyclerViewAdapter extends RecyclerView.Adapter<LogRecyclerView
                 android.content.ClipData clip = android.content.ClipData.newPlainText("Log Entry", timeFormattedFullFinal + "\n" + text + "\n" + selectedTrigger.optString(SyncLog.CONTENT));
                 if (clipboard != null) {
                     clipboard.setPrimaryClip(clip);
-                    Toasty.success(v.getContext(), "Log entry copied to clipboard", android.widget.Toast.LENGTH_SHORT, true).show();
+                    Toasty.success(v.getContext(), v.getContext().getString(R.string.log_entry_copied), android.widget.Toast.LENGTH_SHORT, true).show();
                 }
                 return true;
             });

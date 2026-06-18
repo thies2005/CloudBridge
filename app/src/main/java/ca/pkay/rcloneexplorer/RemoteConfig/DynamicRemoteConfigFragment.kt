@@ -522,7 +522,6 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
             }
         }
         for ((key, value) in mOptionMap) {
-            //Log.e("TAG", "key: $key value: $value (${value.length})")
             options.add(key)
             options.add(value)
         }

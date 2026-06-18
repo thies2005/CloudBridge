@@ -5,6 +5,7 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.browser.customtabs.CustomTabsIntent;
 import ca.pkay.rcloneexplorer.InteractiveRunner;
+import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.util.FLog;
 
@@ -258,8 +259,8 @@ public class OauthHelper {
         private void showTwoFactorDialog() {
             androidx.appcompat.app.AlertDialog.Builder builder = 
                 new androidx.appcompat.app.AlertDialog.Builder(context);
-            builder.setTitle("Internxt Two-Factor Authentication");
-            builder.setMessage("Enter your 2FA code from your authenticator app:");
+            builder.setTitle(context.getString(R.string.internxt_2fa_title));
+            builder.setMessage(context.getString(R.string.internxt_2fa_message));
 
             final android.widget.EditText input = new android.widget.EditText(context);
             input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);

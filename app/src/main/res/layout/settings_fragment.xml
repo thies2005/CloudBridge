@@ -29,6 +29,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#C71414" />
 
@@ -87,6 +88,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#3584D8" />
 
@@ -145,6 +147,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#43AB3B" />
 
@@ -203,6 +206,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#E59308" />
 
@@ -260,6 +264,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#2A9702" />
 
@@ -317,6 +322,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#2A9702" />
 
@@ -374,6 +380,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#32D6E5" />
 
@@ -432,6 +439,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
+                android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
                 app:tint="#D32F2F" />
 

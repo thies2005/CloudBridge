@@ -21,11 +21,11 @@
    - Or run: `sdkmanager "ndk;29.0.14206865"`
    - Ensure NDK is installed to `%ANDROID_HOME%\ndk\29.0.14206865`
 
-4. **Go 1.19.8**
-   - Download: https://go.dev/dl/go1.19.8.windows-amd64.zip
+4. **Go 1.25.0**
+   - Download: https://go.dev/dl/go1.25.0.windows-amd64.zip
    - Extract and add to PATH
    - Or use: `winget install Golang.Go`
-   - Verify: `go version` (should show 1.19.8)
+   - Verify: `go version` (should show go1.25.0)
 
 5. **Git** (for cloning the repository)
    - Download: https://git-scm.com/download/win
@@ -55,7 +55,7 @@ java -version  # Should show version 17.x
 echo $env:ANDROID_HOME
 
 # Check Go
-go version  # Should show go1.19.8
+go version  # Should show go1.25.0
 ```
 
 If any are missing, set them temporarily for this session:
@@ -79,8 +79,7 @@ $env:ANDROID_HOME = "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk"
 ```
 
 This will:
-- Download rclone v1.73.1 and dependencies
-- Apply Session Guardian patches
+- Download rclone v1.74.0 and dependencies
 - Build `librclone.so` for arm64-v8a (Pixel 9)
 
 **Expected output location:**
@@ -95,14 +94,13 @@ app/lib/arm64-v8a/librclone.so
 ./gradlew assembleOssDebug
 
 # Or build only ARM64 (faster)
-```bash
 ./gradlew.bat :rclone:buildArm64
-./gradlew.bat :app:assembleOssDebugArm64-v8a
+./gradlew.bat assembleOssDebug
 ```
 
 **APK output location:**
 ```
-app/build/outputs/apk/oss/debug/roundsync_v*-oss-arm64-v8a-debug.apk
+app/build/outputs/apk/oss/debug/cloudbridge_v*-oss-arm64-v8a-debug.apk
 ```
 
 ### 6. Build All Architectures (Optional)
@@ -133,10 +131,10 @@ Your built APK will include:
 
 ### Go version mismatch
 ```
-The requred go version is: 1.19.8
-You are running: go version go1.19.x windows/amd64
+The required go version is: 1.25.0
+You are running: go version go1.25.x windows/amd64
 ```
-**Solution:** The build works with Go 1.19.x. Minor version differences are OK.
+**Solution:** Install Go 1.25.x exactly; the build verifies the required version.
 
 ### NDK not found
 ```
@@ -158,7 +156,7 @@ org.gradle.jvmargs=-Xmx6144M
 
 ### rclone compilation fails
 If rclone build fails, check:
-1. Go version: `go version` (must be ~1.19.x)
+1. Go version: `go version` (must be ~1.25.x)
 2. NDK path: `echo $env:ANDROID_HOME\ndk`
 3. Available disk space (need ~2GB for Go module cache)
 
@@ -173,11 +171,11 @@ app/
 │       └── apk/
 │           └── oss/
 │               └── debug/
-│                   ├── roundsync_v*-oss-armeabi-v7a-debug.apk
-│                   ├── roundsync_v*-oss-arm64-v8a-debug.apk  <-- FOR PIXEL 9
-│                   ├── roundsync_v*-oss-x86-debug.apk
-│                   ├── roundsync_v*-oss-x86_64-debug.apk
-│                   └── roundsync_v*-oss-universal-debug.apk
+│                   ├── cloudbridge_v*-oss-armeabi-v7a-debug.apk
+│                   ├── cloudbridge_v*-oss-arm64-v8a-debug.apk  <-- FOR PIXEL 9
+│                   ├── cloudbridge_v*-oss-x86-debug.apk
+│                   ├── cloudbridge_v*-oss-x86_64-debug.apk
+│                   └── cloudbridge_v*-oss-universal-debug.apk
 └── lib/
     ├── armeabi-v7a/librclone.so
     ├── arm64-v8a/librclone.so
@@ -188,7 +186,7 @@ app/
 ## Installing on Pixel 9
 
 1. Enable "Install from unknown sources" in Android settings
-2. Transfer `roundsync_v*-oss-arm64-v8a-debug.apk` to Pixel 9
+2. Transfer `cloudbridge_v*-oss-arm64-v8a-debug.apk` to Pixel 9
 3. Install the APK
 4. Test Session Guardian features:
    - Configure an Internxt remote with 2FA

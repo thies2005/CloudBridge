@@ -44,7 +44,7 @@ class NotificationPreferencesFragment : PreferenceFragmentCompat(),
             if (intent.resolveActivity(requireContext().packageManager) != null) {
                 startActivity(intent)
             } else {
-                Toasty.error(requireContext(), "Couldn't find activity to start", Toast.LENGTH_SHORT, true).show()
+                Toasty.error(requireContext(), getString(R.string.couldnt_find_activity), Toast.LENGTH_SHORT, true).show()
             }
         }
     }

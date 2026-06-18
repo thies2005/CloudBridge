@@ -55,7 +55,7 @@ When filing a new bug report, answer all the questions in the template. This inc
 ## Developing
 You should first make sure you have:
 
-- Go 1.20+ installed and in your PATH
+- Go 1.25+ installed and in your PATH
 - Java installed and in your PATH
 - Android SDK command-line tools installed OR the NDK version specified in `gradle.properties`
   installed

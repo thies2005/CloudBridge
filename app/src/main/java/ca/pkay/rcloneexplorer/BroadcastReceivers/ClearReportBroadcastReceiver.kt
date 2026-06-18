@@ -9,7 +9,7 @@ import ca.pkay.rcloneexplorer.notifications.dataStore
 import kotlinx.coroutines.runBlocking
 
 
-class ClearReportBroadcastReciever: BroadcastReceiver() {
+class ClearReportBroadcastReceiver: BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent) {
         val action = intent.action

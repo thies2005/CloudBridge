@@ -1,7 +1,6 @@
 package ca.pkay.rcloneexplorer.workmanager
 
 import android.content.Context
-import android.util.Log
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -60,12 +59,6 @@ class SyncManager(private var mContext: Context) {
             .cancelAllWorkByTag(SYNC_WORK_TAG)
     }
     fun cancel(tag: String) {
-
-        //Intent syncIntent = new Intent(context, SyncService.class);
-        //syncIntent.setAction(TASK_CANCEL_ACTION);
-        //syncIntent.putExtra(EXTRA_TASK_ID, intent.getLongExtra(EXTRA_TASK_ID, -1));
-        //context.startService(syncIntent);
-        Log.e("TAG", "CANCEL"+tag)
         WorkManager
             .getInstance(mContext)
             .cancelAllWorkByTag(tag)

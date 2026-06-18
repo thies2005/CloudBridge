@@ -3,7 +3,7 @@
 ## Option 1: Use GitHub Actions (RECOMMENDED)
 The repository already has a working GitHub Actions workflow (.github/workflows/android.yml) that:
 - Runs on Ubuntu Linux (proper build environment)
-- Uses JDK 17, Go 1.25.6, Android SDK/NDK
+- Uses JDK 17, Go 1.25.0, Android SDK/NDK
 - Builds APKs for all architectures (arm, arm64, x86, x64, universal)
 - Uploads artifacts to GitHub
 
@@ -46,20 +46,10 @@ scoop install mingw
 # Download from: https://www.mingw-w64.org/
 
 # Then build
-./gradlew assembleDebug
+./gradlew assembleOssDebug
 ```
 
-## Option 3: Skip rclone Build (Workaround)
-
-Modify gradle.properties to skip native rclone compilation:
-```gradle
-# Add this line to gradle.properties
-usePrebuiltRclone=true
-```
-
-Then modify rclone/build.gradle to use pre-built binary instead of compiling.
-
-## Option 4: Docker Build (Cross-Platform)
+## Option 3: Docker Build (Cross-Platform)
 
 Build in Docker with Windows SDK and NDK:
 ```bash
@@ -67,7 +57,7 @@ docker run -it --rm -v ${PWD}:/workspace -w /tmp \
   -e ANDROID_HOME=/opt/android-sdk \
   -e ANDROID_NDK_HOME=/opt/android-sdk/ndk/29.0.14206865 \
   ghcr.io/android-actions/sdk:latest \
-  ./gradlew assembleDebug
+  ./gradlew assembleOssDebug
 ```
 
 ---

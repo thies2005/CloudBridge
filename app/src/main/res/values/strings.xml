@@ -663,4 +663,21 @@
     <string name="reset_app_confirm_title">Reset CloudBridge?</string>
     <string name="reset_app_confirm_message">This will delete ALL remotes, tasks, triggers, preferences and cached data. This action cannot be undone.\n\nThe app will restart after reset.</string>
     <string name="reset_app_success">App data cleared. Restarting…</string>
+
+    <!-- Audit remediation: extracted hardcoded UI strings (RC-32) -->
+    <string name="task_run_on_failure">Run on Failure</string>
+    <string name="task_run_on_success">Run on Success</string>
+    <string name="notification_reports_title">Task Reports</string>
+    <string name="internxt_2fa_title">Internxt Two-Factor Authentication</string>
+    <string name="internxt_2fa_message">Enter your 2FA code from your authenticator app:</string>
+    <string name="stopping_everything">Round Sync: Stopping everything</string>
+    <string name="couldnt_find_activity">Couldn\'t find activity to start</string>
+    <string name="install_webview_retry">Install WebView and try again</string>
+    <string name="all_storage_accessible">You can now access all local storage</string>
+    <string name="manage_files_not_granted">Manage files not granted</string>
+    <string name="log_entry_copied">Log entry copied to clipboard</string>
+    <string name="undo">Undo</string>
+    <string name="remote_options_content_description">Remote options</string>
+    <string name="pinned_content_description">Pinned</string>
+    <string name="no_log_entries">No sync log entries yet</string>
 </resources>

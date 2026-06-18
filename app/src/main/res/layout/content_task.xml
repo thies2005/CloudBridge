@@ -36,6 +36,7 @@
                         android:id="@+id/label_name"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:labelFor="@id/task_title_textfield"
                         android:layout_marginBottom="8dp"
                         android:text="@string/task_edit_label_name"
                         android:textAppearance="@style/TextAppearance.AppCompat.Display1"
@@ -145,6 +146,7 @@
                         android:id="@+id/label_local"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:labelFor="@id/task_local_path_textfield"
                         android:layout_margin="8dp"
                         android:text="@string/task_edit_label_local"
                         android:textAppearance="@style/TextAppearance.AppCompat.Display1"
@@ -180,6 +182,7 @@
                         android:id="@+id/label_remote"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:labelFor="@id/task_remote_path_textfield"
                         android:layout_margin="8dp"
                         android:text="@string/task_edit_label_remote"
                         android:textAppearance="@style/TextAppearance.AppCompat.Display1"
@@ -304,7 +307,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_margin="8dp"
-                        android:text="Run on Failure"
+                        android:text="@string/task_run_on_failure"
                         android:textAppearance="@style/TextAppearance.AppCompat.Display1"
                         android:textSize="24sp" />
 
@@ -336,7 +339,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_margin="8dp"
-                        android:text="Run on Success"
+                        android:text="@string/task_run_on_success"
                         android:textAppearance="@style/TextAppearance.AppCompat.Display1"
                         android:textSize="24sp" />
 

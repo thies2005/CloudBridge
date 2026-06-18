@@ -36,7 +36,7 @@ class LogPreferencesFragment : PreferenceFragmentCompat() {
 
 
     private fun sigquitAll() {
-        Toast.makeText(context, "Round Sync: Stopping everything", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, getString(R.string.stopping_everything), Toast.LENGTH_LONG).show()
         try {
             val runtime = Runtime.getRuntime()
             val process = runtime.exec("ps")

@@ -212,8 +212,9 @@ task checkoutRclone(dependsOn: createRcloneModule) {
         if (goVersionOutput.toString().contains(GO_REQ_VERSION)) {
             println "You are running the required go version."
         } else {
-            logger.error("The required go version is: ${GO_REQ_VERSION}")
-            logger.error("You are running: ${goVersionOutput}")
+            // BUILD-019: fail the build instead of silently continuing with the wrong Go toolchain,
+            // which would produce an untested/broken librclone.so.
+            throw new GradleException("The required go version is: ${GO_REQ_VERSION}. You are running: ${goVersionOutput}")
         }
 
         def srcDir = Paths.get(CACHE_PATH, 'rclone-src').toFile()
