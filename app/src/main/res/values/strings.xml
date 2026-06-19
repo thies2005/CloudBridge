@@ -176,6 +176,7 @@
     <string name="operation_failed_unknown_rclone_error">%1$s could not be synchronized due to an unknown rclone-error</string>
     <string name="operation_failed_cancelled">Sync was cancelled</string>
     <string name="operation_failed_notask">There was no task to start!</string>
+    <string name="operation_failed_unsupported_direction">%1$s could not be synchronized because its sync direction is not supported by this version</string>
     <string name="moving_service">Moving Service</string>
     <string name="delete_service">Delete Service</string>
     <string name="syncing_service">Syncing %1$s</string>
@@ -366,6 +367,9 @@
     <string name="task_edit_label_local">Local Storage Path</string>
     <string name="task_edit_label_remote">Remote Storage Path</string>
     <string name="task_edit_label_direction">Direction</string>
+    <string name="task_edit_label_transfers">Concurrent transfers</string>
+    <string name="task_edit_transfers_default">Use global setting</string>
+    <string name="task_edit_transfers_hint">Override the global concurrent transfers setting for this task</string>
     <string name="task_edit_hint_title">Title</string>
     <string name="task_edit_hint_local">Local Path</string>
     <string name="task_edit_hint_remote">Remote Path</string>

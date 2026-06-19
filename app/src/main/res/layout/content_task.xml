@@ -126,6 +126,29 @@
                         android:minHeight="48dp"
                         android:text="@string/description_sync_direction_sync_toremote" />
 
+                    <TextView
+                        android:id="@+id/label_transfers"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_margin="8dp"
+                        android:labelFor="@id/task_transfers_spinner"
+                        android:text="@string/task_edit_label_transfers"
+                        android:textAppearance="@style/TextAppearance.AppCompat.Body1" />
+
+                    <Spinner
+                        android:id="@+id/task_transfers_spinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_margin="8dp"
+                        android:minHeight="48dp" />
+
+                    <TextView
+                        android:id="@+id/descriptionTransfers"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_margin="8dp"
+                        android:text="@string/task_edit_transfers_hint" />
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

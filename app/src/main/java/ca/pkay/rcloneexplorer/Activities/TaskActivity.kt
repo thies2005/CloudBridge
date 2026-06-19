@@ -47,6 +47,7 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
     private lateinit var localPath: EditText
     private lateinit var remoteDropdown: Spinner
     private lateinit var syncDirection: Spinner
+    private lateinit var transfersDropdown: Spinner
     private lateinit var fab: FloatingActionButton
 
     private lateinit var switchWifi: Switch
@@ -129,6 +130,7 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
         remoteDropdown = findViewById(R.id.task_remote_spinner)
         syncDirection = findViewById(R.id.task_direction_spinner)
         syncDescription = findViewById(R.id.descriptionSyncDirection)
+        transfersDropdown = findViewById(R.id.task_transfers_spinner)
         filterDropdown = findViewById(R.id.task_filter_spinner)
         switchDeleteExcluded = findViewById(R.id.task_exclude_delete_toggle)
         onFailDropdown = findViewById(R.id.task_onFail_spinner)
@@ -179,6 +181,7 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
         switchMD5sum.isChecked = existingTask?.md5sum ?: false
         switchDeleteExcluded.isChecked = existingTask?.deleteExcluded ?: false
         prepareSyncDirectionDropdown()
+        prepareTransfersDropdown()
         prepareLocal()
         prepareRemote()
         prepareFilterDropdown()
@@ -256,6 +259,9 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
         taskToPopulate.filterId = if(filterDropdown.selectedItemPosition == 0 || filterDropdown.selectedItemPosition == -1) null else filterItems[filterDropdown.selectedItemPosition - 1].id
         taskToPopulate.onFailFollowup = (onFailDropdown.selectedItem as TaskNameIdPair).id
         taskToPopulate.onSuccessFollowup = (onSuccessDropdown.selectedItem as TaskNameIdPair).id
+        val transfersValue = resources.getStringArray(R.array.task_transfers_values)
+            .getOrNull(transfersDropdown.selectedItemPosition)?.toIntOrNull() ?: -1
+        taskToPopulate.transfers = if (transfersValue <= 0) null else transfersValue
 
         // Verify if data is completed
         if (localPath.text.toString() == "") {
@@ -494,6 +500,20 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
             override fun onNothingSelected(adapterView: AdapterView<*>?) {}
         }
         syncDirection.setSelection((((existingTask?.direction?.minus(1)) ?: 0)) )
+    }
+
+    private fun prepareTransfersDropdown() {
+        val entries = resources.getStringArray(R.array.task_transfers_entries)
+        transfersDropdown.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, entries)
+        val current = existingTask?.transfers
+        var selection = 0
+        if (current != null) {
+            val values = resources.getStringArray(R.array.task_transfers_values)
+            val idx = values.indexOfFirst { it.toIntOrNull() == current }
+            if (idx >= 0) selection = idx
+        }
+        transfersDropdown.setSelection(selection)
     }
 
     private fun updateSpinnerDescription(value: Int) {

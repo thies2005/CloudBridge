@@ -15,6 +15,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import ca.pkay.rcloneexplorer.Database.DatabaseHandler
 import ca.pkay.rcloneexplorer.Items.RemoteItem
+import ca.pkay.rcloneexplorer.Items.SyncDirectionObject
 import ca.pkay.rcloneexplorer.Items.Task
 import ca.pkay.rcloneexplorer.Log2File
 import ca.pkay.rcloneexplorer.R
@@ -56,7 +57,7 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
 
 
     internal enum class FAILURE_REASON {
-        NO_FAILURE, NO_UNMETERED, NO_CONNECTION, RCLONE_ERROR, CONNECTIVITY_CHANGED, CANCELLED, NO_TASK
+        NO_FAILURE, NO_UNMETERED, NO_CONNECTION, RCLONE_ERROR, CONNECTIVITY_CHANGED, CANCELLED, NO_TASK, UNSUPPORTED_DIRECTION
     }
 
     // Objects
@@ -156,6 +157,10 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
             mTitle = mTask.remotePath
         }
         statusObject.syncDirection = mTask.direction
+        if (!isDirectionSupported(mTask.direction)) {
+            failureReason = FAILURE_REASON.UNSUPPORTED_DIRECTION
+            return
+        }
         if(arePreconditionsMet()) {
             val taskFilter = if(mTask.filterId != null ) mDatabase.getFilter(mTask.filterId!!) else null;
             val taskFilterList = taskFilter?.getFilters() ?: ArrayList()
@@ -166,11 +171,24 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
                 mTask.direction,
                 mTask.md5sum,
                 taskFilterList,
-                mTask.deleteExcluded
+                mTask.deleteExcluded,
+                mTask.transfers?.toString()
             )
+            if (sRcloneProcess == null) {
+                failureReason = FAILURE_REASON.RCLONE_ERROR
+                log("Sync: Rclone process could not be started for direction ${mTask.direction}")
+                return
+            }
             handleSync(mTitle)
             sendUploadFinishedBroadcast(remoteItem.name, mTask.remotePath)
         }
+    }
+
+    private fun isDirectionSupported(direction: Int): Boolean {
+        return direction == SyncDirectionObject.SYNC_LOCAL_TO_REMOTE ||
+               direction == SyncDirectionObject.SYNC_REMOTE_TO_LOCAL ||
+               direction == SyncDirectionObject.COPY_LOCAL_TO_REMOTE ||
+               direction == SyncDirectionObject.COPY_REMOTE_TO_LOCAL
     }
 
     private fun handleSync(title: String) {
@@ -262,6 +280,9 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
             }
             FAILURE_REASON.RCLONE_ERROR -> {
                 content = mContext.getString(R.string.operation_failed_unknown_rclone_error, mTitle)
+            }
+            FAILURE_REASON.UNSUPPORTED_DIRECTION -> {
+                content = mContext.getString(R.string.operation_failed_unsupported_direction, mTitle)
             }
         }
         followupTask(mTask.onFailFollowup)
