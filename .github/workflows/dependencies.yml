@@ -61,8 +61,9 @@ jobs:
         run: |
           # prepare scanapk with apktool.
           wget https://github.com/iBotPeaches/Apktool/releases/download/v$apktoolVersion/apktool_$apktoolVersion.jar
-          # Wrapper for apktool_*.jar
-          wget https://github.com/iBotPeaches/Apktool/raw/master/scripts/linux/apktool
+          # Wrapper for apktool_*.jar. Upstream removed scripts/linux/apktool (404), so inline a
+          # minimal one that just invokes the jar from its own directory.
+          printf '#!/bin/bash\njava -jar "$(dirname "$0")/apktool.jar" "$@"\n' > apktool
           # clone izzy's repo with the scan tools
           git clone https://gitlab.com/IzzyOnDroid/repo.git
           # create a directory for Apktool and move the apktool* files there
