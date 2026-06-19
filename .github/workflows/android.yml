@@ -21,6 +21,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Full history is required: the beta versionCode is derived from
+          # `git rev-list --count HEAD`, which only returns the real commit
+          # count (not 1) when the full history is present. Without this every
+          # beta builds with versionCode 10 and Android refuses the update.
+          fetch-depth: '0'
 
       - name: Read versions from gradle.properties
         run: |
