@@ -216,7 +216,7 @@ class UpdateDownloadWorker(
                 md.update(buffer, 0, read)
             }
         }
-        return md.digest().joinToString("") { "%02x".format(it) }
+        return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     }
 
     private fun launchInstaller(file: File): Boolean {

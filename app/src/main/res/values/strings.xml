@@ -649,7 +649,7 @@
 
     <string name="internxt_reauth_title">Re-authenticate Internxt</string>
     <string name="internxt_reauth_message">Choose how to refresh this Internxt session. A one-time code logs in until the next expiry. A 2FA seed enables automatic re-authentication.</string>
-    <string name="internxt_reauth_progress">Re-authenticating Internxt...</string>
+    <string name="internxt_reauth_progress">Re-authenticating Internxt…</string>
     <string name="internxt_reauth_success">Internxt re-authenticated successfully</string>
 
     <string name="internxt_totp_secret_title">2FA Secret (Seed)</string>

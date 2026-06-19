@@ -304,22 +304,26 @@ public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
         long retries = timeout / 150;
         while (retries > 0) {
             synchronized (onlineLock) {
-                try {
-                    if (null == rcloneRcd) {
-                        throw new NullPointerException();
-                    }
-                    rcloneRcd.isOnline();
-                } catch (NullPointerException | RcloneRcd.RcdIOException e) {
+                boolean online = false;
+                if (null == rcloneRcd) {
                     FLog.v(TAG, "rcd not yet online");
+                } else {
                     try {
-                        onlineLock.wait(150);
-                    } catch (InterruptedException ignored) {
+                        rcloneRcd.isOnline();
+                        online = true;
+                    } catch (RcloneRcd.RcdIOException e) {
+                        FLog.v(TAG, "rcd not yet online");
                     }
-                    retries--;
-                    continue;
                 }
-                available = true;
-                break;
+                if (online) {
+                    available = true;
+                    break;
+                }
+                try {
+                    onlineLock.wait(150);
+                } catch (InterruptedException ignored) {
+                }
+                retries--;
             }
         }
         return available;

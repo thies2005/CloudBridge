@@ -38,7 +38,7 @@
         <receiver
             android:name="de.schuelken.cloudbridge.updates.UpdateUserchoiceReceiver"
             android:enabled="true"
-            android:exported="true" />
+            android:exported="false" />
 
         <activity android:name=".Activities.OnboardingActivity" />
         <activity
@@ -92,7 +92,7 @@
             android:foregroundServiceType="dataSync" /> <!-- Used to expose tasks to other apps, no other functionality -->
         <service
             android:name=".Services.SyncService"
-            android:exported="true" /> <!-- This is a default service required for any and all Workers. Do not remove. -->
+            android:exported="false" /> <!-- This is a default service required for any and all Workers. Do not remove. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync" />

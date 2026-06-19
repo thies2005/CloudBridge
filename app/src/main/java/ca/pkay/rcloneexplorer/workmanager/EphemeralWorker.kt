@@ -431,9 +431,13 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         }
 
         val parcel = Parcel.obtain()
-        parcel.unmarshall(sourceParcelByteArray, 0, sourceParcelByteArray.size)
-        parcel.setDataPosition(0)
-        return FileItem.CREATOR.createFromParcel(parcel)
+        try {
+            parcel.unmarshall(sourceParcelByteArray, 0, sourceParcelByteArray.size)
+            parcel.setDataPosition(0)
+            return FileItem.CREATOR.createFromParcel(parcel)
+        } finally {
+            parcel.recycle()
+        }
     }
 
     private fun getRemoteitemFromParcel(key: String): RemoteItem? {
@@ -445,9 +449,13 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         }
 
         val parcel = Parcel.obtain()
-        parcel.unmarshall(sourceParcelByteArray, 0, sourceParcelByteArray.size)
-        parcel.setDataPosition(0)
-        return RemoteItem.CREATOR.createFromParcel(parcel)
+        try {
+            parcel.unmarshall(sourceParcelByteArray, 0, sourceParcelByteArray.size)
+            parcel.setDataPosition(0)
+            return RemoteItem.CREATOR.createFromParcel(parcel)
+        } finally {
+            parcel.recycle()
+        }
     }
 
     private fun getCurrentFile(): FileItem {

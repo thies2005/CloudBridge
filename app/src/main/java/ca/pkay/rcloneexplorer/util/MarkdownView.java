@@ -24,7 +24,11 @@ import es.dmoral.toasty.Toasty;
 public class MarkdownView extends WebView {
 
     private static final String TAG = "MarkdownView";
-    private final Executor ioExecutor = Executors.newSingleThreadExecutor();
+    private final Executor ioExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "MarkdownView-io");
+        t.setDaemon(true);
+        return t;
+    });
 
     public MarkdownView(Context context) {
         super(patchContext(context));

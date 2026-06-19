@@ -62,7 +62,19 @@ jobs:
           echo "Installing NDK version: ${{ env.NDK_VERSION }}"
           sdkmanager "ndk;${{ env.NDK_VERSION }}"
 
+      - name: Configure release signing
+        env:
+          CB_KEYSTORE_BASE64: ${{ secrets.CB_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p app/.config/android
+          echo "$CB_KEYSTORE_BASE64" | base64 -d > app/.config/android/cloudbridge-release.keystore
+
       - name: Build release APKs
+        env:
+          CB_STORE_FILE: app/.config/android/cloudbridge-release.keystore
+          CB_STORE_PASSWORD: ${{ secrets.CB_STORE_PASSWORD }}
+          CB_KEY_ALIAS: ${{ secrets.CB_KEY_ALIAS }}
+          CB_KEY_PASSWORD: ${{ secrets.CB_KEY_PASSWORD }}
         run: |
           echo "Building OSS Release APKs..."
           ./gradlew assembleOssRelease

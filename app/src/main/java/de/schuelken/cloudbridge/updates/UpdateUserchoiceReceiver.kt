@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.preference.PreferenceManager
 import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -53,7 +54,7 @@ class UpdateUserchoiceReceiver : BroadcastReceiver() {
             .setConstraints(constraints)
             .addTag(WORK_TAG)
             .build()
-        WorkManager.getInstance(context).enqueue(request)
+        WorkManager.getInstance(context).enqueueUniqueWork(WORK_TAG, ExistingWorkPolicy.KEEP, request)
         Log.e(tag(), "Enqueued UpdateDownloadWorker")
     }
 }

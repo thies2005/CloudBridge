@@ -3,12 +3,24 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlinx-serialization'
 
 android {
+    // Release signing: credentials come from a git-ignored keystore.properties
+    // (local builds) or CB_* env vars (CI). Falls back to the debug key when
+    // neither is present so fresh checkouts still build an installable APK.
+    def keystoreProperties = new Properties()
+    def keystorePropertiesFile = rootProject.file("keystore.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+    def releaseStorePath = keystoreProperties['storeFile'] ?: System.getenv('CB_STORE_FILE')
+    def releaseKeyConfigured = releaseStorePath != null && file(releaseStorePath).exists()
     signingConfigs {
         release {
-            keyAlias 'fdroid'
-            storeFile file('.config/android/roundsync.keystore')
-            storePassword 'android'
-            keyPassword 'android'
+            if (releaseKeyConfigured) {
+                keyAlias = keystoreProperties['keyAlias'] ?: System.getenv('CB_KEY_ALIAS')
+                storeFile file(releaseStorePath)
+                storePassword = keystoreProperties['storePassword'] ?: System.getenv('CB_STORE_PASSWORD')
+                keyPassword = keystoreProperties['keyPassword'] ?: System.getenv('CB_KEY_PASSWORD')
+            }
         }
     }
     ndkVersion project.properties['de.schuelken.cloudbridge.ndkVersion']
@@ -54,7 +66,7 @@ android {
                     appIcon: "@mipmap/ic_launcher",
                     appIconRound: "@mipmap/ic_launcher_round"
             ]
-            signingConfig signingConfigs.release
+            signingConfig releaseKeyConfigured ? signingConfigs.release : signingConfigs.debug
         }
     }
 

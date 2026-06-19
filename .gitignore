@@ -42,8 +42,11 @@ captures/
 .idea/libraries
 .idea/caches
 
-# Keystore files
+# Keystore files (release signing keys must never be committed)
 *.jks
+*.keystore
+# Local signing credentials for release builds (see app/build.gradle)
+keystore.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

@@ -41,6 +41,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.net.InetAddress;
@@ -79,8 +80,12 @@ public class Rclone {
     private String rclone;
     private String rcloneConf;
     private Log2File log2File;
-    // RC-38: cache of the parsed `rclone config dump` JSON, invalidated on config mutation.
-    private JSONObject cachedRemotesConfig;
+    // RC-38: cache of the parsed `rclone config dump` JSON. Validated against the rclone.conf
+    // file's mtime/length on every read so per-instance caches self-invalidate when another
+    // Rclone instance (e.g. a config dialog) mutates the config. Volatile for cross-thread visibility.
+    private volatile JSONObject cachedRemotesConfig;
+    private volatile long cachedConfMtime;
+    private volatile long cachedConfLength;
 
     public Rclone(Context context) {
         this.context = context;
@@ -423,8 +428,13 @@ public class Rclone {
 
     /** Returns the cached rclone config dump, fetching and caching it on first use. */
     private JSONObject getCachedRemotesConfig() {
-        if (cachedRemotesConfig != null) {
-            return cachedRemotesConfig;
+        File confFile = new File(rcloneConf);
+        long mtime = confFile.lastModified();
+        long length = confFile.length();
+        synchronized (this) {
+            if (cachedRemotesConfig != null && cachedConfMtime == mtime && cachedConfLength == length) {
+                return cachedRemotesConfig;
+            }
         }
         String[] command = createCommand("config", "dump");
         StringBuilder output = new StringBuilder();
@@ -443,13 +453,18 @@ public class Rclone {
                 logErrorOutput(process);
                 return null;
             }
-            cachedRemotesConfig = new JSONObject(output.toString());
+            JSONObject parsed = new JSONObject(output.toString());
+            synchronized (this) {
+                cachedRemotesConfig = parsed;
+                cachedConfMtime = mtime;
+                cachedConfLength = length;
+            }
+            return parsed;
         } catch (IOException | InterruptedException | JSONException e) {
             logErrorOutput(process);
             FLog.e(TAG, "getRemotes: error retrieving remotes", e);
             return null;
         }
-        return cachedRemotesConfig;
     }
 
     /** Drop the cached config dump so the next getRemotes() re-reads it from rclone. */
@@ -1327,7 +1342,7 @@ public class Rclone {
          */
         public boolean isNetworkError() {
             if (exitCode == 0) return false;
-            String lower = stderr.toLowerCase();
+            String lower = stderr.toLowerCase(Locale.ROOT);
             return lower.contains("dial tcp")
                 || lower.contains("connection refused")
                 || lower.contains("no such host")
