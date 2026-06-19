@@ -22,7 +22,7 @@
             android:importantForAccessibility="no"
             android:visibility="visible"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTopToTopOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_twotone_info_24" />
 
         <TextView
