@@ -52,4 +52,18 @@
         <item>KB</item>
         <item>MB</item>
     </string-array>
+
+    <string-array name="transfers_entries">
+        <item>1</item>
+        <item>2</item>
+        <item>4</item>
+        <item>8</item>
+    </string-array>
+
+    <string-array name="transfers_values">
+        <item>1</item>
+        <item>2</item>
+        <item>4</item>
+        <item>8</item>
+    </string-array>
 </resources>
