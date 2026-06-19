@@ -17,6 +17,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
 import ca.pkay.rcloneexplorer.Database.DatabaseHandler
 import ca.pkay.rcloneexplorer.FilePicker
@@ -115,6 +116,7 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, true)
         ActivityHelper.applyTheme(this)
         setContentView(R.layout.activity_task)
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
