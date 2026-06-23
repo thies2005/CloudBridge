@@ -48,7 +48,7 @@ public final class TransferLocks {
                 wifi.acquire();
             }
             return new TransferLocks(wake, wifi);
-        } catch (SecurityException | RuntimeException e) {
+        } catch (RuntimeException e) {
             FLog.e("TransferLocks", "acquire failed, releasing partial state", e);
             if (wake != null && wake.isHeld()) {
                 try { wake.release(); } catch (RuntimeException ignored) { }
