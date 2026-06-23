@@ -24,6 +24,7 @@ import ca.pkay.rcloneexplorer.notifications.prototypes.WorkerNotification
 import ca.pkay.rcloneexplorer.notifications.support.StatusObject
 import ca.pkay.rcloneexplorer.util.FLog
 import ca.pkay.rcloneexplorer.util.SyncLog
+import ca.pkay.rcloneexplorer.util.TransferLocks
 import ca.pkay.rcloneexplorer.util.WifiConnectivitiyUtil
 import de.schuelken.cloudbridge.extensions.tag
 import de.schuelken.cloudbridge.notifications.implementations.DownloadWorkerNotification
@@ -117,7 +118,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             if(preconditionsMet()) {
                 // do not instantiate rclone when you dont want it to run.
                 // It will immediately run!
-                when(type){
+                val transferLocks = TransferLocks.acquire(mContext, "ephemeral")
+                try {
+                    when(type){
                     Type.DOWNLOAD -> {
                         val target = inputData.getString(DOWNLOAD_TARGETPATH)
                         val fileItem = getFileitemFromParcel(DOWNLOAD_SOURCE)
@@ -173,6 +176,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                     }
                 }
                 handleSync(mTitle)
+                } finally {
+                    transferLocks?.release()
+                }
             } else {
                 log("Preconditions are not met!")
                 postSync()
@@ -216,6 +222,11 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             try {
                 val reader = BufferedReader(InputStreamReader(localProcessReference.errorStream))
                 val iterator = reader.lineSequence().iterator()
+                // Throttle notification rebuilds: rclone emits a stats line roughly every second,
+                // but with -vvv there can be many more log lines. Rebuilding a Notification and
+                // calling setForegroundAsync() on every line wastes CPU that the transfer needs.
+                var lastNotifyMs = 0L
+                val minNotifyIntervalMs = 500L
                 while(iterator.hasNext()) {
                     val line = iterator.next()
                     try {
@@ -225,18 +236,26 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                             if (sIsLoggingEnabled) {
                                 log2File?.log(line)
                             }
-                            statusObject.parseLoglineToStatusObject(logline)
-                        } else if (logline.getString("level") == "warning") {
-                            statusObject.parseLoglineToStatusObject(logline)
                         }
 
-                        updateForegroundNotification(mNotificationManager?.updateNotification(
-                            title,
-                            statusObject.notificationContent,
-                            statusObject.notificationBigText,
-                            statusObject.notificationPercent,
-                            ongoingNotificationID
-                        ))
+                        // Process all log lines so stats/progress advance the notification
+                        statusObject.parseLoglineToStatusObject(logline)
+
+                        // Only rebuild when there is content to show, and at most once per
+                        // minNotifyIntervalMs to avoid notification churn on busy logs.
+                        if (statusObject.notificationContent.isNotEmpty()) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotifyMs >= minNotifyIntervalMs) {
+                                lastNotifyMs = now
+                                updateForegroundNotification(mNotificationManager?.updateNotification(
+                                    title,
+                                    statusObject.notificationContent,
+                                    statusObject.notificationBigText,
+                                    statusObject.notificationPercent,
+                                    ongoingNotificationID
+                                ))
+                            }
+                        }
                     } catch (e: JSONException) {
                         Log.e(tag(), "Error: the offending line: $line")
                         //FLog.e(TAG, "onHandleIntent: error reading json", e)

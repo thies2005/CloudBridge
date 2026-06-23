@@ -37,7 +37,7 @@
             android:title="@string/transfer_only_on_wifi"
             app:summary="@string/transfer_only_on_wifi_summary" />
         <ListPreference
-            android:defaultValue="1"
+            android:defaultValue="4"
             android:entries="@array/transfers_entries"
             android:entryValues="@array/transfers_values"
             android:key="@string/pref_key_transfers"

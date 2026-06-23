@@ -174,7 +174,7 @@ public class Rclone {
         }
         return PreferenceManager
                 .getDefaultSharedPreferences(context)
-                .getString(context.getString(R.string.pref_key_transfers), "1");
+                .getString(context.getString(R.string.pref_key_transfers), "4");
     }
 
     public String[] getRcloneEnv(String... overwriteOptions) {
@@ -731,6 +731,22 @@ public class Rclone {
 
         ArrayList<String> params = new ArrayList<>(Arrays.asList(
                 createCommandWithOptions("serve", commandProtocol, "--addr", address, path)));
+
+        // Transfer throughput tuning. These are rclone global / VFS flags; the existing
+        // serve command already appends subcommand flags (e.g. --user) after the path and
+        // rclone's parser accepts them in this position (cf. --log-file below).
+        params.add("--transfers");
+        params.add(getTransfers());
+        params.add("--buffer-size");
+        params.add("16M");
+        params.add("--multi-thread-streams");
+        params.add("4");
+        params.add("--vfs-read-chunk-size");
+        params.add("4M");
+        params.add("--vfs-read-chunk-size-limit");
+        params.add("off");
+        params.add("--dir-cache-time");
+        params.add("5m");
 
         if(null != user && user.length() > 0) {
             params.add("--user");

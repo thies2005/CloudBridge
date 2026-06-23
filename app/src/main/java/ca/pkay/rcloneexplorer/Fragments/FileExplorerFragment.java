@@ -800,7 +800,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
      */
     @Override
     public void onClickText(FileItem fileItem) {
-        new DownloadAndOpen(DownloadAndOpen.OPEN_AS_TEXT).execute(fileItem);
+        new DownloadAndOpen(DownloadAndOpen.OPEN_AS_TEXT).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, fileItem);
     }
 
     @Override
@@ -815,7 +815,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
     @Override
     public void onClickImage(FileItem fileItem) {
-        new DownloadAndOpen(DownloadAndOpen.OPEN_AS_IMAGE).execute(fileItem);
+        new DownloadAndOpen(DownloadAndOpen.OPEN_AS_IMAGE).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, fileItem);
     }
 
     private void showFileProperties(FileItem fileItem) {
@@ -1183,7 +1183,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             new StreamTask().execute(fileItem);
         } else {
             // download and open
-            new DownloadAndOpen().execute(fileItem);
+            new DownloadAndOpen().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, fileItem);
         }
     }
 

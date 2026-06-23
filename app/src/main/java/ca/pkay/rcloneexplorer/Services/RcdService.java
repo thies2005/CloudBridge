@@ -27,6 +27,7 @@ import ca.pkay.rcloneexplorer.RcloneRcd;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.FlagsUtil;
 import ca.pkay.rcloneexplorer.util.NotificationUtils;
+import ca.pkay.rcloneexplorer.util.TransferLocks;
 
 
 public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
@@ -55,6 +56,9 @@ public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
     private volatile boolean available;
     private final Object onlineLock = new Object();
     private long initNanosTimestamp = 0;
+    // Held only while VCP/rcd jobs are actively running, so the device does not enter Doze
+    // and stall transfers with the screen off.
+    private TransferLocks activeTransferLocks;
 
     private final IBinder binder = new RcdBinder();
     private NotificationManagerCompat notificationManager;
@@ -117,6 +121,12 @@ public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
 
         if (running > 0) {
             builder.setOngoing(true).setProgress(100, 25, true);
+            if (activeTransferLocks == null) {
+                activeTransferLocks = TransferLocks.acquire(this, "rcd");
+            }
+        } else if (activeTransferLocks != null) {
+            activeTransferLocks.release();
+            activeTransferLocks = null;
         }
 
         NotificationUtils.createNotification(this, PERSISTENT_NOTIFICATION_ID, builder.build());
@@ -275,6 +285,10 @@ public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
 
     private void shutdown() {
         FLog.d(TAG, "Service shutting down");
+        if (activeTransferLocks != null) {
+            activeTransferLocks.release();
+            activeTransferLocks = null;
+        }
         if (null != rcloneRcd) {
             rcloneRcd.stopRcd();
             rcloneRcd = null;

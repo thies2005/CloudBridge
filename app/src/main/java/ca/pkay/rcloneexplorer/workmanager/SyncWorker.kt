@@ -27,6 +27,7 @@ import ca.pkay.rcloneexplorer.notifications.SyncServiceNotifications.Companion.G
 import ca.pkay.rcloneexplorer.notifications.support.StatusObject
 import ca.pkay.rcloneexplorer.util.FLog
 import ca.pkay.rcloneexplorer.util.SyncLog
+import ca.pkay.rcloneexplorer.util.TransferLocks
 import ca.pkay.rcloneexplorer.util.WifiConnectivitiyUtil
 import kotlinx.serialization.json.Json
 import org.json.JSONException
@@ -162,25 +163,30 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
             return
         }
         if(arePreconditionsMet()) {
-            val taskFilter = if(mTask.filterId != null ) mDatabase.getFilter(mTask.filterId!!) else null;
-            val taskFilterList = taskFilter?.getFilters() ?: ArrayList()
-            sRcloneProcess = mRclone.sync(
-                remoteItem,
-                mTask.localPath,
-                mTask.remotePath,
-                mTask.direction,
-                mTask.md5sum,
-                taskFilterList,
-                mTask.deleteExcluded,
-                mTask.transfers?.toString()
-            )
-            if (sRcloneProcess == null) {
-                failureReason = FAILURE_REASON.RCLONE_ERROR
-                log("Sync: Rclone process could not be started for direction ${mTask.direction}")
-                return
+            val transferLocks = TransferLocks.acquire(mContext, "sync")
+            try {
+                val taskFilter = if(mTask.filterId != null ) mDatabase.getFilter(mTask.filterId!!) else null;
+                val taskFilterList = taskFilter?.getFilters() ?: ArrayList()
+                sRcloneProcess = mRclone.sync(
+                    remoteItem,
+                    mTask.localPath,
+                    mTask.remotePath,
+                    mTask.direction,
+                    mTask.md5sum,
+                    taskFilterList,
+                    mTask.deleteExcluded,
+                    mTask.transfers?.toString()
+                )
+                if (sRcloneProcess == null) {
+                    failureReason = FAILURE_REASON.RCLONE_ERROR
+                    log("Sync: Rclone process could not be started for direction ${mTask.direction}")
+                    return
+                }
+                handleSync(mTitle)
+                sendUploadFinishedBroadcast(remoteItem.name, mTask.remotePath)
+            } finally {
+                transferLocks?.release()
             }
-            handleSync(mTitle)
-            sendUploadFinishedBroadcast(remoteItem.name, mTask.remotePath)
         }
     }
 

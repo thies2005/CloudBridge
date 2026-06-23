@@ -22,10 +22,12 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -239,13 +241,13 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                 File cacheDir = getExternalCacheDir();
                 File outFile = new File(cacheDir, fileName);
                 try (InputStream in = getContentResolver().openInputStream(uri);
-                     FileOutputStream out = new FileOutputStream(outFile)) {
+                     OutputStream out = new BufferedOutputStream(new FileOutputStream(outFile), 64 * 1024)) {
                     if (null == in) {
                         success = false;
                         continue;
                     }
                     uploadList.add(outFile.getAbsolutePath());
-                    byte[] buf = new byte[4096];
+                    byte[] buf = new byte[64 * 1024];
                     int len;
                     while ((len = in.read(buf)) > 0) {
                         out.write(buf, 0, len);
