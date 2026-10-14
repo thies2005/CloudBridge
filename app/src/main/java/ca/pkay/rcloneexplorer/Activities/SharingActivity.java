@@ -231,15 +231,46 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                     continue;
                 }
 
+                if ("file".equalsIgnoreCase(uri.getScheme()) && uri.getPath() != null) {
+                    try {
+                        String canonicalSrc = new File(uri.getPath()).getCanonicalPath();
+                        String internalDataDir = new File(getApplicationInfo().dataDir).getCanonicalPath();
+                        if (canonicalSrc.equals(internalDataDir) || canonicalSrc.startsWith(internalDataDir + File.separator)) {
+                            FLog.e(TAG, "Copy error: rejected internal file URI");
+                            success = false;
+                            continue;
+                        }
+                    } catch (IOException e) {
+                        FLog.e(TAG, "Copy error: failed to canonicalize file URI", e);
+                        success = false;
+                        continue;
+                    }
+                }
+
                 try {
                     fileName = resolveName(uri);
                 } catch (SecurityException e) {
                     success = false;
                     continue;
                 }
-                // todo: encrypt external cache
-                File cacheDir = getExternalCacheDir();
+                File cacheDir = new File(getCacheDir(), "share_staging");
+                if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                    success = false;
+                    continue;
+                }
                 File outFile = new File(cacheDir, fileName);
+                try {
+                    String canonicalCacheDir = cacheDir.getCanonicalPath() + File.separator;
+                    if (!outFile.getCanonicalPath().startsWith(canonicalCacheDir)) {
+                        FLog.e(TAG, "Copy error: rejected path traversal in display name");
+                        success = false;
+                        continue;
+                    }
+                } catch (IOException e) {
+                    FLog.e(TAG, "Copy error: canonical path check failed", e);
+                    success = false;
+                    continue;
+                }
                 try (InputStream in = getContentResolver().openInputStream(uri);
                      OutputStream out = new BufferedOutputStream(new FileOutputStream(outFile), 64 * 1024)) {
                     if (null == in) {
@@ -262,6 +293,19 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         }
 
         @NonNull
+        private String sanitizeFileName(@Nullable String rawName) {
+            if (rawName == null) {
+                return "unnamed";
+            }
+            String cleaned = rawName.replace('\\', '/');
+            String baseName = new File(cleaned).getName().trim();
+            if (baseName.isEmpty() || ".".equals(baseName) || "..".equals(baseName)) {
+                return "unnamed";
+            }
+            return baseName;
+        }
+
+        @NonNull
         private String resolveName(@NonNull Uri uri) {
             String[] projection = {OpenableColumns.DISPLAY_NAME};
             try (Cursor cursor = getContentResolver().query(uri, projection, null, null, null)) {
@@ -270,14 +314,14 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                     if(index>=0) {
                         String name = cursor.getString(index);
                         if (null != name) {
-                            return name;
+                            return sanitizeFileName(name);
                         }
                     }
                 }
             }
             List<String> segments = uri.getPathSegments();
             if (segments.size() >= 1) {
-                return segments.get(segments.size() - 1);
+                return sanitizeFileName(segments.get(segments.size() - 1));
             }
             return "unnamed";
         }

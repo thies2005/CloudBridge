@@ -285,6 +285,9 @@ public class Rclone {
 
     @Nullable
     public List<FileItem> getDirectoryContent(RemoteItem remote, String path, boolean startAtRoot) {
+        if (remote == null) {
+            return null;
+        }
         String remoteAndPath = remote.getName() + ":";
         if (startAtRoot) {
             remoteAndPath += "/";
@@ -664,8 +667,12 @@ public class Rclone {
     }
 
     public void deleteRemote(String remoteName) {
+        if (remoteName == null || remoteName.startsWith("-")) {
+            FLog.e(TAG, "deleteRemote: rejected invalid remote name");
+            return;
+        }
         invalidateRemotesCache();
-        String[] command = createCommandWithOptions("config", "delete", remoteName);
+        String[] command = createCommandWithOptions("config", "delete", "--", remoteName);
         Process process;
 
         try {
@@ -766,7 +773,11 @@ public class Rclone {
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
         boolean isLoggingEnabled = sharedPreferences.getBoolean(context.getString(R.string.pref_key_logs), false);
         if (isLoggingEnabled) {
-            File serveLog = new File(context.getExternalFilesDir("logs"), "serve.log");
+            File logsDir = new File(context.getFilesDir(), "logs");
+            if (!logsDir.exists()) {
+                logsDir.mkdirs();
+            }
+            File serveLog = new File(logsDir, "serve.log");
             params.add("--log-file");
             params.add(serveLog.getAbsolutePath());
         }
@@ -841,7 +852,7 @@ public class Rclone {
         }
 
         ArrayList<String> directionParameter = new ArrayList<>();
-        Collections.addAll(directionParameter, op, srcSection, dstSection);
+        Collections.addAll(directionParameter, op, "--", srcSection, dstSection);
         directionParameter.addAll(defaultParameter);
         command = createCommandWithOptions(directionParameter);
 
@@ -873,20 +884,22 @@ public class Rclone {
             defaultParameter.add((filter.filterType == FilterEntry.FILTER_INCLUDE ? "+ " : "- ") + filter.filter);
         }
 
+        localPath = encodePath(localPath);
+
         if (syncDirection == SyncDirectionObject.SYNC_LOCAL_TO_REMOTE) {
-            Collections.addAll(directionParameter, "sync", localPath, remoteSection);
+            Collections.addAll(directionParameter, "sync", "--", localPath, remoteSection);
             directionParameter.addAll(defaultParameter);
             command = createCommandWithOptions(directionParameter);
         } else if (syncDirection == SyncDirectionObject.SYNC_REMOTE_TO_LOCAL) {
-            Collections.addAll(directionParameter, "sync", remoteSection, localPath);
+            Collections.addAll(directionParameter, "sync", "--", remoteSection, localPath);
             directionParameter.addAll(defaultParameter);
             command = createCommandWithOptions(directionParameter);
         } else if (syncDirection == SyncDirectionObject.COPY_LOCAL_TO_REMOTE) {
-            Collections.addAll(directionParameter, "copy", localPath, remoteSection);
+            Collections.addAll(directionParameter, "copy", "--", localPath, remoteSection);
             directionParameter.addAll(defaultParameter);
             command = createCommandWithOptions(directionParameter);
         }else if (syncDirection == SyncDirectionObject.COPY_REMOTE_TO_LOCAL) {
-            Collections.addAll(directionParameter, "copy", remoteSection, localPath);
+            Collections.addAll(directionParameter, "copy", "--", remoteSection, localPath);
             directionParameter.addAll(defaultParameter);
             command = createCommandWithOptions(directionParameter);
         }else {
@@ -1323,7 +1336,10 @@ public class Rclone {
     }
 
     public Process reconnectRemote(RemoteItem remoteItem) {
-        String[] command = createCommand("config", "update", remoteItem.getName());
+        if (remoteItem == null || remoteItem.getName() == null || remoteItem.getName().startsWith("-")) {
+            return null;
+        }
+        String[] command = createCommand("config", "update", "--", remoteItem.getName());
 
         try {
             return getRuntimeProcess(command, getRcloneEnv());
@@ -1406,7 +1422,10 @@ public class Rclone {
     }
 
     public DirectoryProbeResult listDirectories(String remoteName, int maxDepth) {
-        String[] command = createCommand("lsd", "--max-depth", String.valueOf(maxDepth), remoteName + ":");
+        if (remoteName == null || remoteName.startsWith("-")) {
+            return new DirectoryProbeResult(1, "Rejected invalid remote name");
+        }
+        String[] command = createCommand("lsd", "--max-depth", String.valueOf(maxDepth), "--", remoteName + ":");
         Process process;
 
         try {
@@ -1566,21 +1585,32 @@ public class Rclone {
 
         String appsFileDir = context.getFilesDir().getPath();
         File file = new File(appsFileDir, "rclone.conf");
+        File tmpFile = new File(appsFileDir, "rclone.conf.tmp");
 
         try {
-            file.delete();
-            file.createNewFile();
-            FileOutputStream fileOutputStream = new FileOutputStream(file);
-            OutputStreamWriter outputStreamWriter = new OutputStreamWriter(fileOutputStream);
-            for (String line2 : result) {
-                outputStreamWriter.append(line2);
-                outputStreamWriter.append("\n");
+            if (tmpFile.exists()) {
+                tmpFile.delete();
             }
-            outputStreamWriter.close();
-            fileOutputStream.flush();
-            fileOutputStream.close();
+            tmpFile.createNewFile();
+            tmpFile.setReadable(false, false);
+            tmpFile.setReadable(true, true);
+            tmpFile.setWritable(false, false);
+            tmpFile.setWritable(true, true);
+            try (FileOutputStream fileOutputStream = new FileOutputStream(tmpFile);
+                 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(fileOutputStream, java.nio.charset.StandardCharsets.UTF_8)) {
+                for (String line2 : result) {
+                    outputStreamWriter.append(line2);
+                    outputStreamWriter.append("\n");
+                }
+                outputStreamWriter.flush();
+            }
+            if (!tmpFile.renameTo(file)) {
+                tmpFile.delete();
+                return false;
+            }
         } catch (IOException e) {
-            FLog.e(TAG, "decryptConfig: error reading stdout", e);
+            FLog.e(TAG, "decryptConfig: error writing config", e);
+            tmpFile.delete();
             return false;
         }
         return true;

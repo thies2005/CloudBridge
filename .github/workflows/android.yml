@@ -78,9 +78,16 @@ jobs:
       - name: Configure release signing
         env:
           CB_KEYSTORE_BASE64: ${{ secrets.CB_KEYSTORE_BASE64 }}
+          CB_STORE_PASSWORD: ${{ secrets.CB_STORE_PASSWORD }}
+          CB_KEY_ALIAS: ${{ secrets.CB_KEY_ALIAS }}
         run: |
+          if [ -z "$CB_KEYSTORE_BASE64" ] || [ -z "$CB_STORE_PASSWORD" ] || [ -z "$CB_KEY_ALIAS" ]; then
+            echo "ERROR: Release signing secrets (CB_KEYSTORE_BASE64, CB_STORE_PASSWORD, CB_KEY_ALIAS) must be set in CI." >&2
+            exit 1
+          fi
           mkdir -p app/.config/android
-          echo "$CB_KEYSTORE_BASE64" | base64 -d > app/.config/android/cloudbridge-release.keystore
+          printf '%s' "$CB_KEYSTORE_BASE64" | base64 -d > app/.config/android/cloudbridge-release.keystore
+          keytool -list -keystore app/.config/android/cloudbridge-release.keystore -storepass "$CB_STORE_PASSWORD" -alias "$CB_KEY_ALIAS" >/dev/null
 
       - name: Build release APKs and Play AAB
         env:

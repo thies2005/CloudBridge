@@ -423,8 +423,10 @@ public class VirtualContentProvider extends SingleRootProvider {
             String originalParentDocId = parentDocumentId;
             parentDocumentId = parentDocumentId.substring(ROOT_DOC_ID.length() + 1);
             String remoteName = getRemoteName(getShortId(originalParentDocId));
-            // TODO: missing guard if remote name is garbage => IllegalArgumentException
             RemoteItem remoteItem = getRemoteItem(remoteName);
+            if (remoteItem == null) {
+                throw new FileNotFoundException("Remote not found: " + remoteName);
+            }
             int idx = parentDocumentId.indexOf("/");
             String dirPath = -1 != idx ? parentDocumentId.substring(idx + 1) : "";
 
@@ -1209,8 +1211,9 @@ public class VirtualContentProvider extends SingleRootProvider {
         if (null == cachedItem) {
             FLog.v(TAG, "getFileItem: refresh meta for %s", documentId);
             String[] remote = documentId.split(":");
-            // TODO: missing guard if remote name is garbage => IllegalArgumentException
-            getRemoteItem(remote[0]);
+            if (remote.length == 0 || getRemoteItem(remote[0]) == null) {
+                return null;
+            }
             // retrieve parent dir path or root
             int idx = documentId.indexOf("/");
             int ldx = documentId.lastIndexOf("/");
@@ -1396,14 +1399,15 @@ public class VirtualContentProvider extends SingleRootProvider {
         return DocumentsContract.buildRootsUri(BuildConfig.VCP_AUTHORITY);
     }
 
+    @Nullable
     private RemoteItem getRemoteItem(String name) {
+        if (name == null) {
+            return null;
+        }
         RemoteItem item = remotes.get(name);
         if (null == item) {
             reloadRemotesIfRequired();
             item = remotes.get(name);
-            if (null == item) {
-                throw new IllegalArgumentException("Remote " + name + " does not exist");
-            }
         }
         return item;
     }

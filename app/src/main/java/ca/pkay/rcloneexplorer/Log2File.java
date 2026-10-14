@@ -21,8 +21,8 @@ public class Log2File {
     }
 
     public void log(String message) {
-        File path = context.getExternalFilesDir("logs");
-        if (path == null) {
+        File path = new File(context.getFilesDir(), "logs");
+        if (!path.exists() && !path.mkdirs()) {
             return;
         }
         File logFile = new File(path, "log.txt");

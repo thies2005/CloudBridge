@@ -41,19 +41,26 @@ jobs:
           fetch-depth: 0
       - name: Prepare Profanity Check
         id: prep
+        env:
+          CHANGED_FILES: ${{ needs.string-change-verification.outputs.files }}
+          PR_COMMITS: ${{ github.event.pull_request.commits }}
         run: |
           sudo apt-get install -y xmlstarlet
           pip3 install alt-profanity-check
           chmod +x ./scripts/checkProfanity.py
           chmod +x ./scripts/generateFilelist.sh
-          FILE_LIST="${{needs.string-change-verification.outputs.files}}"
-          SIZE=$(echo "$FILE_LIST" | awk '{print NF}')
+          SIZE=$(printf '%s\n' "$CHANGED_FILES" | awk '{print NF}')
           if [ "$SIZE" -ne 1 ]; then
             echo "Only pass the amount of commits and one translation file! You passed: $SIZE"
             exit 1
           fi
-          TRANSLATIONS=$(./scripts/generateFilelist.sh ${{ github.event.pull_request.commits }} ${{needs.string-change-verification.outputs.files}})
-          echo "TRANSLATIONS=$TRANSLATIONS" >> $GITHUB_OUTPUT
+          SINGLE_FILE=$(printf '%s\n' "$CHANGED_FILES" | awk '{print $1}')
+          TRANSLATIONS=$(./scripts/generateFilelist.sh "$PR_COMMITS" "$SINGLE_FILE")
+          {
+            echo "TRANSLATIONS<<EOF_TRANSLATIONS"
+            printf '%s\n' "$TRANSLATIONS"
+            echo "EOF_TRANSLATIONS"
+          } >> "$GITHUB_OUTPUT"
         shell: sh
       - uses: fabasoad/translation-action@1476a9db97feaa816029bc027103eb89f3b017bf # v4.2.4
         id: google-translate
@@ -62,9 +69,11 @@ jobs:
           lang: auto-en
           source: ${{ steps.prep.outputs.TRANSLATIONS }}
       - name: Print the result
+        env:
+          TRANSLATED_TEXT: ${{ steps.google-translate.outputs.text }}
         run: |
-          echo "Translations are: '${{ steps.google-translate.outputs.text }}'"
-          echo "${{ steps.google-translate.outputs.text }}" | sed 's/ ; /\n/g' > translated_texts.txt
+          printf 'Translations are: %s\n' "$TRANSLATED_TEXT"
+          printf '%s\n' "$TRANSLATED_TEXT" | sed 's/ ; /\n/g' > translated_texts.txt
           ./scripts/checkProfanity.py translated_texts.txt
         shell: sh
       - name: Upload Raw Translations

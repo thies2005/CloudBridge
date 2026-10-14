@@ -32,6 +32,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -133,7 +134,11 @@ public class RcloneRcd {
             port = nextAvailablePort();
             String addr = "localhost:" + port;
             String tmpDir = context.getCacheDir().getAbsolutePath();
-            String logFile = context.getExternalFilesDir("logs").getAbsolutePath() + "/rcd.log";
+            File logsDir = new File(context.getFilesDir(), "logs");
+            if (!logsDir.exists()) {
+                logsDir.mkdirs();
+            }
+            String logFile = new File(logsDir, "rcd.log").getAbsolutePath();
             SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(context);
             String transfers = pref.getString(context.getString(R.string.pref_key_transfers), "4");
             ArrayList<String> parameters = new ArrayList<>(Arrays.asList(
@@ -150,8 +155,7 @@ public class RcloneRcd {
             if (pref.getBoolean(context.getString(R.string.pref_key_logs), false)) {
                 parameters.addAll(Arrays.asList(
                         "--log-file", logFile,
-                        "--dump", "headers",
-                        "-vvv"));
+                        "-vv"));
             }
             parameters.add("rcd");
             rcd = Runtime.getRuntime().exec(parameters.toArray(new String[0]), getEnv());

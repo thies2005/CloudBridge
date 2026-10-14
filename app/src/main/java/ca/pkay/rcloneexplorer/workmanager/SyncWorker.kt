@@ -68,7 +68,7 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
     private val mPreferences = PreferenceManager.getDefaultSharedPreferences(mContext)
 
 
-    private var log2File: Log2File? = null
+    private var log2File: Log2File? = Log2File(mContext)
 
 
 
@@ -145,7 +145,10 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
 
     private fun finishWork() {
         sRcloneProcess?.destroy()
-        mContext.unregisterReceiver(connectivityChangeBroadcastReceiver)
+        try {
+            mContext.unregisterReceiver(connectivityChangeBroadcastReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
         postSync()
     }
 

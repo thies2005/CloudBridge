@@ -12,7 +12,11 @@ android {
         keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
     }
     def releaseStorePath = keystoreProperties['storeFile'] ?: System.getenv('CB_STORE_FILE')
-    def releaseKeyConfigured = releaseStorePath != null && file(releaseStorePath).exists()
+    def releaseKeyConfigured = releaseStorePath != null && file(releaseStorePath).exists() && file(releaseStorePath).length() > 0
+    def isReleaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') || it.toLowerCase() == 'build' }
+    if (System.getenv('CI') == 'true' && isReleaseRequested && !releaseKeyConfigured) {
+        throw new GradleException("CI release build requires a valid release keystore (CB_STORE_FILE).")
+    }
     signingConfigs {
         release {
             if (releaseKeyConfigured) {

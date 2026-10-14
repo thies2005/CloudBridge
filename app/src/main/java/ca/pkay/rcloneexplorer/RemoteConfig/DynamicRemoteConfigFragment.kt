@@ -510,7 +510,11 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
     private fun setUpRemote() {
 
         val options = java.util.ArrayList<String>()
-        val name: String = mRemoteName?.text.toString()
+        val name: String = mRemoteName?.text.toString().trim()
+        if (name.isEmpty() || name.startsWith("-") || !name.matches(Regex("^[A-Za-z0-9_][A-Za-z0-9_. -]*$"))) {
+            es.dmoral.toasty.Toasty.error(mContext, "Invalid remote name", android.widget.Toast.LENGTH_SHORT, true).show()
+            return
+        }
         options.add(name)
         options.add(mProviderTitle)
 

@@ -243,20 +243,27 @@ task checkoutRclone(dependsOn: createRcloneModule) {
             workingDir srcDir.absolutePath
             commandLine 'git', 'fetch', 'origin', '--tags'
         }
+        if (!(RCLONE_REF ==~ /^[0-9a-f]{40}$/)) {
+            throw new GradleException("de.schuelken.cloudbridge.rCloneRef must be a full 40-character commit SHA, got: ${RCLONE_REF}")
+        }
         exec {
             workingDir srcDir.absolutePath
             commandLine 'git', 'checkout', RCLONE_REF
         }
 
-        // Print resolved commit and version for traceability
+        // Verify resolved commit matches pinned SHA and print for traceability
         def commitOut = new ByteArrayOutputStream()
         exec {
             workingDir srcDir.absolutePath
-            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            commandLine 'git', 'rev-parse', 'HEAD'
             standardOutput = commitOut
         }
+        def resolvedSha = commitOut.toString().trim()
+        if (resolvedSha != RCLONE_REF) {
+            throw new GradleException("rclone checkout SHA mismatch: expected ${RCLONE_REF}, got ${resolvedSha}")
+        }
         def version = getSourceVersion()
-        println "rclone source: commit=${commitOut.toString().trim()} version=${version} (from ${RCLONE_REPO_URL})"
+        println "rclone source ready at verified commit: ${resolvedSha} version=${version} (from ${RCLONE_REPO_URL})"
     }
 }
 

@@ -1850,13 +1850,24 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         protected Boolean doInBackground(FileItem... fileItems) {
             FileItem fileItem = fileItems[0];
             mimeType = fileItem.getMimeType();
-            File[] extCacheDirs = ContextCompat.getExternalCacheDirs(context);
-            if (extCacheDirs.length < 1) {
+            File previewCacheDir = new File(context.getCacheDir(), "preview");
+            if (!previewCacheDir.exists() && !previewCacheDir.mkdirs()) {
                 return false;
             }
-            String saveLocation = extCacheDirs[0].getAbsolutePath();
-
-            fileLocation = saveLocation + "/" + fileItem.getName();
+            String safeFileName = new File(fileItem.getName().replace('\\', '/')).getName().trim();
+            if (safeFileName.isEmpty() || ".".equals(safeFileName) || "..".equals(safeFileName)) {
+                return false;
+            }
+            String saveLocation = previewCacheDir.getAbsolutePath();
+            File targetFile = new File(previewCacheDir, safeFileName);
+            try {
+                if (!targetFile.getCanonicalPath().startsWith(previewCacheDir.getCanonicalPath() + File.separator)) {
+                    return false;
+                }
+            } catch (IOException e) {
+                return false;
+            }
+            fileLocation = targetFile.getAbsolutePath();
 
             process = rclone.downloadFile(remote, fileItem, saveLocation);
 
@@ -1953,17 +1964,23 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             }
             fileItem = fileItems[0];
             int port = allocatePort(8080, true);
+            byte[] tokenBytes = new byte[16];
+            new java.security.SecureRandom().nextBytes(tokenBytes);
+            String streamToken = android.util.Base64.encodeToString(
+                    tokenBytes, android.util.Base64.NO_WRAP | android.util.Base64.NO_PADDING | android.util.Base64.URL_SAFE);
             serveIntent = new Intent(context, StreamingService.class);
             serveIntent.putExtra(StreamingService.SERVE_PATH_ARG, fileItem.getPath());
             serveIntent.putExtra(StreamingService.REMOTE_ARG, remote);
             serveIntent.putExtra(StreamingService.SHOW_NOTIFICATION_TEXT, false);
             serveIntent.putExtra(StreamingService.SERVE_PORT, port);
+            serveIntent.putExtra(StreamingService.SERVE_BASE_URL, streamToken);
             // GH-87: Release old stream
             context.stopService(new Intent(context, StreamingService.class));
             tryStartService(context, serveIntent);
 
             Uri uri = Uri.parse("http://127.0.0.1:" + port)
                     .buildUpon()
+                    .appendPath(streamToken)
                     .appendPath(fileItem.getName())
                     .build();
 

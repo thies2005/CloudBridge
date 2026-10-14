@@ -90,11 +90,16 @@ public class SafDAVServer extends NanoHTTPD {
     }
 
     private boolean checkAuthorization(IHTTPSession session) {
-        if(null == requiredAuthHeader) {
+        if (null == requiredAuthHeader) {
             return true;
         }
         String suppliedAuthHeader = session.getHeaders().get("authorization");
-        return requiredAuthHeader.equals(suppliedAuthHeader);
+        if (null == suppliedAuthHeader) {
+            return false;
+        }
+        return java.security.MessageDigest.isEqual(
+                requiredAuthHeader.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                suppliedAuthHeader.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private Response badRequest(String signature) {

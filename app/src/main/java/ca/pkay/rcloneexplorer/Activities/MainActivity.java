@@ -324,11 +324,9 @@ public class MainActivity extends AppCompatActivity
                 }
             }
         } else if (requestCode == SETTINGS_CODE && resultCode == RESULT_OK) {
-            if (data != null) {
-                boolean themeChanged = data.getBooleanExtra(SettingsActivity.THEME_CHANGED, false);
-                if (themeChanged) {
-                    recreate();
-                }
+            boolean themeChanged = data != null && data.getBooleanExtra(SettingsActivity.THEME_CHANGED, false);
+            if (themeChanged) {
+                recreate();
             }
         } else if (requestCode == WRITE_REQUEST_CODE && resultCode == RESULT_OK) {
             Uri uri;

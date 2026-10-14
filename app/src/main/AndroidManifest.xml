@@ -57,7 +57,7 @@
         </activity>
         <activity
             android:name=".Activities.ShortcutServiceActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTask"
             android:noHistory="true"
             android:taskAffinity=""
