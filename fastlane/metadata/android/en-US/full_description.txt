@@ -9,4 +9,7 @@ CloudBridge is a cloud file manager for Android, powered by rclone. It helps you
 * <b>Access everything:</b> Supports Storage Access Framework (SAF) for SD card and USB device access, regular storage devices and of course any cloud compatible with rclone
 * <b>Always up to date:</b> CloudBridge is regularly updated to the newest rclone version, so new providers and fixes arrive quickly
 
+<b>Lineage & Credits:</b>
+CloudBridge is a continuation of great open-source work: it is a fork of Round-Sync (by Felix Nüsse / newhinton), which is a fork of RCX (by x0b), which was originally created as rcloneExplorer (by Patryk Kaczmarkiewicz / patrykcoding). CloudBridge is powered by rclone (by Nick Craig-Wood and contributors). Deep gratitude to all original authors and contributors!
+
 CloudBridge is free and open source software (GPLv3). Questions, feedback or feature ideas? You are welcome to write me at 136268370+thies2005@users.noreply.github.com, or open an issue or pull request on GitHub: https://github.com/thies2005/CloudBridge
