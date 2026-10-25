@@ -68,13 +68,24 @@ public class StreamingService extends IntentService {
         final Boolean allowRemoteAccess = intent.getBooleanExtra(ALLOW_REMOTE_ACCESS, false);
         final String authenticationUsername = intent.getStringExtra(AUTHENTICATION_USERNAME);
         final String authenticationPassword = intent.getStringExtra(AUTHENTICATION_PASSWORD);
-        final String baseUrl = intent.getStringExtra(SERVE_BASE_URL);
+        String resolvedBaseUrl = intent.getStringExtra(SERVE_BASE_URL);
+        boolean hasCredentials = authenticationUsername != null && !authenticationUsername.isEmpty()
+                && authenticationPassword != null && !authenticationPassword.isEmpty();
+        if ((resolvedBaseUrl == null || resolvedBaseUrl.isEmpty())
+                && !hasCredentials
+                && (protocol == SERVE_HTTP || protocol == SERVE_WEBDAV)) {
+            byte[] tokenBytes = new byte[16];
+            new java.security.SecureRandom().nextBytes(tokenBytes);
+            resolvedBaseUrl = android.util.Base64.encodeToString(
+                    tokenBytes, android.util.Base64.NO_WRAP | android.util.Base64.NO_PADDING | android.util.Base64.URL_SAFE);
+        }
+        final String baseUrl = resolvedBaseUrl;
 
         int flags = 0;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             flags = PendingIntent.FLAG_IMMUTABLE;
         }
-        Intent foregroundIntent = new Intent(this, StreamingService.class);
+        Intent foregroundIntent = new Intent(this, ca.pkay.rcloneexplorer.Activities.MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, foregroundIntent, flags);
 
         Intent cancelIntent = new Intent(this, ServeCancelAction.class);

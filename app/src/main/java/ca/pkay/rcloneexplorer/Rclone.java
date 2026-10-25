@@ -684,7 +684,7 @@ public class Rclone {
     }
 
     public String obscure(String pass) {
-        String[] command = createCommand("obscure", pass);
+        String[] command = createCommand("obscure", "--", pass);
 
         Process process;
         try {
@@ -1144,7 +1144,7 @@ public class Rclone {
     }
 
     public InputStream downloadToPipe(String rclonePath) throws IOException {
-        String[] command = createCommandWithOptions("cat", rclonePath);
+        String[] command = createCommandWithOptions("cat", "--", rclonePath);
         String[] env = getRcloneEnv();
         final Process process = getRuntimeProcess(command, env);
         new Thread() {
@@ -1162,7 +1162,7 @@ public class Rclone {
     }
 
     public OutputStream uploadFromPipe(String rclonePath) throws IOException {
-        String[] command = createCommandWithOptions("rcat", rclonePath, "--streaming-upload-cutoff", "500K");
+        String[] command = createCommandWithOptions("rcat", "--streaming-upload-cutoff", "500K", "--", rclonePath);
         String[] env = getRcloneEnv();
         final Process process = getRuntimeProcess(command, env);
         new Thread() {
@@ -1180,7 +1180,10 @@ public class Rclone {
     }
 
     public boolean emptyTrashCan(String remote) {
-        String[] command = createCommandWithOptions("cleanup", remote + ":");
+        if (remote == null || remote.startsWith("-")) {
+            return false;
+        }
+        String[] command = createCommandWithOptions("cleanup", "--", remote + ":");
         Process process = null;
         String[] env = getRcloneEnv();
         try {
@@ -1741,12 +1744,18 @@ public class Rclone {
         fileOutputStream.flush();
         fileOutputStream.close();
 
+        tempFile.setReadable(false, false);
+        tempFile.setReadable(true, true);
+        tempFile.setWritable(false, false);
+        tempFile.setWritable(true, true);
         if (isValidConfig(tempFile.getAbsolutePath())) {
             if (!(tempFile.renameTo(configFile) && !tempFile.delete())) {
+                tempFile.delete();
                 throw new IOException();
             }
             return true;
         }
+        tempFile.delete();
         return false;
     }
 
@@ -1755,14 +1764,24 @@ public class Rclone {
         try {
             Process process = getRuntimeProcess(command);
             process.waitFor();
-            if (process.exitValue() != 0) { //
-                try (BufferedReader stdOut = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                     BufferedReader stdErr = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                    String line;
-                    while ((line = stdOut.readLine()) != null || (line = stdErr.readLine()) != null) {
-                        if (line.contains("could not parse line")) {
+            try (BufferedReader stdOut = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                 BufferedReader stdErr = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = stdOut.readLine()) != null) {
+                    if (line.contains("could not parse line")) {
+                        return false;
+                    }
+                    String trimmed = line.trim();
+                    if (trimmed.endsWith(":")) {
+                        String remoteName = trimmed.substring(0, trimmed.length() - 1);
+                        if (remoteName.isEmpty() || remoteName.startsWith("-") || !remoteName.matches("^[A-Za-z0-9_][A-Za-z0-9_. -]*$")) {
                             return false;
                         }
+                    }
+                }
+                while ((line = stdErr.readLine()) != null) {
+                    if (line.contains("could not parse line")) {
+                        return false;
                     }
                 }
             }

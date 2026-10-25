@@ -59,8 +59,10 @@ jobs:
 
       - name: 'Check for non-FOSS libraries'
         run: |
-          # prepare scanapk with apktool.
-          wget https://github.com/iBotPeaches/Apktool/releases/download/v$apktoolVersion/apktool_$apktoolVersion.jar
+          set -euo pipefail
+          # prepare scanapk with apktool and verify official SHA-256 digest
+          wget -q "https://github.com/iBotPeaches/Apktool/releases/download/v${apktoolVersion}/apktool_${apktoolVersion}.jar"
+          echo "${apktoolSha256}  apktool_${apktoolVersion}.jar" | sha256sum -c -
           # Wrapper for apktool_*.jar. Upstream removed scripts/linux/apktool (404), so inline a
           # minimal one that just invokes the jar from its own directory.
           printf '#!/bin/bash\njava -jar "$(dirname "$0")/apktool.jar" "$@"\n' > apktool
@@ -74,6 +76,7 @@ jobs:
           repo/bin/scanapk.php app/build/outputs/apk/oss/debug/cloudbridge_v*-oss-universal-debug.apk
         env:
           apktoolVersion: "2.9.3"
+          apktoolSha256: "7956eb04194300ce0d0a84ad18771eebc94b89fb8d1ddcce8ea4c056818646f4"
       - name: 'Get Commit Hash'
         id: commit
         uses: pr-mpt/actions-commit-hash@d06222114eac9daa8cfe0a748462a83e651aa136 # v1

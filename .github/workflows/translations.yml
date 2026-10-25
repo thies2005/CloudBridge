@@ -56,10 +56,11 @@ jobs:
           fi
           SINGLE_FILE=$(printf '%s\n' "$CHANGED_FILES" | awk '{print $1}')
           TRANSLATIONS=$(./scripts/generateFilelist.sh "$PR_COMMITS" "$SINGLE_FILE")
+          DELIM="EOF_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           {
-            echo "TRANSLATIONS<<EOF_TRANSLATIONS"
+            echo "TRANSLATIONS<<$DELIM"
             printf '%s\n' "$TRANSLATIONS"
-            echo "EOF_TRANSLATIONS"
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
         shell: sh
       - uses: fabasoad/translation-action@1476a9db97feaa816029bc027103eb89f3b017bf # v4.2.4

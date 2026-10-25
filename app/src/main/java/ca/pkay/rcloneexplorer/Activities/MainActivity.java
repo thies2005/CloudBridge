@@ -98,6 +98,8 @@ public class MainActivity extends AppCompatActivity
     public static final String MAIN_ACTIVITY_START_IMPORT = "MAIN_ACTIVITY_START_IMPORT";
     public static final String MAIN_ACTIVITY_START_EXPORT = "MAIN_ACTIVITY_START_EXPORT";
     public static final String MAIN_ACTIVITY_START_REAUTH = "MAIN_ACTIVITY_START_REAUTH";
+    public static final String EXTRA_INTERNAL_ACTION_TOKEN = "cb_internal_action_token";
+    public static final String INTERNAL_ACTION_TOKEN = UUID.randomUUID().toString();
     private static final int READ_REQUEST_CODE = 42; // code when opening rclone config file
     private static final int REQUEST_PERMISSION_CODE = 62; // code when requesting permissions
     private static final int REQUEST_PERMISSION_CODE_POST_NOTIFICATIONS = 63;
@@ -230,15 +232,16 @@ public class MainActivity extends AppCompatActivity
             return;
         }
         String action = intent.getAction();
-        if (MAIN_ACTIVITY_START_LOG.equals(action)) {
+        boolean hasInternalToken = INTERNAL_ACTION_TOKEN.equals(intent.getStringExtra(EXTRA_INTERNAL_ACTION_TOKEN));
+        if (MAIN_ACTIVITY_START_LOG.equals(action) && hasInternalToken) {
             startLogFragment();
-        } else if (MAIN_ACTIVITY_START_IMPORT.equals(action)) {
+        } else if (MAIN_ACTIVITY_START_IMPORT.equals(action) && hasInternalToken) {
             //todo: Migrate import and export out of the main activity
             startConfigImportFlow();
-        } else if (MAIN_ACTIVITY_START_EXPORT.equals(action)) {
+        } else if (MAIN_ACTIVITY_START_EXPORT.equals(action) && hasInternalToken) {
             //todo: Migrate import and export out of the main activity
             startConfigExportFlow();
-        } else if (MAIN_ACTIVITY_START_REAUTH.equals(action)) {
+        } else if (MAIN_ACTIVITY_START_REAUTH.equals(action) && hasInternalToken) {
             handleReauthIntent(intent);
         }
     }
@@ -365,12 +368,20 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // TODO: document deletion on exit
-        File dir = getExternalCacheDir();
-        if (dir != null && dir.isDirectory()) {
-            String[] children = dir.list();
-            for (String aChildren : children) {
-                new File(dir, aChildren).delete();
+        // Clean external cache and internal preview / share_staging caches on exit
+        File[] cacheDirs = new File[]{
+                getExternalCacheDir(),
+                new File(getCacheDir(), "preview"),
+                new File(getCacheDir(), "share_staging")
+        };
+        for (File dir : cacheDirs) {
+            if (dir != null && dir.isDirectory()) {
+                String[] children = dir.list();
+                if (children != null) {
+                    for (String aChildren : children) {
+                        new File(dir, aChildren).delete();
+                    }
+                }
             }
         }
     }
@@ -746,7 +757,7 @@ public class MainActivity extends AppCompatActivity
             ContentResolver resolver = context.getContentResolver();
             String mime = resolver.getType(uris[0]);
 
-            if(mime.equals("application/zip")) {
+            if("application/zip".equals(mime)) {
                 try {
                     boolean validRclone = rclone.copyConfigFileFromZip(uris[0]);
                     if(!validRclone) {

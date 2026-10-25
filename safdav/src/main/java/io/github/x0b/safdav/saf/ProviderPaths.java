@@ -90,8 +90,13 @@ public class ProviderPaths {
      * @return an {@link Uri} representing the path as tree uri, e.g. {@code content://com.android.externalstorage.documents/tree/primary:DCIM}
      */
     public Uri getUriByMappedPath(String requestUri) {
-        if(null == requestUri || '/' != requestUri.charAt(0)){
+        if(null == requestUri || '/' != requestUri.charAt(0) || requestUri.indexOf('\\') >= 0 || requestUri.indexOf('\0') >= 0){
             throw new IllegalArgumentException("You must request an actual path permission, not " + requestUri);
+        }
+        for (String seg : requestUri.split("/")) {
+            if (".".equals(seg) || "..".equals(seg)) {
+                throw new ItemNotFoundException();
+            }
         }
         Uri thirdParty = getUriThirdParty(requestUri);
         if (null != thirdParty) {
@@ -140,7 +145,10 @@ public class ProviderPaths {
             // provider specific logic - must be adapted for other content providers
             String pathPrefix = ANDROID_EXTERNAL_STORAGE_PREFIX + subPath;
             String permissionPath = permission.getUri().toString().replace("%3A", ":");
-            if(pathPrefix.contains(permissionPath)){
+            boolean validPrefix = pathPrefix.equals(permissionPath)
+                    || pathPrefix.startsWith(permissionPath + "/")
+                    || (permissionPath.endsWith(":") && pathPrefix.startsWith(permissionPath));
+            if(validPrefix){
                 // all ok, we this is a android ext doc path provider and the app has been granted access
                 Log.v(TAG, "Rewrote URI to " + pathPrefix);
                 Uri.Builder builder = new Uri.Builder();

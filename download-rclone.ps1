@@ -24,7 +24,23 @@ try {
         exit 1
     }
 
-    Write-Host "  Downloaded: $([math]::Round((Get-Item $output).Length / 1MB, 2)) MB" -ForegroundColor Green
+    $sumsUrl = "https://github.com/rclone/rclone/releases/download/v${version}/SHA256SUMS"
+    Invoke-WebRequest -Uri $sumsUrl -OutFile "SHA256SUMS" -UseBasicParsing
+    $expectedLine = Select-String -Path "SHA256SUMS" -Pattern "rclone-v${version}-linux-arm64\.zip$" | Select-Object -First 1
+    if (-not $expectedLine) {
+        Write-Host "ERROR: Could not find checksum entry in SHA256SUMS!" -ForegroundColor Red
+        exit 1
+    }
+    $expectedHash = ($expectedLine.Line -split '\s+')[0].ToLower()
+    $actualHash = (Get-FileHash -Path $output -Algorithm SHA256).Hash.ToLower()
+    Remove-Item "SHA256SUMS" -ErrorAction SilentlyContinue
+    if ($actualHash -ne $expectedHash) {
+        Remove-Item $output -ErrorAction SilentlyContinue
+        Write-Host "ERROR: SHA-256 mismatch! Expected $expectedHash but got $actualHash" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "  Downloaded and verified SHA-256: $([math]::Round((Get-Item $output).Length / 1MB, 2)) MB" -ForegroundColor Green
 } catch {
     Write-Host "ERROR: Failed to download: $_" -ForegroundColor Red
     exit 1

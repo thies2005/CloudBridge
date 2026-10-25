@@ -395,7 +395,7 @@ public class SafDAVServer extends NanoHTTPD {
         Uri src = paths.getUriByMappedPath(path);
         boolean noOverwrite = "F".equals(session.getHeaders().get("overwrite"));
         String destination = session.getHeaders().get("destination");
-        if (null == destination) {
+        if (null == destination || !destination.startsWith(SafConstants.SAF_REMOTE_URL)) {
             return badRequest("onMove");
         }
         Uri dst = paths.getUriByMappedPath(destination.substring(SafConstants.SAF_REMOTE_URL.length() - 1));

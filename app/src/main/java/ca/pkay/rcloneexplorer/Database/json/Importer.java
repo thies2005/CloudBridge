@@ -25,7 +25,25 @@ public class Importer {
         for(Filter filter : createFilterList(json)){
             dbHandler.createFilter(filter, true);
         }
+        String internalDataDir = null;
+        try {
+            internalDataDir = new java.io.File(context.getApplicationInfo().dataDir).getCanonicalPath();
+        } catch (java.io.IOException ignored) {
+        }
         for(Task task : createTasklist(json)){
+            if (task.getRemoteId() != null && task.getRemoteId().startsWith("-")) {
+                continue;
+            }
+            if (task.getLocalPath() != null && !task.getLocalPath().isEmpty() && internalDataDir != null) {
+                try {
+                    String canonicalLocal = new java.io.File(task.getLocalPath()).getCanonicalPath();
+                    if (canonicalLocal.equals(internalDataDir) || canonicalLocal.startsWith(internalDataDir + java.io.File.separator)) {
+                        continue;
+                    }
+                } catch (java.io.IOException e) {
+                    continue;
+                }
+            }
             dbHandler.createTask(task, true);
         }
     }

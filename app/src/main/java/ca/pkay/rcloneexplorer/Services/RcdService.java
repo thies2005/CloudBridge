@@ -87,7 +87,7 @@ public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             flags = PendingIntent.FLAG_IMMUTABLE;
         }
-        Intent foregroundIntent = new Intent(this, RcdService.class);
+        Intent foregroundIntent = new Intent(this, ca.pkay.rcloneexplorer.Activities.MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, foregroundIntent, flags);
 
         // build job statistics
@@ -186,7 +186,7 @@ public class RcdService extends Service implements RcloneRcd.JobsUpdateHandler {
     }
 
     private void showNotification() {
-        Intent foregroundIntent = new Intent(this, RcdService.class);
+        Intent foregroundIntent = new Intent(this, ca.pkay.rcloneexplorer.Activities.MainActivity.class);
         foregroundIntent.setAction(ACTION_START_FOREGROUND);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, foregroundIntent, FlagsUtil.Companion.getFlagImmutable());
 

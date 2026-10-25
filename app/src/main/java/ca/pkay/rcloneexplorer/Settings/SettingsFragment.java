@@ -169,12 +169,14 @@ public class SettingsFragment extends Fragment {
     private Intent getImportIntent() {
         Intent i = new Intent(this.getContext(), MainActivity.class);
         i.setAction(MAIN_ACTIVITY_START_IMPORT);
+        i.putExtra(MainActivity.EXTRA_INTERNAL_ACTION_TOKEN, MainActivity.INTERNAL_ACTION_TOKEN);
         return i;
     }
 
     private Intent getExportIntent() {
         Intent i = new Intent(this.getContext(), MainActivity.class);
         i.setAction(MAIN_ACTIVITY_START_EXPORT);
+        i.putExtra(MainActivity.EXTRA_INTERNAL_ACTION_TOKEN, MainActivity.INTERNAL_ACTION_TOKEN);
         return i;
     }
 }
