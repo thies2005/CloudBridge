@@ -60,7 +60,6 @@ import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.SyncLog;
 import es.dmoral.toasty.Toasty;
 import io.github.x0b.safdav.SafAccessProvider;
-import io.github.x0b.safdav.SafDAVServer;
 import io.github.x0b.safdav.file.SafConstants;
 
 public class Rclone {
@@ -75,7 +74,6 @@ public class Rclone {
 
     public static final String RCLONE_CONFIG_NAME_KEY = "rclone_remote_name";
     private static volatile Boolean isCompatible;
-    private static SafDAVServer safDAVServer;
     private Context context;
     private String rclone;
     private String rcloneConf;
@@ -298,13 +296,11 @@ public class Rclone {
         if (path.compareTo("//" + remote.getName()) != 0) {
             remoteAndPath += path;
         }
-        // if SAFW, start emulation server
-        if(remote.isRemoteType(RemoteItem.SAFW) && path.equals("//" + remote.getName()) && safDAVServer == null){
+        if (isSafDavRemote(remote)) {
             try {
-                safDAVServer = SafAccessProvider.getServer(context);
+                SafAccessProvider.getServer(context);
             } catch (IOException e) {
-                // TODO: Provide port checking / alt port functionality
-                FLog.e(TAG, "Cannot connect to SAF DAV emulation server");
+                FLog.e(TAG, "Cannot start SAF WebDAV bridge", e);
                 return null;
             }
         }
@@ -407,21 +403,14 @@ public class Rclone {
             String key = iterator.next();
             try {
                 JSONObject remoteJSON = new JSONObject(remotesJSON.get(key).toString());
-                String type = remoteJSON.optString("type");
+                String type = remoteType(remoteJSON);
                 if (type.trim().isEmpty()) {
                     Toasty.error(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT, true).show();
                     continue;
                 }
-                if(type.equals("webdav")){
-                    String url = remoteJSON.optString("url");
-                    if(url.startsWith(SafConstants.SAF_REMOTE_URL)){
-                        type = SafConstants.SAF_REMOTE_NAME;
-                    }
-                }
-
                 RemoteItem newRemote = new RemoteItem(key, type);
                 if (type.equals("crypt") || type.equals("alias") || type.equals("cache")) {
-                    newRemote = getRemoteType(remotesJSON, newRemote, key, 8);
+                    newRemote = getRemoteType(remotesJSON, newRemote, key, 8, false);
                     if (newRemote == null) {
                         Toasty.error(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT, true).show();
                         continue;
@@ -511,8 +500,37 @@ public class Rclone {
         return Runtime.getRuntime().exec(command, env);
     }
 
+    private static String remoteType(JSONObject config) {
+        return remoteType(config.optString("type"), config.optString("url"));
+    }
+
+    static String remoteType(String type, String url) {
+        if ("webdav".equals(type) && url.startsWith(SafConstants.SAF_REMOTE_URL)) {
+            return SafConstants.SAF_REMOTE_NAME;
+        }
+        return type;
+    }
+
+    private boolean isSafDavRemote(@Nullable RemoteItem remote) {
+        if (remote == null) {
+            return false;
+        }
+        if (remote.isRemoteType(RemoteItem.SAFW)) {
+            return true;
+        }
+        // Resolve the transport while retaining the wrapper's existing display and provider type.
+        if (remote.isRemoteType(RemoteItem.WEBDAV) && (remote.isAlias() || remote.isCrypt() || remote.isCache())) {
+            JSONObject config = getCachedRemotesConfig();
+            RemoteItem resolved = config == null ? null
+                    : getRemoteType(config, new RemoteItem(remote.getName(), "webdav"), remote.getName(), 8, true);
+            return resolved != null && resolved.isRemoteType(RemoteItem.SAFW);
+        }
+        return false;
+    }
+
     @Nullable
-    private RemoteItem getRemoteType(JSONObject remotesJSON, RemoteItem remoteItem, String remoteName, int maxDepth) {
+    private RemoteItem getRemoteType(JSONObject remotesJSON, RemoteItem remoteItem, String remoteName,
+                                     int maxDepth, boolean detectSafDav) {
         Iterator<String> iterator = remotesJSON.keys();
 
         while (iterator.hasNext()) {
@@ -524,7 +542,7 @@ public class Rclone {
 
             try {
                 JSONObject remoteJSON = new JSONObject(remotesJSON.get(key).toString());
-                String type = remoteJSON.optString("type");
+                String type = detectSafDav ? remoteType(remoteJSON) : remoteJSON.optString("type");
                 if (type.trim().isEmpty()) {
                     return null;
                 }
@@ -557,7 +575,7 @@ public class Rclone {
                     } else {
                         int index = remote.indexOf(":");
                         remote = remote.substring(0, index);
-                        return getRemoteType(remotesJSON, remoteItem, remote, --maxDepth);
+                        return getRemoteType(remotesJSON, remoteItem, remote, maxDepth - 1, detectSafDav);
                     }
                 }
                 remoteItem.setType(type);
@@ -838,7 +856,6 @@ public class Rclone {
                 && syncDirection != SyncDirectionObject.COPY_REMOTE_TO_REMOTE) {
             return null;
         }
-        String[] command;
         String srcSection = buildRemoteSection(remoteItem, remotePath, context);
         String dstSection = buildRemoteSection(remoteItem2, remotePath2, context);
         String op = (syncDirection == SyncDirectionObject.SYNC_REMOTE_TO_REMOTE) ? "sync" : "copy";
@@ -855,19 +872,10 @@ public class Rclone {
             defaultParameter.add((filter.filterType == FilterEntry.FILTER_INCLUDE ? "+ " : "- ") + filter.filter);
         }
 
-        command = createCommandWithOptions(savedTransferArguments(op, defaultParameter, srcSection, dstSection));
-
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "sync: error starting rclone", e);
-            return null;
-        }
+        return startFileTransfer(op, defaultParameter, srcSection, dstSection, remoteItem, remoteItem2);
     }
 
     private Process syncLocalRemote(RemoteItem remoteItem, String localPath, String remotePath, int syncDirection, boolean useMD5Sum, ArrayList<FilterEntry> filters, boolean deleteExcluded, String transfersOverride) {
-        String[] command;
         String remoteSection = buildRemoteSection(remoteItem, remotePath, context);
 
         ArrayList<String> defaultParameter = new ArrayList<>(Arrays.asList("--transfers", getTransfers(transfersOverride), "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log"));
@@ -886,38 +894,53 @@ public class Rclone {
 
         localPath = encodePath(localPath);
 
-        if (syncDirection == SyncDirectionObject.SYNC_LOCAL_TO_REMOTE) {
-            command = createCommandWithOptions(savedTransferArguments("sync", defaultParameter, localPath, remoteSection));
-        } else if (syncDirection == SyncDirectionObject.SYNC_REMOTE_TO_LOCAL) {
-            command = createCommandWithOptions(savedTransferArguments("sync", defaultParameter, remoteSection, localPath));
-        } else if (syncDirection == SyncDirectionObject.COPY_LOCAL_TO_REMOTE) {
-            command = createCommandWithOptions(savedTransferArguments("copy", defaultParameter, localPath, remoteSection));
-        }else if (syncDirection == SyncDirectionObject.COPY_REMOTE_TO_LOCAL) {
-            command = createCommandWithOptions(savedTransferArguments("copy", defaultParameter, remoteSection, localPath));
-        }else {
-            return null;
-        }
-
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "sync: error starting rclone", e);
-            return null;
-        }
+        return switch (syncDirection) {
+            case SyncDirectionObject.SYNC_LOCAL_TO_REMOTE ->
+                    startFileTransfer("sync", defaultParameter, localPath, remoteSection, null, remoteItem);
+            case SyncDirectionObject.SYNC_REMOTE_TO_LOCAL ->
+                    startFileTransfer("sync", defaultParameter, remoteSection, localPath, remoteItem, null);
+            case SyncDirectionObject.COPY_LOCAL_TO_REMOTE ->
+                    startFileTransfer("copy", defaultParameter, localPath, remoteSection, null, remoteItem);
+            case SyncDirectionObject.COPY_REMOTE_TO_LOCAL ->
+                    startFileTransfer("copy", defaultParameter, remoteSection, localPath, remoteItem, null);
+            default -> null;
+        };
     }
 
     static ArrayList<String> savedTransferArguments(String operation, List<String> options, String source, String destination) {
-        ArrayList<String> arguments = new ArrayList<>(options.size() + 4);
+        return savedTransferArguments(operation, options, source, destination, false);
+    }
+
+    static ArrayList<String> savedTransferArguments(String operation, List<String> options, String source,
+                                                    String destination, boolean safDavSource) {
+        ArrayList<String> arguments = new ArrayList<>(options.size() + 6);
         arguments.add(operation);
         arguments.addAll(options);
+        if (safDavSource) {
+            Collections.addAll(arguments, "--multi-thread-streams", "0");
+        }
         // Keep path operands after the separator so leading dashes cannot become flags.
         Collections.addAll(arguments, "--", source, destination);
         return arguments;
     }
 
+    @Nullable
+    private Process startFileTransfer(String operation, List<String> options, String source, String destination,
+                                      @Nullable RemoteItem sourceRemote, @Nullable RemoteItem destinationRemote) {
+        boolean safDavSource = isSafDavRemote(sourceRemote);
+        try {
+            if (safDavSource || isSafDavRemote(destinationRemote)) {
+                SafAccessProvider.getServer(context);
+            }
+            return getRuntimeProcess(createCommandWithOptions(
+                    savedTransferArguments(operation, options, source, destination, safDavSource)), getRcloneEnv());
+        } catch (IOException e) {
+            FLog.e(TAG, operation + ": error starting transfer", e);
+            return null;
+        }
+    }
+
     public Process downloadFile(RemoteItem remote, FileItem downloadItem, String downloadPath) {
-        String[] command;
         String remoteFilePath;
         String localFilePath;
 
@@ -935,21 +958,13 @@ public class Rclone {
 
         localFilePath = encodePath(localFilePath);
 
-        command = createCommandWithOptions("copy", remoteFilePath, localFilePath, "--transfers", getTransfers(), "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log");
-
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "downloadFile: error starting rclone", e);
-            return null;
-        }
+        return startFileTransfer("copy", Arrays.asList("--transfers", getTransfers(), "--stats=1s",
+                "--stats-log-level", "NOTICE", "--use-json-log"), remoteFilePath, localFilePath, remote, null);
     }
 
     public Process uploadFile(RemoteItem remote, String uploadPath, String uploadFile) {
         String remoteName = remote.getName();
         String path;
-        String[] command;
         String localRemotePath;
 
         if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isAlias() && !remote.isCrypt() && !remote.isCache())) {
@@ -967,16 +982,27 @@ public class Rclone {
             path = (uploadPath.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath : remoteName + ":" + localRemotePath + uploadPath;
         }
 
-        command = createCommandWithOptions("copy", uploadFile, path, "--transfers", getTransfers(), "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log");
+        return startFileTransfer("copy", Arrays.asList("--transfers", getTransfers(), "--stats=1s",
+                "--stats-log-level", "NOTICE", "--use-json-log"), uploadFile, path, null, remote);
 
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "uploadFile: error starting rclone", e);
-            return null;
-        }
+    }
 
+    public Process downloadFilesFrom(RemoteItem remote, String sourceParent, String destination,
+                                     File filesFrom, File report) {
+        return startFileTransfer("copy", batchCopyOptions(filesFrom, report, getTransfers()),
+                buildFullRemotePath(remote, sourceParent), encodePath(destination), remote, null);
+    }
+
+    public Process uploadFilesFrom(RemoteItem remote, String sourceParent, String destination,
+                                   File filesFrom, File report) {
+        return startFileTransfer("copy", batchCopyOptions(filesFrom, report, getTransfers()),
+                encodePath(sourceParent), buildRemoteSection(remote, destination, context), null, remote);
+    }
+
+    static List<String> batchCopyOptions(File filesFrom, File report, String transfers) {
+        return Arrays.asList("--files-from-raw", filesFrom.getAbsolutePath(), "--no-traverse",
+                "--combined", report.getAbsolutePath(), "--transfers", transfers, "--stats=1s",
+                "--stats-log-level", "NOTICE", "--use-json-log");
     }
 
     // Can't pass \u0000 as cmd arg - encode like rclone with U+2400
@@ -1091,10 +1117,8 @@ public class Rclone {
 
     public Process moveTo(RemoteItem remote, FileItem moveItem, String newLocation) {
         String remoteName = remote.getName();
-        String[] command;
         String oldFilePath;
         String newFilePath;
-        Process process = null;
         String localRemotePath;
 
         if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isAlias() && !remote.isCrypt() && !remote.isCache())) {
@@ -1105,15 +1129,7 @@ public class Rclone {
 
         oldFilePath = remoteName + ":" + localRemotePath + moveItem.getPath();
         newFilePath = (newLocation.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath + moveItem.getName() : remoteName + ":" + localRemotePath + newLocation + "/" + moveItem.getName();
-        command = createCommandWithOptions("moveto", oldFilePath, newFilePath);
-        String[] env = getRcloneEnv();
-        try {
-            process = getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "moveTo: error starting rclone", e);
-        }
-
-        return process;
+        return startFileTransfer("moveto", Collections.emptyList(), oldFilePath, newFilePath, remote, remote);
     }
 
     public Boolean moveTo(RemoteItem remote, String oldFile, String newFile) {
@@ -1128,16 +1144,18 @@ public class Rclone {
 
         String oldFilePath = remoteName + ":" + localRemotePath + oldFile;
         String newFilePath = remoteName + ":" + localRemotePath + newFile;
-        String[] command = createCommandWithOptions("moveto", oldFilePath, newFilePath);
-        String[] env = getRcloneEnv();
+        Process process = startFileTransfer("moveto", Collections.emptyList(), oldFilePath, newFilePath, remote, remote);
+        if (process == null) {
+            return false;
+        }
         try {
-            Process process = getRuntimeProcess(command, env);
             process.waitFor();
             if (process.exitValue() != 0) {
                 logErrorOutput(process);
                 return false;
             }
-        } catch (IOException | InterruptedException e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             FLog.e(TAG, "moveTo: error running rclone", e);
             return false;
         }

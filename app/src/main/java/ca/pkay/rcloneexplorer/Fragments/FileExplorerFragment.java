@@ -544,14 +544,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         if (requestCode == FILE_PICKER_UPLOAD_RESULT && resultCode == FragmentActivity.RESULT_OK) {
             @SuppressWarnings("unchecked")
             ArrayList<File> result = (ArrayList<File>) data.getSerializableExtra(FilePicker.FILE_PICKER_RESULT);
-            ArrayList<String> uploadList = new ArrayList<>();
-            for (File file : result) {
-                uploadList.add(file.getPath());
-            }
-
-            for (String uploadFile : uploadList) {
-                EphemeralTaskManager.Companion.queueUpload(this.context, remote, uploadFile, directoryObject.getCurrentPath());
-            }
+            EphemeralTaskManager.Companion.queueUploads(context, remote, result, directoryObject.getCurrentPath());
         } else if (requestCode == FILE_PICKER_DOWNLOAD_RESULT) {
             if (resultCode != FragmentActivity.RESULT_OK) {
                 downloadList.clear();
@@ -560,9 +553,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             String selectedPath = data.getStringExtra(FilePicker.FILE_PICKER_RESULT);
             recyclerViewAdapter.cancelSelection();
 
-            for (FileItem downloadItem : downloadList) {
-                EphemeralTaskManager.Companion.queueDownload(this.context, remote, downloadItem, selectedPath);
-            }
+            EphemeralTaskManager.Companion.queueDownloads(context, remote, downloadList, selectedPath);
             downloadList.clear();
         } else if (requestCode == FILE_PICKER_SYNC_RESULT && resultCode == FragmentActivity.RESULT_OK) {
             String path = data.getStringExtra(FilePicker.FILE_PICKER_RESULT);

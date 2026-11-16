@@ -24,11 +24,13 @@ public class SafAccessProvider {
     private static String user;
     private static String password;
 
-    public static SafDAVServer getServer(Context context) throws IOException {
+    public static synchronized SafDAVServer getServer(Context context) throws IOException {
         if(null == davServer) {
             initAuth(context);
-            davServer = new SafDAVServer(SafConstants.SAF_REMOTE_PORT, user, password, context);
-            davServer.start();
+            SafDAVServer server = new SafDAVServer(SafConstants.SAF_REMOTE_PORT, user, password,
+                    context.getApplicationContext());
+            server.start();
+            davServer = server;
         }
         return davServer;
     }

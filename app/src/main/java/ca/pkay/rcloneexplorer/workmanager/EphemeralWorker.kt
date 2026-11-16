@@ -67,6 +67,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         const val DELETE_PATH = "DELETE_PATH"
 
         const val DELETE_MANIFEST = "DELETE_MANIFEST"
+
+        const val BATCH_MANIFEST = "BATCH_MANIFEST"
+        const val BATCH_SOURCE_PARENT = "BATCH_SOURCE_PARENT"
     }
 
     internal enum class FAILURE_REASON {
@@ -102,8 +105,13 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
     private var mTitle: String = mNotificationManager?.initialTitle ?: ""
 
     override fun doWork(): Result {
+        val batchManifest = inputData.getString(BATCH_MANIFEST)?.let { name ->
+            File(File(mContext.noBackupFilesDir, "transfer-batches"), name).also {
+                EphemeralTaskManager.cleanBatchOnCompletion(mContext, id, it)
+            }
+        }
         try {
-            return runOperation()
+            return runOperation(batchManifest)
         } finally {
             if (inputData.getBoolean(DELETE_STAGED_UPLOAD, false)) {
                 inputData.getString(UPLOAD_FILE)?.let {
@@ -118,7 +126,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         }
     }
 
-    private fun runOperation(): Result {
+    private fun runOperation(batchManifest: File?): Result {
 
         registerBroadcastReceivers()
 
@@ -150,7 +158,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                 // It will immediately run!
                 val transferLocks = TransferLocks.acquire(mContext, "ephemeral")
                 try {
-                    when(type){
+                    if (batchManifest != null) {
+                        handleBatch(type, remoteItem, batchManifest)
+                    } else when (type) {
                     Type.DOWNLOAD -> {
                         val target = inputData.getString(DOWNLOAD_TARGETPATH)
                         val fileItem = getFileitemFromParcel(DOWNLOAD_SOURCE)
@@ -229,7 +239,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                         }
                     }
                 }
-                handleSync(mTitle)
+                    if (batchManifest == null) handleSync(mTitle)
                 } finally {
                     transferLocks?.release()
                     sCleanupFiles.forEach { it.delete() }
@@ -253,6 +263,51 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         }
         log("Critical: No valid ephemeral type passed!")
         return Result.failure()
+    }
+
+    private fun handleBatch(type: Type, remote: RemoteItem, manifest: File) {
+        val targetKey = when (type) {
+            Type.DOWNLOAD -> DOWNLOAD_TARGETPATH
+            Type.UPLOAD -> UPLOAD_TARGETPATH
+            else -> error("Unsupported transfer batch type: $type")
+        }
+        val target = inputData.getString(targetKey)
+        val sourceParent = inputData.getString(BATCH_SOURCE_PARENT)
+        if (target == null || sourceParent == null) {
+            failureReason = FAILURE_REASON.RCLONE_ERROR
+            log("Transfer batch is missing its source or destination")
+            return
+        }
+
+        try {
+            val names = manifest.readLines()
+            if (names.isEmpty()) {
+                failureReason = FAILURE_REASON.RCLONE_ERROR
+                log("Transfer batch is empty")
+                return
+            }
+            val report = File(manifest.parentFile, "$id.report")
+            sCleanupFiles.add(report)
+            val rclone = Rclone(mContext)
+            sPendingProcesses.add {
+                if (type == Type.DOWNLOAD) {
+                    rclone.downloadFilesFrom(remote, sourceParent, target, manifest, report)
+                } else {
+                    rclone.uploadFilesFrom(remote, sourceParent, target, manifest, report)
+                }
+            }
+            handleSync(mTitle)
+            if (failureReason == FAILURE_REASON.NO_FAILURE && !isStopped) {
+                val missing = report.useLines { TransferBatch.missingSources(names, it) }
+                if (missing.isNotEmpty()) {
+                    failureReason = FAILURE_REASON.RCLONE_ERROR
+                    log("Transfer batch skipped ${missing.size} selected items")
+                }
+            }
+        } catch (e: IOException) {
+            failureReason = FAILURE_REASON.RCLONE_ERROR
+            FLog.e(tag(), "Could not read or report transfer batch", e)
+        }
     }
 
     override fun onStopped() {
@@ -422,7 +477,17 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         //Todo: This should be context dependend on the type. It is currently not!
 
 
-        var message = mNotificationManager?.generateSuccessMessage(statusObject, getCurrentFile())?: "error"
+        var message = if (inputData.getString(BATCH_MANIFEST) != null) {
+            val plural = if (inputData.getString(EPHEMERAL_TYPE) == Type.UPLOAD.name) {
+                R.plurals.worker_upload_success_message
+            } else {
+                R.plurals.worker_download_success_message
+            }
+            val transferred = statusObject.getTransfers()
+            mContext.resources.getQuantityString(plural, transferred, transferred.toString())
+        } else {
+            mNotificationManager?.generateSuccessMessage(statusObject, getCurrentFile()) ?: "error"
+        }
 
         mNotificationManager?.showSuccessNotification(
             mTitle,
