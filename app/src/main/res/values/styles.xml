@@ -1,4 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
 
     <style name="AppTheme.NoActionBar" parent="AppTheme">
         <item name="windowActionBar">false</item>
@@ -93,7 +93,7 @@
         <item name="cornerSize">@dimen/dialogCornerRadius</item>
     </style>
     <style name="BreadcrumbText" parent="">
-        <item name="android:textColor">@color/md_theme_light_background</item>
+        <item name="android:textColor">?attr/colorOnPrimaryContainer</item>
     </style>
 
     <!-- Splash screen entry theme (androidx.core:core-splashscreen). MainActivity calls
@@ -102,6 +102,5 @@
         <item name="windowSplashScreenBackground">@color/seed</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:ignore="NewApi">true</item>
     </style>
 </resources>

@@ -1,0 +1,9 @@
+<resources>
+    <string name="pixel_all_files_access_title">All files access</string>
+    <string name="pixel_all_files_access_summary">Open system settings to allow CloudBridge to access files on this device.</string>
+    <string name="pixel_add_folder_access">Add folder access</string>
+    <string name="pixel_folder_access_title">Folder access</string>
+    <string name="pixel_folder_access_summary">Allow access to selected folders, including folders on external storage.</string>
+    <string name="pixel_internal_storage">Internal storage</string>
+    <string name="pixel_external_storage">Storage: %1$s</string>
+</resources>

@@ -7,8 +7,11 @@
     app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
     <ScrollView
+        android:id="@+id/editor_scroll"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/editor_actions"
         android:layout_margin="16dp"
         tools:layout_editor_absoluteX="8dp"
         tools:layout_editor_absoluteY="8dp">
@@ -19,8 +22,9 @@
             android:orientation="vertical">
 
 
-            <androidx.cardview.widget.CardView
-                style="@style/SecondaryCardStyle"
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_margin="8dp"
@@ -39,8 +43,8 @@
                         android:labelFor="@id/trigger_name_edit"
                         android:layout_margin="8dp"
                         android:text="@string/trigger_name"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
-                        android:textSize="24sp" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                        android:textColor="?attr/colorPrimary" />
 
                     <EditText
                         android:id="@+id/trigger_name_edit"
@@ -50,7 +54,7 @@
                         android:layout_marginBottom="8dp"
                         android:hint="@string/trigger_name" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/cb_is_enabled"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -58,17 +62,25 @@
                         android:checked="true"
                         android:text="@string/is_this_trigger_enabled" />
 
-                    <Spinner
-                        android:id="@+id/triggerType"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:entries="@array/triggerTypeItems" />
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                         android:hint="@string/trigger_type_label">
+                        <ca.pkay.rcloneexplorer.util.ExposedChoice
+                            android:id="@+id/triggerType"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/intervalCard"
-                style="@style/SecondaryCardStyle"
+                style="@style/Widget.Material3.CardView.Filled"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_margin="8dp"
@@ -87,25 +99,32 @@
                         android:layout_margin="8dp"
                         android:layout_marginBottom="8dp"
                         android:text="@string/task_interval"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
-                        android:textSize="24sp" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                        android:textColor="?attr/colorPrimary" />
 
-                    <Spinner
-                        android:id="@+id/spinnerIntervals"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:entries="@array/triggerIntervals" />
+                        android:layout_height="wrap_content"
+                        android:hint="@string/task_interval">
+                        <ca.pkay.rcloneexplorer.util.ExposedChoice
+                            android:id="@+id/spinnerIntervals"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/weekdaysCard"
-                style="@style/SecondaryCardStyle"
+                style="@style/Widget.Material3.CardView.Filled"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_margin="8dp"
-                android:theme="@style/SecondaryCardStyle"
+
                 app:cardCornerRadius="@dimen/cardCornerRadius"
                 app:contentPadding="@dimen/cardPadding">
 
@@ -121,52 +140,52 @@
                         android:layout_margin="8dp"
                         android:layout_marginBottom="8dp"
                         android:text="@string/trigger_label_weekdays"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
-                        android:textSize="24sp" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                        android:textColor="?attr/colorPrimary" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_monday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
                         android:text="@string/monday" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_tuesday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
                         android:text="@string/tuesday" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_wednesday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
                         android:text="@string/wednesday" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_thursday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
                         android:text="@string/thursday" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_friday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
                         android:text="@string/friday" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_saturday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:checked="true"
                         android:text="@string/saturday" />
 
-                    <CheckBox
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/trigger_cb_sunday"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -174,12 +193,13 @@
                         android:checked="true"
                         android:text="@string/sunday" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/timeCard"
-                style="@style/SecondaryCardStyle"
+                style="@style/Widget.Material3.CardView.Filled"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_margin="8dp"
@@ -197,8 +217,8 @@
                         android:layout_height="wrap_content"
                         android:layout_margin="8dp"
                         android:text="@string/time"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
-                        android:textSize="24sp" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                        android:textColor="?attr/colorPrimary" />
 
 
                     <TimePicker
@@ -208,11 +228,12 @@
                         android:timePickerMode="spinner" />
 
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
-            <androidx.cardview.widget.CardView
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/targetCard"
-                style="@style/SecondaryCardStyle"
+                style="@style/Widget.Material3.CardView.Filled"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_margin="8dp"
@@ -231,19 +252,50 @@
                         android:layout_margin="8dp"
                         android:layout_marginBottom="8dp"
                         android:text="@string/task_to_run"
-                        android:textAppearance="@style/TextAppearance.AppCompat.Display1"
-                        android:textSize="24sp" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                        android:textColor="?attr/colorPrimary" />
 
-                    <Spinner
-                        android:id="@+id/trigger_targets"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
+                        android:layout_height="wrap_content"
+                        android:hint="@string/task_to_run">
+                        <ca.pkay.rcloneexplorer.util.ExposedChoice
+                            android:id="@+id/trigger_targets"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
 
     </ScrollView>
+
+
+    <FrameLayout
+        android:id="@+id/editor_actions"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/saveButton"
+            style="@style/Widget.Material3Expressive.ExtendedFloatingActionButton.Small"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="@string/save"
+            app:icon="@drawable/ic_twotone_save_24" />
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

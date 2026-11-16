@@ -2,7 +2,6 @@ package ca.pkay.rcloneexplorer.RemoteConfig
 
 import android.app.ActionBar.LayoutParams
 import android.content.Context
-import android.graphics.Typeface
 import android.os.AsyncTask
 import android.os.Bundle
 import android.text.Editable
@@ -29,7 +28,10 @@ import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.core.view.setPadding
 import androidx.core.view.size
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import ca.pkay.rcloneexplorer.R
@@ -37,13 +39,37 @@ import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.Rclone.RCLONE_CONFIG_NAME_KEY
 import ca.pkay.rcloneexplorer.rclone.Provider
 import ca.pkay.rcloneexplorer.rclone.ProviderOption
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Locale
 
 
-class DynamicRemoteConfigFragment(private val mProviderTitle: String, private val optionMap: HashMap<String, String>?) : Fragment() {
+class DynamicRemoteConfigFragment : Fragment() {
+
+    class FormState : ViewModel() {
+        var initialized = false
+        val options = hashMapOf<String, String>()
+    }
+
+    companion object {
+        private const val ARG_PROVIDER = "provider"
+        private const val ARG_EDIT_TARGET = "edit_target"
+        private const val STATE_ADVANCED = "advanced"
+        private const val STATE_FILTER = "filter"
+
+        fun newInstance(provider: String, editTarget: String? = null) =
+            DynamicRemoteConfigFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_PROVIDER, provider)
+                    putString(ARG_EDIT_TARGET, editTarget)
+                }
+            }
+    }
+
+    private lateinit var mProviderTitle: String
 
     private val TAG = "DynamicRemoteConfigFragment"
     private lateinit var mContext: Context
@@ -53,25 +79,16 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
     private var mTitleLabel: TextView? = null
     private var mAuthView: View? = null
     private var mCancelAuthButton: Button? = null
-    private var mFinishButton: FloatingActionButton? = null
+    private var mFinishButton: ExtendedFloatingActionButton? = null
     private var mRemoteName: EditText? = null
+    private lateinit var remoteNameLayout: TextInputLayout
     private var mProvider: Provider? = null
     private var mShowAdvanced = false
     private var mIsEditTask = false
-    private var mOptionMap = hashMapOf<String, String>()
+    private lateinit var mOptionMap: HashMap<String, String>
     private var mAuthTask: AsyncTask<Void?, Void?, Boolean>? = null
     private var mUseOauth = false
     private var mOptionFilter = ""
-
-    constructor(providerTitle: String) : this(providerTitle, null)
-
-    init {
-        if(optionMap != null) {
-            // we assume that if the option-map is passed, we are editing.
-            this.mIsEditTask = true
-            mOptionMap = optionMap
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,7 +98,26 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         setHasOptionsMenu(true)
         mContext = context as Context
 
+        mProviderTitle = requireArguments().getString(ARG_PROVIDER) ?: return
+        val editTarget = requireArguments().getString(ARG_EDIT_TARGET)
+        mIsEditTask = editTarget != null
+        mShowAdvanced = savedInstanceState?.getBoolean(STATE_ADVANCED) ?: false
+        mOptionFilter = savedInstanceState?.getString(STATE_FILTER).orEmpty()
         rclone = Rclone(this.context)
+        val formState = ViewModelProvider(this)[FormState::class.java]
+        if (!formState.initialized) {
+            if (editTarget != null) {
+                val config = rclone!!.getConfig(editTarget)
+                if (config == null || config[RCLONE_CONFIG_NAME_KEY] != editTarget) {
+                    Toast.makeText(mContext, R.string.remote_not_found, Toast.LENGTH_SHORT).show()
+                    requireActivity().finish()
+                    return
+                }
+                formState.options.putAll(config)
+            }
+            formState.initialized = true
+        }
+        mOptionMap = formState.options
         mProvider = rclone!!.getProvider(mProviderTitle)
         if(mProvider == null) {
             Log.e(this::class.java.simpleName, "Unknown Provider: $mProviderTitle")
@@ -109,18 +145,23 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
+        if (requireActivity().isFinishing) return null
         val view = inflater.inflate(R.layout.remote_config_form, container, false)
         mFormView = view.findViewById(R.id.form_content)
         mTitleLabel = view.findViewById(R.id.labelTitle)
         mAuthView = view.findViewById(R.id.auth_screen)
 
-        mRemoteName = view.findViewById(R.id.remote_name)
+        remoteNameLayout = view.findViewById(R.id.remote_name_layout)
+        mRemoteName = view.findViewById<EditText>(R.id.remote_name).apply {
+            doAfterTextChanged { remoteNameLayout.error = null }
+        }
         mCancelAuthButton = view.findViewById(R.id.cancel_auth)
 
         mFinishButton = view.findViewById(R.id.finish)
 
-        if(mUseOauth) {
-            (mFinishButton as FloatingActionButton).contentDescription = getString(R.string.next)
+        if (mUseOauth && !mIsEditTask) {
+            mFinishButton?.setText(R.string.next)
+            mFinishButton?.setIconResource(R.drawable.ic_appintro_arrow)
         }
 
         setUpForm()
@@ -149,6 +190,12 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_ADVANCED, mShowAdvanced)
+        outState.putString(STATE_FILTER, mOptionFilter)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         mAuthTask?.cancel(true)
@@ -157,6 +204,8 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
     fun isEditConfig(): Boolean {
         return mIsEditTask
     }
+
+    fun providerName(): String = mProviderTitle
 
     fun cancelCurrentStep() {
         if(isEditConfig()){
@@ -168,8 +217,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
 
     fun setSearchterm (term: String) {
         mOptionFilter = term
-        Log.e(TAG, "Filter:: $term")
-        setUpForm()
+        if (mFormView != null) setUpForm()
     }
 
     // Todo: required attribute is not honored (also apply to title!)
@@ -210,13 +258,14 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
             val textViewTitle = TextView(mContext)
             textViewTitle.contentDescription = it.name
             textViewTitle.text = it.getNameCapitalized()
-            textViewTitle.typeface = Typeface.DEFAULT_BOLD
+            textViewTitle.setTextAppearance(R.style.TextAppearance_Material3_TitleMedium)
             layout.addView(textViewTitle)
 
 
             val textViewDescription = TextView(mContext)
             textViewDescription.contentDescription = it.help
             textViewDescription.text = it.help
+            textViewDescription.setTextAppearance(R.style.TextAppearance_Material3_BodyMedium)
             layout.addView(textViewDescription)
 
 
@@ -240,7 +289,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                     }
                 }
                 "bool" -> {
-                    val input = CheckBox(mContext)
+                    val input = MaterialCheckBox(mContext)
                     input.text = it.name
                     updateValue(input, it)
 
@@ -288,12 +337,13 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
             // then set it to true if it is enabled by default
             when (view::class.java) {
                 AutoCompleteTextView::class.java -> {
-                    (view as AutoCompleteTextView).setText(option.default)
+                    // false keeps the full example list available when a value is preset.
+                    (view as AutoCompleteTextView).setText(option.default, false)
                 }
                 TextInputEditText::class.java -> {
                     (view as TextInputEditText).setText(option.default)
                 }
-                CheckBox::class.java -> {
+                MaterialCheckBox::class.java -> {
                     if(option.default.lowercase(Locale.ROOT).toBoolean()){
                         (view as CheckBox).isChecked = true
                     }
@@ -311,7 +361,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                 TextInputEditText::class.java -> {
                     (view as TextInputEditText).setText(mOptionMap[option.name])
                 }
-                CheckBox::class.java -> {
+                MaterialCheckBox::class.java -> {
                     (view as CheckBox).isChecked = mOptionMap[option.name].toBoolean()
                 }
                 else -> {
@@ -324,7 +374,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
     private fun createSpinnerFromExample(option: ProviderOption, hint: String, layout: LinearLayout): View {
 
         val padding = resources.getDimensionPixelOffset(R.dimen.cardPadding)
-        val textinput = TextInputLayout(ContextThemeWrapper(activity, R.style.Widget_MaterialComponents_TextInputLayout_OutlinedBox_ExposedDropdownMenu))
+        val textinput = TextInputLayout(ContextThemeWrapper(activity, R.style.Widget_Material3_TextInputLayout_OutlinedBox_ExposedDropdownMenu))
         textinput.hint = hint
         textinput.boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
         textinput.setPadding(0, padding, 0, 0)
@@ -336,11 +386,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         option.examples.forEach { example ->
             items.add(example.Value)
         }
-        val adapter = ArrayAdapter(
-            this.mContext,
-            android.R.layout.simple_spinner_item,
-            items
-        )
+        val adapter = ArrayAdapter(this.mContext, android.R.layout.simple_spinner_item, items)
 
         input.setAdapter(adapter)
         if (option.exclusive) input.keyListener = null
@@ -390,24 +436,18 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
 
 
         // Suffix Container
-        val suffixContainer = TextInputLayout(ContextThemeWrapper(activity, R.style.Widget_MaterialComponents_TextInputLayout_OutlinedBox_ExposedDropdownMenu))
+        val suffixContainer = TextInputLayout(ContextThemeWrapper(activity, R.style.Widget_Material3_TextInputLayout_OutlinedBox_ExposedDropdownMenu))
         suffixContainer.boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
         suffixContainer.setPadding(padding, padding, 0, 0)
         suffixContainer.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, 1.3f)
-        valueInput.setText(suffix)
-
         val items = listOf("P", "T", "G", "M", "K", "B")
-        val adapter = ArrayAdapter(
-            this.mContext,
-            android.R.layout.simple_spinner_item,
-            items
-        )
+        val adapter = ArrayAdapter(this.mContext, android.R.layout.simple_spinner_item, items)
 
         val suffixSpinner = AutoCompleteTextView(suffixContainer.context)
         suffixSpinner.setPadding(padding)
         suffixSpinner.hint = getString(R.string.dynamic_config_suffixselector_suffix_hint)
         suffixSpinner.setAdapter(adapter)
-        //suffixSpinner.isEnabled = false
+        suffixSpinner.setText(suffix, false)
         suffixContainer.addView(suffixSpinner)
 
 
@@ -441,8 +481,6 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
 
         val editText = TextInputEditText(textinput.context)
         editText.setPadding(padding)
-        //@ManualTheming
-        editText.setTextColor(convertAttributeToColor(R.attr.colorOnSecondaryContainer))
         editText.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
 
         textinput.addView(editText)
@@ -472,11 +510,13 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         }
     }
 
-    private fun getCard(): CardView {
-        val card = CardView(mContext)
+    private fun getCard(): MaterialCardView {
+        val card = MaterialCardView(mContext)
+        card.setCardBackgroundColor(convertAttributeToColor(R.attr.colorSurfaceContainerLow))
+        card.strokeWidth = 0
         val cardLayout = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
+            ViewGroup.LayoutParams.WRAP_CONTENT
         )
         cardLayout.topMargin = getDPasPixel(16).toInt()
         cardLayout.marginStart = getDPasPixel(8).toInt()
@@ -484,9 +524,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         cardLayout.bottomMargin = getDPasPixel(8).toInt()
         card.layoutParams = cardLayout
 
-        //@ManualTheming
-        card.setCardBackgroundColor(convertAttributeToColor(R.attr.colorSecondaryContainer))
-        card.radius = resources.getDimension(R.dimen.cardCornerRadius)
+        card.radius = getDPasPixel(24)
         card.setContentPadding(
             resources.getDimension(R.dimen.cardPadding).toInt(),
             resources.getDimension(R.dimen.cardPadding).toInt(),
@@ -512,7 +550,12 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         val options = java.util.ArrayList<String>()
         val name: String = mRemoteName?.text.toString().trim()
         if (name.isEmpty() || name.startsWith("-") || !name.matches(Regex("^[A-Za-z0-9_][A-Za-z0-9_. -]*$"))) {
-            es.dmoral.toasty.Toasty.error(mContext, "Invalid remote name", android.widget.Toast.LENGTH_SHORT, true).show()
+            remoteNameLayout.error = getString(R.string.remote_name_error)
+            if (remoteNameLayout.isShown) {
+                mRemoteName?.requestFocus()
+            } else {
+                Toast.makeText(mContext, R.string.remote_name_error, Toast.LENGTH_LONG).show()
+            }
             return
         }
         options.add(name)
@@ -531,8 +574,10 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
         }
 
         if(mIsEditTask) {
-            RemoteConfigHelper.updateAndWait(context, options)
-            requireActivity().finish()
+            if (RemoteConfigHelper.updateAndWait(requireContext(), options)) {
+                requireActivity().finish()
+            }
+            return
         }
 
         if(mUseOauth){
@@ -540,8 +585,7 @@ class DynamicRemoteConfigFragment(private val mProviderTitle: String, private va
                 options, mFormView!!, mAuthView!!,
                 requireContext(), rclone!!, mProvider?.name ?: ""
             ).execute()
-        } else {
-            RemoteConfigHelper.setupAndWait(context, options)
+        } else if (RemoteConfigHelper.setupAndWait(requireContext(), options)) {
             requireActivity().finish()
         }
     }

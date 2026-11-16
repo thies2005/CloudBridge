@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="md_theme_light_primary">@android:color/system_accent1_200</color>
+    <color name="md_theme_light_primary">@android:color/system_accent1_600</color>
     <color name="md_theme_light_onPrimary">@android:color/system_accent1_0</color>
     <color name="md_theme_light_primaryContainer">@android:color/system_accent1_300</color>
     <color name="md_theme_light_onPrimaryContainer">@android:color/system_accent1_700</color>

@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import ca.pkay.rcloneexplorer.Rclone
 import android.os.AsyncTask
-import es.dmoral.toasty.Toasty
 import ca.pkay.rcloneexplorer.R
 import android.widget.Toast
 import android.content.Intent
@@ -373,19 +372,15 @@ class ConfigCreate internal constructor(
     override fun onPostExecute(success: Boolean) {
         super.onPostExecute(success)
         if (!success) {
-            Toasty.error(
+            Toast.makeText(
                 mContext,
                 mContext.getString(R.string.error_creating_remote),
-                Toast.LENGTH_SHORT,
-                true
-            ).show()
+                Toast.LENGTH_SHORT).show()
         } else {
-            Toasty.success(
+            Toast.makeText(
                 mContext,
                 mContext.getString(R.string.remote_creation_success),
-                Toast.LENGTH_SHORT,
-                true
-            ).show()
+                Toast.LENGTH_SHORT).show()
         }
         val intent = Intent(mContext, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)

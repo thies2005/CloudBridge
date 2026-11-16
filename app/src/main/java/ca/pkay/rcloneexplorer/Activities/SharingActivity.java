@@ -17,7 +17,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
@@ -43,7 +42,6 @@ import ca.pkay.rcloneexplorer.RuntimeConfiguration;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager;
-import es.dmoral.toasty.Toasty;
 
 public class SharingActivity extends AppCompatActivity implements ShareRemotesFragment.OnRemoteClickListener,
         ShareFragment.OnShareDestinationSelected {
@@ -69,7 +67,6 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
         setContentView(R.layout.activity_sharing);
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -357,8 +354,8 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                 return;
             }
             if (!success) {
-                Toasty.error(context, getString(duplicateName ? R.string.share_duplicate_file_name
-                        : R.string.error_retrieving_files), Toast.LENGTH_LONG, true).show();
+                Toast.makeText(context, getString(duplicateName ? R.string.share_duplicate_file_name
+                        : R.string.error_retrieving_files), Toast.LENGTH_LONG).show();
                 finish();
             }
             isDataReady = true;

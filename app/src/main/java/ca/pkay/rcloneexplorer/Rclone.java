@@ -58,7 +58,6 @@ import ca.pkay.rcloneexplorer.Items.SyncDirectionObject;
 import ca.pkay.rcloneexplorer.rclone.Provider;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.SyncLog;
-import es.dmoral.toasty.Toasty;
 import io.github.x0b.safdav.SafAccessProvider;
 import io.github.x0b.safdav.file.SafConstants;
 
@@ -405,14 +404,14 @@ public class Rclone {
                 JSONObject remoteJSON = new JSONObject(remotesJSON.get(key).toString());
                 String type = remoteType(remoteJSON);
                 if (type.trim().isEmpty()) {
-                    Toasty.error(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT, true).show();
+                    Toast.makeText(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT).show();
                     continue;
                 }
                 RemoteItem newRemote = new RemoteItem(key, type);
                 if (type.equals("crypt") || type.equals("alias") || type.equals("cache")) {
                     newRemote = getRemoteType(remotesJSON, newRemote, key, 8, false);
                     if (newRemote == null) {
-                        Toasty.error(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT, true).show();
+                        Toast.makeText(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT).show();
                         continue;
                     }
                 }
@@ -458,7 +457,7 @@ public class Rclone {
             }
             process.waitFor();
             if (process.exitValue() != 0) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                 logErrorOutput(process);
                 return null;
             }
@@ -654,7 +653,7 @@ public class Rclone {
 
             process.waitFor();
             if (process.exitValue() != 0) {
-                Toasty.error(context, context.getString(R.string.error_getting_config), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_config), Toast.LENGTH_SHORT).show();
                 logErrorOutput(process);
             }
 
@@ -1959,7 +1958,7 @@ public class Rclone {
                 process.waitFor();
                 if (process.exitValue() != 0) {
                     if(!silent){
-                        Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                        Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                     }
                     logErrorOutput(process);
                     return new ArrayList<>();
@@ -1977,7 +1976,7 @@ public class Rclone {
                 bw.write(remotesJSON.toString(4));
                 bw.close();
             } catch (IOException e) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                 FLog.e(TAG, "Could not save providers to cache!", e);
                 return new ArrayList<>();
             }
@@ -1991,7 +1990,7 @@ public class Rclone {
                     fileContent.append(new String(buffer, 0, size));
                 }
             } catch (IOException e) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                 FLog.e(TAG, "Could not read cached providers, but the file exists! Please clear your app cache.", e);
                 return new ArrayList<>();
             }

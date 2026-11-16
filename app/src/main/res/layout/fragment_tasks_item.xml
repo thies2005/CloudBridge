@@ -1,161 +1,109 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    xmlns:tools="http://schemas.android.com/tools"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:orientation="vertical">
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="5dp"
+    app:cardBackgroundColor="?attr/colorSurfaceContainer"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="0dp">
 
-    <androidx.cardview.widget.CardView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_margin="8dp"
-        android:elevation="4dp"
-        android:theme="@style/SecondaryCardStyle"
-        style="@style/SecondaryCardStyle"
-        app:cardCornerRadius="@dimen/cardCornerRadius">
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="16dp">
 
-        <androidx.constraintlayout.widget.ConstraintLayout
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <ImageView
                 android:id="@+id/taskIcon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:contentDescription="@string/remote_icon"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_cloudbridge_tonal_icon"
+                android:importantForAccessibility="no"
+                android:padding="8dp"
+                app:tint="?attr/colorOnSecondaryContainer"
                 tools:src="@drawable/ic_cloud" />
 
             <TextView
                 android:id="@+id/taskName"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginTop="16dp"
-                android:fontFamily="sans-serif"
-                android:textSize="16sp"
-                app:layout_constraintStart_toEndOf="@+id/taskIcon"
-                app:layout_constraintTop_toTopOf="parent"
-                tools:text="Google Drive" />
-
-            <TextView
-                android:id="@+id/fromLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/task_item_label_from"
-                app:layout_constraintStart_toStartOf="@+id/taskName"
-                app:layout_constraintTop_toBottomOf="@+id/taskName" />
-
-            <TextView
-                android:id="@+id/toLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
-                android:text="@string/task_item_label_to"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="@+id/fromLabel"
-                app:layout_constraintTop_toBottomOf="@+id/fromLabel" />
-
-            <ImageButton
-                android:id="@+id/file_options"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:background="?selectableItemBackgroundBorderless"
-                android:contentDescription="@string/file_options_content_description"
-                android:minWidth="48dp"
-                android:minHeight="48dp"
-                android:padding="4dp"
-                android:src="@drawable/ic_more_vert"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnSurface"
+                tools:text="Back up photos" />
 
             <TextView
                 android:id="@+id/task_sync_direction"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="32dp"
-                android:text="@string/sync"
-                android:textSize="12sp"
-                android:textStyle="italic"
-                app:layout_constraintBottom_toBottomOf="@+id/taskName"
-                app:layout_constraintEnd_toStartOf="@+id/file_options"
-                app:layout_constraintTop_toTopOf="@+id/taskName" />
+                android:background="@drawable/bg_cloudbridge_task_badge"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSecondaryContainer"
+                tools:text="Copy" />
 
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:orientation="vertical"
-                app:layout_constraintBottom_toBottomOf="@+id/toLabel"
-                app:layout_constraintEnd_toStartOf="@+id/file_options"
-                app:layout_constraintStart_toEndOf="@+id/fromLabel"
-                app:layout_constraintTop_toTopOf="@+id/fromLabel">
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/file_options"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/file_options_content_description"
+                android:src="@drawable/ic_more_vert"
+                app:tint="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start"
-                    android:orientation="horizontal">
+        <TextView
+            android:id="@+id/fromLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            tools:text="@string/task_item_label_from" />
 
-                    <TextView
-                        android:id="@+id/fromID"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="2dp"
-                        android:singleLine="true"
-                        tools:text="fromid"
-                        android:textColor="@color/textColorHighlight"
-                        android:textStyle="italic"
-                        tools:ignore="HardcodedText" />
+        <TextView
+            android:id="@+id/fromPath"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurface"
+            tools:text="/storage/emulated/0/Pictures" />
 
-                    <TextView
-                        android:id="@+id/fromPath"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:singleLine="true"
-                        tools:text="fromPath"
-                        tools:ignore="HardcodedText" />
+        <TextView
+            android:id="@+id/toLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            tools:text="@string/task_item_label_to" />
 
-                </LinearLayout>
+        <TextView
+            android:id="@+id/toPath"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurface"
+            tools:text="remote:/Backups" />
+    </LinearLayout>
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/toID"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="2dp"
-                        android:singleLine="true"
-                        tools:text="toid"
-                        android:textAllCaps="false"
-                        android:textColor="@color/textColorHighlight"
-                        android:textStyle="italic"
-                        tools:ignore="HardcodedText" />
-
-                    <TextView
-                        android:id="@+id/toPath"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:singleLine="true"
-                        tools:text="toPath"
-                        tools:ignore="HardcodedText" />
-
-                </LinearLayout>
-            </LinearLayout>
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
-    </androidx.cardview.widget.CardView>
-
-</LinearLayout>
+</com.google.android.material.card.MaterialCardView>

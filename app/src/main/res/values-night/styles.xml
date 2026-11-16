@@ -6,6 +6,6 @@
         <item name="android:tint">?attr/colorOnSecondaryContainer</item>
     </style>
     <style name="BreadcrumbText" parent="">
-        <item name="android:textColor">@color/md_theme_dark_background</item>
+        <item name="android:textColor">?attr/colorOnPrimaryContainer</item>
     </style>
 </resources>

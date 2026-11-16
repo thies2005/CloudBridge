@@ -22,7 +22,7 @@ Android cloud file manager wrapping [rclone](https://rclone.org). Fork of RCX / 
 - Package namespace: `ca.pkay.rcloneexplorer` (legacy from rcloneExplorer fork).
 - Application ID: `de.schuelken.cloudbridge`.
 - Newer code lives under `de.schuelken.cloudbridge.*`.
-- `app/src/rcx/` is an additional source set for RCX-specific utilities.
+- `app/src/cloudbridge/` holds the inactive legacy crash-logger source. The OSS and RS builds compile their application code from `app/src/main/`.
 - Product flavors are `oss` and `rs` in the `edition` dimension. Most work should target `oss` unless the task says otherwise.
 
 ## rclone Upgradeability

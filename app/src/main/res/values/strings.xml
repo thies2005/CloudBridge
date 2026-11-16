@@ -192,7 +192,9 @@
     <string name="no_search_results">No search results</string>
     <string name="nothing_selected">Nothing selected</string>
     <string name="file_picker_root_title">Device storage</string>
-    <string name="remote_name_hint">Name (a–z, 0-9 only)</string>
+    <string name="remote_display_name">Display name</string>
+    <string name="remote_name_hint">Name</string>
+    <string name="remote_name_error">Start with a letter, number or underscore. You can also use spaces, hyphens and periods after the first character.</string>
     <string name="waiting_for_code">Waiting for code</string>
     <string name="open_browser">Open browser</string>
     <string name="provider_ftp">FTP</string>
@@ -202,6 +204,7 @@
     <string name="error_creating_remote">Error creating remote</string>
     <string name="cancelled">Cancelled</string>
     <string name="remote_creation_success">Remote created successfully</string>
+    <string name="remote_update_success">Remote updated successfully</string>
     <string name="next">Next</string>
     <string name="title_activity_remote_config">Select type</string>
     <string name="error_exporting_config_file">Error exporting config file</string>
@@ -264,6 +267,7 @@
     <string name="sync">Sync…</string>
     <string name="select_sync_direction">Select sync direction</string>
     <string name="nav_drawer_pinned_header">Pinned</string>
+    <string name="open_navigation_drawer">Open navigation drawer</string>
     <string name="nav_header_options_header">Options</string>
     <string name="worker_download_cancelled">Download cancelled</string>
     <string name="wifi_connections_isnt_available">Wi-Fi connection isn\'t available</string>
@@ -370,6 +374,7 @@
     <string name="operation_report_fail_short_content">%d Tasks failed</string>
     <string name="pin_to_dektop">Pin to Home</string>
     <string name="title_activity_task">Create a new Task</string>
+    <string name="title_edit_task">Edit task</string>
     <string name="title_activity_filter">Create a new Filter</string>
     <!-- Strings used for fragments for navigation -->
 
@@ -507,6 +512,7 @@
     <string name="auto_theme">Follow System Theme</string>
     <string name="light_theme">Light Mode</string>
     <string name="theme_title">Theme</string>
+    <string name="amoled_theme">AMOLED Black</string>
     <string name="remote_folder_picker_title">Folder picker</string>
     <string name="logFragment">Logs</string>
     <string name="alarm_while_idle">Allow tasks to run when the device is idle</string>
@@ -547,6 +553,7 @@
     <string name="toggle_advanced_options">Toggle Advanced Options</string>
     <string name="trigger_type_schedule">Scheduled</string>
     <string name="trigger_type_interval">Interval</string>
+    <string name="trigger_type_label">Trigger type</string>
     <string name="task_interval">Interval Settings</string>
     <string name="trigger_interval_15_min">Every 15 minutes</string>
     <string name="trigger_interval_30_min">Every 30 minutes</string>

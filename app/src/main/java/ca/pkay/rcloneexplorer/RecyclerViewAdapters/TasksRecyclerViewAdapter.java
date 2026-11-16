@@ -37,7 +37,6 @@ import ca.pkay.rcloneexplorer.Items.SyncDirectionObject;
 import ca.pkay.rcloneexplorer.Items.Task;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.workmanager.SyncManager;
-import es.dmoral.toasty.Toasty;
 
 public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecyclerViewAdapter.ViewHolder>{
 
@@ -78,39 +77,22 @@ public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecycler
         holder.from.setText(this.context.getString(R.string.task_item_label_from));
 
         if(direction == SyncDirectionObject.SYNC_LOCAL_TO_REMOTE || direction == SyncDirectionObject.COPY_LOCAL_TO_REMOTE){
-            holder.fromID.setVisibility(View.GONE);
             holder.fromPath.setText(selectedTask.getLocalPath());
-
-            holder.toID.setVisibility(View.VISIBLE);
-            holder.toID.setText(String.format("%s:", selectedTask.getRemoteId()));
-            holder.toPath.setText(selectedTask.getRemotePath());
+            holder.toPath.setText(remotePath(selectedTask.getRemoteId(), selectedTask.getRemotePath()));
         }
 
         if(direction == SyncDirectionObject.SYNC_REMOTE_TO_LOCAL || direction == SyncDirectionObject.COPY_REMOTE_TO_LOCAL){
-            holder.fromID.setVisibility(View.VISIBLE);
-            holder.fromID.setText(String.format("%s:", selectedTask.getRemoteId()));
-            holder.fromPath.setText(selectedTask.getRemotePath());
-
-            holder.toID.setVisibility(View.GONE);
+            holder.fromPath.setText(remotePath(selectedTask.getRemoteId(), selectedTask.getRemotePath()));
             holder.toPath.setText(selectedTask.getLocalPath());
         }
 
         if(direction == SyncDirectionObject.SYNC_REMOTE_TO_REMOTE || direction == SyncDirectionObject.COPY_REMOTE_TO_REMOTE){
-            holder.fromID.setVisibility(View.VISIBLE);
-            holder.fromID.setText(String.format("%s:", selectedTask.getRemoteId()));
-            holder.fromPath.setText(selectedTask.getRemotePath());
-
-            holder.toID.setVisibility(View.VISIBLE);
-            holder.toID.setText(String.format("%s:", selectedTask.getRemoteId2()));
-            holder.toPath.setText(selectedTask.getRemotePath2());
+            holder.fromPath.setText(remotePath(selectedTask.getRemoteId(), selectedTask.getRemotePath()));
+            holder.toPath.setText(remotePath(selectedTask.getRemoteId2(), selectedTask.getRemotePath2()));
         }
 
         if(direction == SyncDirectionObject.SYNC_BIDIRECTIONAL || direction == SyncDirectionObject.SYNC_BIDIRECTIONAL_INITIAL){
-            holder.fromID.setVisibility(View.VISIBLE);
-            holder.fromID.setText(String.format("%s:", selectedTask.getRemoteId()));
-            holder.fromPath.setText(selectedTask.getRemotePath());
-
-            holder.toID.setVisibility(View.GONE);
+            holder.fromPath.setText(remotePath(selectedTask.getRemoteId(), selectedTask.getRemotePath()));
             holder.toPath.setText(selectedTask.getLocalPath());
 
             holder.to.setText(this.context.getString(R.string.task_item_label_to_bisync));
@@ -184,6 +166,7 @@ public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecycler
     private void showFileMenu(View view, final Task task) {
         PopupMenu popupMenu = new PopupMenu(context, view);
         popupMenu.getMenuInflater().inflate(R.menu.task_item_menu, popupMenu.getMenu());
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(popupMenu.getMenu(), true);
         popupMenu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case R.id.action_start_task:
@@ -205,7 +188,7 @@ public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecycler
                     ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
                     ClipData clip = ClipData.newPlainText(clipboardID, id);
                     clipboard.setPrimaryClip(clip);
-                    Toasty.info(context, context.getResources().getString(R.string.task_copied_id_to_clipboard, id), Toast.LENGTH_SHORT, true).show();
+                    Toast.makeText(context, context.getResources().getString(R.string.task_copied_id_to_clipboard, id), Toast.LENGTH_SHORT).show();
                     break;
                 case R.id.action_add_to_home_screen:
                     if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -220,6 +203,11 @@ public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecycler
         popupMenu.show();
     }
 
+    /** Remote locations are rendered in rclone notation (remote:path); local paths stay as-is. */
+    private static String remotePath(String remoteId, String path) {
+        return remoteId + ":" + path;
+    }
+
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
         final View view;
@@ -227,8 +215,6 @@ public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecycler
         final TextView taskName;
         final TextView to;
         final TextView from;
-        final TextView toID;
-        final TextView fromID;
         final TextView toPath;
         final TextView fromPath;
         final ImageButton fileOptions;
@@ -241,8 +227,6 @@ public class TasksRecyclerViewAdapter extends RecyclerView.Adapter<TasksRecycler
             this.taskName = view.findViewById(R.id.taskName);
             this.to = view.findViewById(R.id.toLabel);
             this.from = view.findViewById(R.id.fromLabel);
-            this.toID = view.findViewById(R.id.toID);
-            this.fromID = view.findViewById(R.id.fromID);
             this.toPath = view.findViewById(R.id.toPath);
             this.fromPath = view.findViewById(R.id.fromPath);
             this.taskSyncDirection = view.findViewById(R.id.task_sync_direction);

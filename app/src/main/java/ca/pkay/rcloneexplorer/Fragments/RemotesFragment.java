@@ -49,7 +49,6 @@ import ca.pkay.rcloneexplorer.RecyclerViewAdapters.RemotesRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.RemoteConfig.InternxtReauth;
 import ca.pkay.rcloneexplorer.RemoteConfig.RemoteConfig;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdapter.OnRemoteOptionsClick {
 
@@ -113,7 +112,6 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
 
         final Context context = view.getContext();
         RecyclerView recyclerView =  view.findViewById(R.id.remotes_list);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
         recyclerViewAdapter = new RemotesRecyclerViewAdapter(remotes, remoteClickListener, this);
         recyclerView.setAdapter(recyclerViewAdapter);
@@ -274,6 +272,7 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
     private void showRemoteMenu(View view, final RemoteItem remoteItem) {
         PopupMenu popupMenu = new PopupMenu(context, view);
         popupMenu.getMenuInflater().inflate(R.menu.remote_options, popupMenu.getMenu());
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(popupMenu.getMenu(), true);
         popupMenu.setOnMenuItemClickListener(item -> {
             int itemID = item.getItemId();
 
@@ -490,23 +489,37 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
     }
 
     private void renameRemote(final RemoteItem remoteItem) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        com.google.android.material.dialog.MaterialAlertDialogBuilder builder =
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(context);
 
         final SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(context);
-        final EditText remoteNameEdit = new EditText(context);
+        com.google.android.material.textfield.TextInputLayout inputLayout =
+                new com.google.android.material.textfield.TextInputLayout(context);
+        inputLayout.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        inputLayout.setHint(getString(R.string.remote_display_name));
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        inputLayout.setPadding(padding, 0, padding, 0);
+        final EditText remoteNameEdit = new com.google.android.material.textfield.TextInputEditText(inputLayout.getContext());
         String initialText = remoteItem.getDisplayName();
+        remoteNameEdit.setSingleLine(true);
         remoteNameEdit.setText(initialText);
-        builder.setView(remoteNameEdit);
+        remoteNameEdit.setSelectAllOnFocus(true);
+        inputLayout.addView(remoteNameEdit);
+        builder.setView(inputLayout);
         builder.setNegativeButton(R.string.cancel, null);
-        builder.setPositiveButton(R.string.select, (dialog, which) -> {
+        builder.setPositiveButton(R.string.save, (dialog, which) -> {
             String displayName = remoteNameEdit.getText().toString();
-            Set<String> renamedRemotes = pref.getStringSet(getString(R.string.pref_key_renamed_remotes), new HashSet<>());
+            Set<String> renamedRemotes = new HashSet<>(pref.getStringSet(
+                    getString(R.string.pref_key_renamed_remotes), Collections.emptySet()));
             renamedRemotes.add(remoteItem.getName());
             pref.edit()
                     .putString(getString(R.string.pref_key_renamed_remote_prefix, remoteItem.getName()), displayName)
                     .putStringSet(getString(R.string.pref_key_renamed_remotes), renamedRemotes)
                 .apply();
             remoteItem.setDisplayName(displayName);
+            if (remoteItem.isDrawerPinned()) {
+                pinToDrawerListener.addRemoteToNavDrawer();
+            }
             refreshRemotes();
         });
         builder.setTitle(R.string.rename_remote);

@@ -7,11 +7,9 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.Spinner;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.widget.PopupMenu;
@@ -22,6 +20,7 @@ import java.util.List;
 
 import ca.pkay.rcloneexplorer.Items.FilterEntry;
 import ca.pkay.rcloneexplorer.R;
+import ca.pkay.rcloneexplorer.util.ExposedChoice;
 
 public class FilterEntryRecyclerViewAdapter extends RecyclerView.Adapter<FilterEntryRecyclerViewAdapter.ViewHolder> {
     private List<FilterEntry> filterEntries;
@@ -61,17 +60,14 @@ public class FilterEntryRecyclerViewAdapter extends RecyclerView.Adapter<FilterE
 
 
         ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(holder.itemView.getContext(),
-                android.R.layout.simple_spinner_item, new String[]{ context.getString(R.string.filter_entry_filtertype_include), context.getString(R.string.filter_entry_filtertype_exclude) });
-        holder.filterTypeSpinner.setAdapter(spinnerAdapter);
-        holder.filterTypeSpinner.setSelection(selectedFilterEntry.filterType);
-        holder.filterTypeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-                selectedFilterEntry.filterType = pos;
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+                android.R.layout.simple_list_item_1, new String[]{ context.getString(R.string.filter_entry_filtertype_include), context.getString(R.string.filter_entry_filtertype_exclude) });
+        holder.filterTypeSpinner.setChoices(spinnerAdapter);
+        // Restore the stored type without firing the write-back listener, then attach it.
+        holder.filterTypeSpinner.setOnChoiceChanged(null);
+        holder.filterTypeSpinner.selectPosition(selectedFilterEntry.filterType);
+        holder.filterTypeSpinner.setOnChoiceChanged(pos -> {
+            selectedFilterEntry.filterType = pos;
+            return null;
         });
 
         holder.fileOptions.setOnClickListener(v -> removeItem(selectedFilterEntry));
@@ -94,7 +90,7 @@ public class FilterEntryRecyclerViewAdapter extends RecyclerView.Adapter<FilterE
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
         final View view;
-        final Spinner filterTypeSpinner;
+        final ExposedChoice filterTypeSpinner;
         final EditText filterText;
         final ImageButton fileOptions;
 

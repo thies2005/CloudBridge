@@ -1,8 +1,12 @@
 package ca.pkay.rcloneexplorer
 
 import android.app.Application
+import android.app.Activity
+import android.os.Bundle
+import ca.pkay.rcloneexplorer.Activities.OnboardingActivity
 import android.util.Log
 import androidx.work.Configuration
+import ca.pkay.rcloneexplorer.util.ActivityHelper
 
 /**
  * Application entry point.
@@ -15,6 +19,25 @@ import androidx.work.Configuration
  * so that this configuration is honored; WorkManager then initializes lazily on first use.
  */
 class CloudBridgeApp : Application(), Configuration.Provider {
+
+    override fun onCreate() {
+        super.onCreate()
+        ActivityHelper.applyDarkMode(this)
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, state: Bundle?) {
+                // Onboarding owns its immersive window independently.
+                if (activity !is OnboardingActivity && !activity.isFinishing) {
+                    ActivityHelper.applyWindowInsets(activity)
+                }
+            }
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+    }
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()

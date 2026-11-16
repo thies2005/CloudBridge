@@ -39,12 +39,14 @@
         <item>@string/auto_theme</item>
         <item>@string/dark_theme</item>
         <item>@string/light_theme</item>
+        <item>@string/amoled_theme</item>
     </array>
 
     <string-array name="theme_ids">
         <item>0</item>
         <item>1</item>
         <item>2</item>
+        <item>3</item>
     </string-array>
 
     <string-array name="filesize_selector">

@@ -8,5 +8,6 @@
         android:layout_height="wrap_content"
         android:icon="@drawable/ic_search_black_24dp"
         android:title="@string/search"
+        app:iconTint="?attr/colorOnSurfaceVariant"
         app:showAsAction="always" />
 </menu>

@@ -1,5 +1,7 @@
 package ca.pkay.rcloneexplorer.RecyclerViewAdapters;
 
+import android.widget.Toast;
+
 
 import static ca.pkay.rcloneexplorer.Items.Trigger.TRIGGER_DAY_FRI;
 import static ca.pkay.rcloneexplorer.Items.Trigger.TRIGGER_DAY_MON;
@@ -36,7 +38,6 @@ import ca.pkay.rcloneexplorer.Items.Task;
 import ca.pkay.rcloneexplorer.Items.Trigger;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Services.TriggerService;
-import es.dmoral.toasty.Toasty;
 
 public class TriggerRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
 
@@ -132,7 +133,7 @@ public class TriggerRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVie
         } else {
             new TriggerService(context).cancelTrigger(trigger.getId());
         }
-        Toasty.info(context, message).show();
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
     }
 
     public void setList(ArrayList<Trigger> data) {
@@ -165,6 +166,7 @@ public class TriggerRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVie
     private void showFileMenu(View view, final Trigger trigger) {
         PopupMenu popupMenu = new PopupMenu(context, view);
         popupMenu.getMenuInflater().inflate(R.menu.trigger_item_menu, popupMenu.getMenu());
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(popupMenu.getMenu(), true);
         popupMenu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case R.id.action_edit_trigger:

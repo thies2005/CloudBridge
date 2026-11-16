@@ -17,10 +17,9 @@ class RemoteConfigListItemAdapter(
     private val mProvider: ArrayList<Provider>,
     private val mContext: Context,
     private var mSelectionChange: ProviderListFragment.SelectionChangedListener,
-    private val mPreselection: String?
+    private var mPreselection: String?
 ): RecyclerView.Adapter<RemoteConfigListItemAdapter.ViewHolder>() {
 
-    private var mLastSelected: RadioButton? = null
 
     override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(viewGroup.context)
@@ -39,29 +38,15 @@ class RemoteConfigListItemAdapter(
             ContextCompat.getDrawable(mContext, getIconIfAvailable(provider.name))
         )
 
-        viewHolder.itemView.setOnClickListener { v: View ->
-            val rb = v.findViewById<RadioButton>(R.id.provider_rb)
-            setSelected(rb, provider)
-        }
-
-        if(mPreselection != null) {
-            if(provider.name == mPreselection.lowercase()){
-                val rb = viewHolder.isSelectedButton.findViewById<RadioButton>(R.id.provider_rb)
-                setSelected(rb, provider)
-            }
+        viewHolder.isSelectedButton.isChecked = provider.name.equals(mPreselection, ignoreCase = true)
+        viewHolder.itemView.setOnClickListener {
+            mPreselection = provider.name
+            mSelectionChange.onProviderChanged(provider)
+            notifyDataSetChanged()
         }
     }
 
     override fun getItemCount() = mProvider.size
-
-    private fun setSelected(radioButton: RadioButton, provider: Provider) {
-        if (mLastSelected != null) {
-            mLastSelected!!.isChecked = false
-        }
-        radioButton.isChecked = true
-        mLastSelected = radioButton
-        mSelectionChange.onProviderChanged(provider)
-    }
 
     private fun getIconIfAvailable(providerName: String ): Int {
         return when(providerName) {

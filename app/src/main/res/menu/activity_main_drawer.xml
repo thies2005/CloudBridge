@@ -30,52 +30,30 @@
             android:visible="false" />
     </group>
 
+    <!-- Section label for drawer-pinned remotes; entries are added at runtime
+         into the nav_pinned group below (NavigationView ignores submenu children). -->
     <item
-        android:title="@string/nav_drawer_pinned_header"
         android:id="@+id/drawer_pinned_header"
         android:orderInCategory="1"
-        android:checkableBehavior="single">
-        <menu>
-            <group
-                android:id="@+id/nav_pinned"
-                android:orderInCategory="1"
-                android:checkableBehavior="none">
-            </group>
-        </menu>
-    </item>
+        android:title="@string/nav_drawer_pinned_header"
+        android:visible="false" />
 
-    <item
-        android:checkableBehavior="single"
-        android:orderInCategory="2"
-        android:title="@string/nav_header_options_header"
-        android:visible="false">
-        <menu>
-            <group
-                android:id="@+id/nav_bottom"
-                android:checkableBehavior="none"
-                android:orderInCategory="2"
-                android:title="@string/settings">
-                <item
-                    android:id="@+id/nav_import"
-                    android:icon="@drawable/ic_import"
-                    android:title="@string/import_rclone_config" />
+    <group
+        android:id="@+id/nav_pinned"
+        android:orderInCategory="1"
+        android:checkableBehavior="none"
+        android:visible="false" />
 
-                <item
-                    android:id="@+id/nav_export"
-                    android:icon="@drawable/ic_export"
-                    android:title="@string/export_rclone_config" />
-
-                <item
-                    android:id="@+id/nav_settings"
-                    android:checkable="false"
-                    android:icon="@drawable/ic_twotone_settings_24"
-                    android:title="@string/settings" />
-                <item
-                    android:id="@+id/nav_about"
-                    android:checkable="false"
-                    android:icon="@drawable/ic_twotone_info_24"
-                    android:title="@string/about" />
-            </group>
-        </menu>
-    </item>
+    <group
+        android:id="@+id/nav_bottom"
+        android:orderInCategory="2">
+        <item
+            android:id="@+id/nav_settings"
+            android:icon="@drawable/ic_twotone_settings_24"
+            android:title="@string/settings" />
+        <item
+            android:id="@+id/nav_about"
+            android:icon="@drawable/ic_twotone_info_24"
+            android:title="@string/about" />
+    </group>
 </menu>

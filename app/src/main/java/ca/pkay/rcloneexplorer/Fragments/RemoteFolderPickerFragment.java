@@ -57,8 +57,6 @@ import ca.pkay.rcloneexplorer.Services.ThumbnailsLoadingService;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.LargeParcel;
 import de.felixnuesse.ui.BreadcrumbView;
-import es.dmoral.toasty.Toasty;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class RemoteFolderPickerFragment extends Fragment implements   FileExplorerRecyclerViewAdapter.OnClickListener,
                                                                             SwipeRefreshLayout.OnRefreshListener,
@@ -213,7 +211,6 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
 
         RecyclerView recyclerView = view.findViewById(R.id.file_explorer_list);
         recyclerViewLinearLayoutManager = new LinearLayoutManager(context);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(recyclerViewLinearLayoutManager);
         View emptyFolderView = view.findViewById(R.id.empty_folder_view);
         View noSearchResultsView = view.findViewById(R.id.no_search_results_view);
@@ -874,7 +871,7 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
                     return;
                 }
                 FLog.w(TAG, "FetchDirectoryContent/onPostExecute: "+getString(R.string.error_getting_dir_content));
-                Toasty.error(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT).show();
                 fileItems = new ArrayList<>();
             }
 

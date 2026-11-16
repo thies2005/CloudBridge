@@ -18,7 +18,6 @@ import androidx.fragment.app.FragmentActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import ca.pkay.rcloneexplorer.R;
-import es.dmoral.toasty.Toasty;
 
 public class LinkDialog extends DialogFragment {
 
@@ -49,7 +48,7 @@ public class LinkDialog extends DialogFragment {
                 return;
             }
             clipboardManager.setPrimaryClip(clipData);
-            Toasty.info(context, getString(R.string.link_copied_to_clipboard), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, getString(R.string.link_copied_to_clipboard), Toast.LENGTH_SHORT).show();
         });
 
         builder.setView(view)

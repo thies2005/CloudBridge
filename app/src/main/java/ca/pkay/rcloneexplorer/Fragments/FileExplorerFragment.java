@@ -94,11 +94,9 @@ import ca.pkay.rcloneexplorer.util.LargeParcel;
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager;
 import ca.pkay.rcloneexplorer.workmanager.SyncManager;
 import de.felixnuesse.ui.BreadcrumbView;
-import es.dmoral.toasty.Toasty;
 import com.google.android.material.snackbar.Snackbar;
 import java9.util.stream.Collectors;
 import java9.util.stream.StreamSupport;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -281,7 +279,6 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
         RecyclerView recyclerView = view.findViewById(R.id.file_explorer_list);
         recyclerViewLinearLayoutManager = new LinearLayoutManager(context);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(recyclerViewLinearLayoutManager);
         View emptyFolderView = view.findViewById(R.id.empty_folder_view);
         View noSearchResultsView = view.findViewById(R.id.no_search_results_view);
@@ -760,7 +757,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         InputMethodManager keyboard = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
 
         if (isSearchMode) {
-            searchBar.setVisibility(View.INVISIBLE);
+            searchBar.setVisibility(View.GONE);
             searchButton.setVisibility(View.VISIBLE);
             searchDirContent("");
             ((EditText)searchBar.findViewById(R.id.search_field)).setText("");
@@ -768,7 +765,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             isSearchMode = false;
         } else {
             searchBar.setVisibility(View.VISIBLE);
-            searchButton.setVisibility(View.INVISIBLE);
+            searchButton.setVisibility(View.GONE);
             recyclerViewAdapter.setSearchMode(true);
             isSearchMode = true;
             EditText search = searchBar.findViewById(R.id.search_field);
@@ -931,7 +928,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         isInMoveMode = false;
         showNavDrawerButtonInToolbar();
         if (moveList.size() < 1) {
-            Toasty.error(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT).show();
             moveList.clear();
             moveStartPath = null;
             return;
@@ -947,7 +944,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         for (FileItem moveItem : moveList) {
             EphemeralTaskManager.Companion.queueMove(this.context, remote, directoryObject.getCurrentPath(), moveItem, path2);
         }
-        Toasty.info(context, getString(R.string.moving_info), Toast.LENGTH_SHORT, true).show();
+        Toast.makeText(context, getString(R.string.moving_info), Toast.LENGTH_SHORT).show();
         moveList.clear();
         moveStartPath = null;
     }
@@ -1106,7 +1103,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         }
         breadcrumbView.clearCrumbs();
         breadcrumbView.setVisibility(View.GONE);
-        searchBar.setVisibility(View.INVISIBLE);
+        searchBar.setVisibility(View.GONE);
         ((FragmentActivity) context).setTitle(originalToolbarTitle);
         showNavDrawerButtonInToolbar();
         prefChangeListener = null;
@@ -1268,6 +1265,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private void showFileMenu(View view, final FileItem fileItem) {
         PopupMenu popupMenu = new PopupMenu(context, view);
         popupMenu.getMenuInflater().inflate(R.menu.file_explorer_menu, popupMenu.getMenu());
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(popupMenu.getMenu(), true);
         popupMenu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case R.id.action_file_properties:
@@ -1468,7 +1466,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                     Snackbar snackbar = Snackbar.make(view, getString(R.string.deleting_info), Snackbar.LENGTH_LONG);
                     snackbar.setAction(R.string.undo, v -> {
                         pendingDeletes.clear();
-                        Toasty.info(context, getString(R.string.cancel), Toast.LENGTH_SHORT, true).show();
+                        Toast.makeText(context, getString(R.string.cancel), Toast.LENGTH_SHORT).show();
                     });
                     snackbar.addCallback(new Snackbar.Callback() {
                         @Override
@@ -1678,7 +1676,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 }
                 // UI-021: keep the currently-displayed content rather than blanking the list on a
                 // transient rclone error; the user can pull-to-refresh to retry.
-                Toasty.error(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -1734,9 +1732,9 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             if (result) {
-                Toasty.success(context, getString(R.string.file_renamed_success), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.file_renamed_success), Toast.LENGTH_SHORT).show();
             } else {
-                Toasty.error(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT).show();
 
             }
             if (!pathWhenTaskStarted.equals(directoryObject.getCurrentPath())) {
@@ -1777,9 +1775,9 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             if (result) {
-                Toasty.success(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT).show();
             } else {
-                Toasty.error(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT).show();
             }
             if (!pathWhenTaskStarted.equals(directoryObject.getCurrentPath())) {
                 directoryObject.removePathFromCache(pathWhenTaskStarted);
@@ -2055,7 +2053,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 }
                 tryStartActivityForResult(activity, intent, STREAMING_INTENT_RESULT);
             } else {
-                Toasty.error(context, getString(R.string.streaming_task_failed), Toast.LENGTH_LONG, true).show();
+                Toast.makeText(context, getString(R.string.streaming_task_failed), Toast.LENGTH_LONG).show();
                 context.stopService(serveIntent);
             }
         }
@@ -2074,9 +2072,9 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             super.onPostExecute(result);
             if (isRunning) {
                 if (result) {
-                    Toasty.success(context, getString(R.string.trash_emptied), Toast.LENGTH_SHORT, true).show();
+                    Toast.makeText(context, getString(R.string.trash_emptied), Toast.LENGTH_SHORT).show();
                 } else {
-                    Toasty.error(context, getString(R.string.error_emptying_trash), Toast.LENGTH_SHORT, true).show();
+                    Toast.makeText(context, getString(R.string.error_emptying_trash), Toast.LENGTH_SHORT).show();
                 }
             }
         }
@@ -2111,7 +2109,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             }
 
             if (link == null) {
-                Toasty.error(context, getString(R.string.error_generating_link), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_generating_link), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -2127,7 +2125,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             clipboardManager.setPrimaryClip(clipData);
-            Toasty.info(context, getString(R.string.link_copied_to_clipboard), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, getString(R.string.link_copied_to_clipboard), Toast.LENGTH_SHORT).show();
         }
 
         @Override

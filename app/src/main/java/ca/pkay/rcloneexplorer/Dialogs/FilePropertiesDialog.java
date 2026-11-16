@@ -24,7 +24,6 @@ import ca.pkay.rcloneexplorer.Items.FileItem;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
-import es.dmoral.toasty.Toasty;
 
 public class FilePropertiesDialog extends DialogFragment {
 
@@ -164,7 +163,7 @@ public class FilePropertiesDialog extends DialogFragment {
                 return;
             }
             clipboardManager.setPrimaryClip(clipData);
-            Toasty.info(context, getString(R.string.hash_copied_confirmation), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, getString(R.string.hash_copied_confirmation), Toast.LENGTH_SHORT).show();
         } else { // calculate md5
             if (asyncTasks[0] != null) {
                 asyncTasks[0].cancel(true);
@@ -183,7 +182,7 @@ public class FilePropertiesDialog extends DialogFragment {
                 return;
             }
             clipboardManager.setPrimaryClip(clipData);
-            Toasty.info(context, getString(R.string.hash_copied_confirmation), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, getString(R.string.hash_copied_confirmation), Toast.LENGTH_SHORT).show();
         } else { // calculate sha1
             if (asyncTasks[1] != null) {
                 asyncTasks[1].cancel(true);

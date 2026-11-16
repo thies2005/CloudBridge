@@ -13,10 +13,11 @@ import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.RemoteConfigListItemAdapter
 import ca.pkay.rcloneexplorer.RemoteConfig.ProviderListFragment.SelectionChangedListener
 import ca.pkay.rcloneexplorer.rclone.Provider
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 
 
-class ProviderListFragment(private val mPreselection: String?) : Fragment() {
+class ProviderListFragment : Fragment() {
+    private var mPreselection: String? = null
     interface ProviderSelectedListener {
         fun onProviderSelected(provider: Provider)
     }
@@ -38,18 +39,22 @@ class ProviderListFragment(private val mPreselection: String?) : Fragment() {
     }
 
     private var mRootView: View? = null
-    private var mFab: FloatingActionButton? = null
+    private var mFab: ExtendedFloatingActionButton? = null
 
 
     companion object {
+        private const val ARG_PRESELECTION = "preselection"
+        private const val STATE_SELECTION = "selection"
+        private const val STATE_FILTER = "filter"
+
         @JvmStatic
-        fun newProviderListConfig(): ProviderListFragment {
-            return ProviderListFragment(null)
-        }
+        fun newProviderListConfig(): ProviderListFragment = newProviderListConfig(null)
 
         @JvmStatic
         fun newProviderListConfig(preselection: String?): ProviderListFragment {
-            return ProviderListFragment(preselection)
+            return ProviderListFragment().apply {
+                arguments = Bundle().apply { putString(ARG_PRESELECTION, preselection) }
+            }
         }
     }
 
@@ -58,12 +63,23 @@ class ProviderListFragment(private val mPreselection: String?) : Fragment() {
         super.onCreate(savedInstanceState)
         mRclone = Rclone(this.context)
         mProviders = mRclone?.providers ?: listOf()
+        mPreselection = savedInstanceState?.getString(STATE_SELECTION)
+            ?: arguments?.getString(ARG_PRESELECTION)
+        mProviderFilter = savedInstanceState?.getString(STATE_FILTER).orEmpty()
+        mSelectedProvider = mProviders.find { it.name.equals(mPreselection, ignoreCase = true) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_SELECTION, mSelectedProvider?.name)
+        outState.putString(STATE_FILTER, mProviderFilter)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = inflater.inflate(R.layout.fragment_config_list, container, false)
         mRootView = view
         mFab = view.findViewById(R.id.next)
+        if (mSelectedProvider != null) mFab?.visibility = View.VISIBLE
         setClickListeners(view)
         return view
     }
@@ -107,7 +123,7 @@ class ProviderListFragment(private val mPreselection: String?) : Fragment() {
             ArrayList(filteredProvider.sortedWith(compareBy { it.name })),
             requireContext(),
             mSelectionChangeListener,
-            mPreselection
+            mSelectedProvider?.name
         )
 
     }

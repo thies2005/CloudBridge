@@ -11,7 +11,6 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 
 import ca.pkay.rcloneexplorer.Settings.FileAccessPreferencesFragment;
 import ca.pkay.rcloneexplorer.Settings.FileAccessSettingsFragment;
@@ -39,7 +38,6 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
         setContentView(R.layout.activity_settings);
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -68,6 +66,14 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
         Intent returnData = new Intent();
         returnData.putExtra(THEME_CHANGED, themeHasChanged);
         setResult(RESULT_OK, returnData);
+    }
+
+    public void onThemeChanged() {
+        themeHasChanged = true;
+        Intent returnData = new Intent();
+        returnData.putExtra(THEME_CHANGED, true);
+        setResult(RESULT_OK, returnData);
+        recreate();
     }
 
     @Override

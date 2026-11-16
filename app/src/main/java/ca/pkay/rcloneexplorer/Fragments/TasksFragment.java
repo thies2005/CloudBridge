@@ -18,8 +18,6 @@ import ca.pkay.rcloneexplorer.Database.DatabaseHandler;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.TasksRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.Activities.TaskActivity;
-import es.dmoral.toasty.Toasty;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class TasksFragment extends Fragment {
 
@@ -72,7 +70,7 @@ public class TasksFragment extends Fragment {
         Context context = getContext();
 
         if(activity==null){
-            Toasty.error(context, context.getResources().getString(R.string.importer_unknown_error), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, context.getResources().getString(R.string.importer_unknown_error), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -90,7 +88,6 @@ public class TasksFragment extends Fragment {
 
         RecyclerView recyclerView =  v.findViewById(R.id.task_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(c));
-        recyclerView.setItemAnimator(new LandingAnimator());
 
         TasksRecyclerViewAdapter recyclerViewAdapter = new TasksRecyclerViewAdapter(dbHandler.getAllTasks(), c);
         recyclerView.setAdapter(recyclerViewAdapter);

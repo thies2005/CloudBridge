@@ -14,7 +14,6 @@ import ca.pkay.rcloneexplorer.notifications.AppErrorNotificationManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import es.dmoral.toasty.Toasty
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -271,14 +270,12 @@ class InternxtReauth(
         progressDialog?.dismiss()
         if (success) {
             AppErrorNotificationManager.clearSessionExpiredNotification(context, remoteName)
-            Toasty.success(context, context.getString(R.string.internxt_reauth_success), Toast.LENGTH_SHORT, true).show()
+            Toast.makeText(context, context.getString(R.string.internxt_reauth_success), Toast.LENGTH_SHORT).show()
         } else if (errorMessage != context.getString(R.string.cancelled)) {
-            Toasty.error(
+            Toast.makeText(
                 context,
                 errorMessage ?: context.getString(R.string.error_creating_remote),
-                Toast.LENGTH_SHORT,
-                true
-            ).show()
+                Toast.LENGTH_SHORT).show()
         }
     }
 }

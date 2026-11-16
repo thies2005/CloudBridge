@@ -30,7 +30,6 @@ import ca.pkay.rcloneexplorer.RemoteConfig.OauthHelper;
 import ca.pkay.rcloneexplorer.RemoteConfig.OauthHelper.InitOauthStep;
 import ca.pkay.rcloneexplorer.RemoteConfig.OauthHelper.OauthFinishStep;
 import ca.pkay.rcloneexplorer.util.FLog;
-import es.dmoral.toasty.Toasty;
 
 public class RemotePropertiesDialog extends DialogFragment {
 
@@ -241,7 +240,7 @@ public class RemotePropertiesDialog extends DialogFragment {
                     process.destroy();
                     // Appcenter #965158510
                     if (e instanceof ActivityNotFoundException) {
-                        Toasty.error(appContext, appContext.getString(R.string.no_app_found_for_this_link), Toast.LENGTH_LONG).show();
+                        Toast.makeText(appContext, appContext.getString(R.string.no_app_found_for_this_link), Toast.LENGTH_LONG).show();
                     }
                 };
 

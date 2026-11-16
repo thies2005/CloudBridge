@@ -16,7 +16,6 @@ import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -37,7 +36,6 @@ import ca.pkay.rcloneexplorer.RecyclerViewAdapters.FilePickerAdapter;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
 import de.felixnuesse.ui.BreadcrumbView;
-import es.dmoral.toasty.Toasty;
 
 public class FilePicker extends AppCompatActivity implements FilePickerAdapter.OnClickListener,
         InputDialog.OnPositive,
@@ -65,7 +63,6 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
         setContentView(R.layout.activity_file_picker);
         Toolbar toolbar = findViewById(R.id.toolbar);
@@ -175,7 +172,7 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
         } else if (filePickerAdapter.isDataSelected()) {
             setResultData(filePickerAdapter.getSelectedFiles());
         } else {
-            Toasty.info(this, getString(R.string.nothing_selected), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(this, getString(R.string.nothing_selected), Toast.LENGTH_SHORT).show();
             finish();
         }
     }

@@ -383,12 +383,6 @@ public class RcloneRcd {
                                 .header("Authorization", credential).build();
                     });
 
-            /*if (DEBUG) {
-                okhttp3.logging.HttpLoggingInterceptor logging = new okhttp3.logging.HttpLoggingInterceptor();
-                logging.level(okhttp3.logging.HttpLoggingInterceptor.Level.HEADERS);
-                builder.addInterceptor(logging);
-            }*/
-
             okHttpClient = builder.build();
         }
         return okHttpClient;

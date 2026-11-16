@@ -16,7 +16,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.Switch;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -30,7 +30,6 @@ import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RemoteConfig.RemoteConfigHelper;
 import ca.pkay.rcloneexplorer.Services.RcdService;
 import ca.pkay.rcloneexplorer.VirtualContentProvider;
-import es.dmoral.toasty.Toasty;
 import io.github.x0b.safdav.file.SafConstants;
 
 import java.util.List;
@@ -46,20 +45,20 @@ public class FileAccessSettingsFragment extends Fragment {
     private Context context;
     private ViewGroup fileAccessAll;
     private View safEnabledView;
-    private Switch safEnabledSwitch;
+    private MaterialSwitch safEnabledSwitch;
     private View vcpEnabledContainer;
-    private Switch vcpEnabledSwitch;
+    private MaterialSwitch vcpEnabledSwitch;
     private View vcpDeclareLocalContainer;
-    private Switch vcpDeclareLocalSwitch;
+    private MaterialSwitch vcpDeclareLocalSwitch;
     private PermissionListAdapter permissionList;
     private Button addPermissionBtn;
     private RecyclerView listView;
     private View addButtonContainer;
     private View refreshLaContainer;
-    private Switch refreshLaSwitch;
+    private MaterialSwitch refreshLaSwitch;
     private View openAllFilesPerm;
     private View vcpGrantAllContainer;
-    private Switch vcpGrantAllSwitch;
+    private MaterialSwitch vcpGrantAllSwitch;
     private Rclone rclone;
 
     public static FileAccessSettingsFragment newInstance() {
@@ -229,9 +228,9 @@ public class FileAccessSettingsFragment extends Fragment {
                 break;
             case onAllFilesSettingOpened:
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
-                    Toasty.success(context, getString(R.string.all_storage_accessible), Toast.LENGTH_LONG, true).show();
+                    Toast.makeText(context, getString(R.string.all_storage_accessible), Toast.LENGTH_LONG).show();
                 } else {
-                    Toasty.info(context, getString(R.string.manage_files_not_granted), Toast.LENGTH_LONG, true).show();
+                    Toast.makeText(context, getString(R.string.manage_files_not_granted), Toast.LENGTH_LONG).show();
                 }
                 break;
         }
@@ -247,7 +246,7 @@ public class FileAccessSettingsFragment extends Fragment {
         if (Activity.RESULT_OK == resultCode) {
             Uri uri = data.getData();
             if (null == uri || uri.getAuthority().equals(BuildConfig.VCP_AUTHORITY)) {
-                Toasty.error(context, getString(R.string.saf_uri_permission_error), Toast.LENGTH_LONG, true).show();
+                Toast.makeText(context, getString(R.string.saf_uri_permission_error), Toast.LENGTH_LONG).show();
                 return;
             }
             int takeFlags = data.getFlags();
@@ -255,23 +254,23 @@ public class FileAccessSettingsFragment extends Fragment {
             for (UriPermission uriPermission : contentResolver.getPersistedUriPermissions()) {
                 if (uri.toString().startsWith(uriPermission.getUri().toString())) {
                     // granted uri is less specific than already granted ones, reject
-                    Toasty.error(context, getString(R.string.saf_uri_permission_already_added), Toast.LENGTH_LONG, true).show();
+                    Toast.makeText(context, getString(R.string.saf_uri_permission_already_added), Toast.LENGTH_LONG).show();
                     return;
                 }
             }
             if(!ANDROID_AUTHORITY.equals(uri.getAuthority())){
                 String msg = "Third party providers are not tested well, proceed with caution.";
-                Toasty.warning(context, msg, Toast.LENGTH_LONG, true).show();
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show();
             }
             contentResolver.takePersistableUriPermission(
                     uri,
                     (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION) & takeFlags
             );
             permissionList.updatePermissions(context.getContentResolver().getPersistedUriPermissions());
-            Toasty.normal(context, getString(R.string.saf_uri_permission_added), Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, getString(R.string.saf_uri_permission_added), Toast.LENGTH_SHORT).show();
 
         } else if (Activity.RESULT_CANCELED == resultCode) {
-            Toasty.normal(context, getString(R.string.saf_uri_permission_cancelled), Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, getString(R.string.saf_uri_permission_cancelled), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -313,9 +312,9 @@ public class FileAccessSettingsFragment extends Fragment {
             if (!ANDROID_AUTHORITY.equals(authority)) {
                 permissionLabel = authority + " (" + permissionLabel + ")";
             } else if ("primary:".equals(permissionLabel)) {
-                permissionLabel = getString(R.string.pref_saf_permission_label_primary, permissionLabel);
+                permissionLabel = getString(R.string.pixel_internal_storage);
             } else {
-                permissionLabel = getString(R.string.pref_saf_permission_label_external, permissionLabel);
+                permissionLabel = getString(R.string.pixel_external_storage, permissionLabel);
             }
             holder.text.setText(permissionLabel);
         }

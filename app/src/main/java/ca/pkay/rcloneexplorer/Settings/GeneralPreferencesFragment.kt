@@ -22,13 +22,16 @@ import ca.pkay.rcloneexplorer.workmanager.SyncManager
 import de.schuelken.cloudbridge.extensions.TAG
 import de.schuelken.cloudbridge.settings.language.LanguagePicker
 import de.schuelken.cloudbridge.settings.preferences.FilesizePreference
-import es.dmoral.toasty.Toasty
 
 class GeneralPreferencesFragment : PreferenceFragmentCompat() {
 
 
     private lateinit var sharedPreferences: SharedPreferences
 
+
+    override fun onDisplayPreferenceDialog(preference: Preference) {
+        if (!showMaterialListPreference(preference)) super.onDisplayPreferenceDialog(preference)
+    }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.settings_general_preferences, rootKey)
@@ -75,12 +78,10 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             .setPositiveButton(R.string.cancel_all_transfers_action) { _, _ ->
                 EphemeralTaskManager(requireContext()).cancel()
                 SyncManager(requireContext()).cancel()
-                Toasty.info(
+                Toast.makeText(
                     requireContext(),
                     getString(R.string.cancel_all_transfers_done),
-                    Toast.LENGTH_SHORT,
-                    true
-                ).show()
+                    Toast.LENGTH_SHORT).show()
             }
             .show()
     }
@@ -166,12 +167,10 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             checkedItems
         ) { _: DialogInterface?, which: Int, isChecked: Boolean ->
             if (userSelected.size >= 4 && isChecked) {
-                Toasty.info(
+                Toast.makeText(
                     requireContext(),
                     getString(R.string.app_shortcuts_max_toast),
-                    Toast.LENGTH_SHORT,
-                    true
-                ).show()
+                    Toast.LENGTH_SHORT).show()
                 //((AlertDialog)dialog).getListView().setItemChecked(which, false); This doesn't work
             }
             if (isChecked) {

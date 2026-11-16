@@ -14,7 +14,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.LogRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.util.SyncLog;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class LogFragment extends Fragment {
 
@@ -56,7 +55,6 @@ public class LogFragment extends Fragment {
 
         RecyclerView recyclerView =  v.findViewById(R.id.log_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(c));
-        recyclerView.setItemAnimator(new LandingAnimator());
 
         LogRecyclerViewAdapter recyclerViewAdapter = new LogRecyclerViewAdapter(SyncLog.getLog(c));
         recyclerView.setAdapter(recyclerViewAdapter);
