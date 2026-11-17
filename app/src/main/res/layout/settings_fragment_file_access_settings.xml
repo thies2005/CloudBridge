@@ -74,14 +74,9 @@
             android:id="@+id/permission_add_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="@drawable/pixel_settings_row"
             android:layout_marginTop="4dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="@dimen/settings_padding_topbottom"
-            android:paddingBottom="@dimen/settings_padding_topbottom">
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
             <Button
                 android:id="@+id/permission_add_button"

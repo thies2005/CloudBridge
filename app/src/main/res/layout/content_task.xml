@@ -136,15 +136,6 @@
                         android:minHeight="48dp"
                         android:text="@string/description_sync_direction_sync_toremote" />
 
-                    <TextView
-                        android:id="@+id/label_transfers"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_margin="8dp"
-                        android:labelFor="@id/task_transfers_spinner"
-                        android:text="@string/task_edit_label_transfers"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
-
                     <com.google.android.material.textfield.TextInputLayout
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                         android:layout_width="match_parent"
@@ -502,7 +493,6 @@
         android:id="@+id/editor_actions"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
         android:paddingStart="16dp"
         android:paddingTop="8dp"
         android:paddingEnd="16dp"

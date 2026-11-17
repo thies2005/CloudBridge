@@ -16,15 +16,14 @@
         android:orientation="vertical"
         android:paddingBottom="16dp">
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.CloudBridge.AboutCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/activity_horizontal_margin"
             android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:theme="@style/SecondaryCardStyle"
-            app:cardCornerRadius="@dimen/cardCornerRadius"
-            app:contentPadding="@dimen/cardPadding">
+            android:layout_marginEnd="@dimen/activity_horizontal_margin"
+            android:theme="@style/SecondaryCardStyle">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -33,7 +32,7 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -67,7 +66,7 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -99,17 +98,16 @@
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.CloudBridge.AboutCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:theme="@style/SecondaryCardStyle"
-            app:cardCornerRadius="@dimen/cardCornerRadius"
-            app:contentPadding="@dimen/cardPadding">
+            android:layout_marginStart="@dimen/activity_horizontal_margin"
+            android:layout_marginEnd="@dimen/activity_horizontal_margin"
+            android:theme="@style/SecondaryCardStyle">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -118,7 +116,7 @@
                 <LinearLayout
                     android:id="@+id/changelog"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -143,7 +141,7 @@
                 <LinearLayout
                         android:id="@+id/contributors"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"                        android:minHeight="48dp"
                         android:layout_gravity="center_vertical"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
@@ -168,7 +166,7 @@
                 <LinearLayout
                     android:id="@+id/open_source_libraries"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -193,7 +191,7 @@
                 <LinearLayout
                     android:id="@+id/star_on_github"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:orientation="horizontal"
                     android:layout_gravity="center_vertical"
                     android:gravity="center_vertical"
@@ -218,7 +216,7 @@
                 <LinearLayout
                     android:id="@+id/report_bug"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
@@ -240,17 +238,16 @@
                         android:textStyle="bold"/>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.CloudBridge.AboutCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:theme="@style/SecondaryCardStyle"
-            app:cardCornerRadius="@dimen/cardCornerRadius"
-            app:contentPadding="@dimen/cardPadding">
+            android:layout_marginStart="@dimen/activity_horizontal_margin"
+            android:layout_marginEnd="@dimen/activity_horizontal_margin"
+            android:theme="@style/SecondaryCardStyle">
 
             <LinearLayout
                     android:layout_width="match_parent"
@@ -264,7 +261,7 @@
 
                 <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:layout_gravity="center_vertical"
                         android:gravity="center_vertical" >
@@ -286,7 +283,7 @@
                 <LinearLayout
                         android:id="@+id/maintainer_github_link"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:layout_gravity="center_vertical"
                         android:gravity="center_vertical"
@@ -307,17 +304,16 @@
                             android:paddingEnd="0dp"/>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.CloudBridge.AboutCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:theme="@style/SecondaryCardStyle"
-            app:cardCornerRadius="@dimen/cardCornerRadius"
-            app:contentPadding="@dimen/cardPadding">
+            android:layout_marginStart="@dimen/activity_horizontal_margin"
+            android:layout_marginEnd="@dimen/activity_horizontal_margin"
+            android:theme="@style/SecondaryCardStyle">
 
             <LinearLayout
                     android:layout_width="match_parent"
@@ -331,7 +327,7 @@
 
                 <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:layout_gravity="center_vertical"
                         android:gravity="center_vertical" >
@@ -353,7 +349,7 @@
                 <LinearLayout
                         android:id="@+id/previous_maintainer_github_link"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"                        android:minHeight="48dp"
                         android:orientation="horizontal"
                         android:layout_gravity="center_vertical"
                         android:gravity="center_vertical"
@@ -374,17 +370,16 @@
                             android:paddingEnd="0dp"/>
                 </LinearLayout>
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.CloudBridge.AboutCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/activity_horizontal_margin"
             android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:theme="@style/SecondaryCardStyle"
-            app:cardCornerRadius="@dimen/cardCornerRadius"
-            app:contentPadding="@dimen/cardPadding">
+            android:layout_marginEnd="@dimen/activity_horizontal_margin"
+            android:theme="@style/SecondaryCardStyle">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -399,7 +394,7 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
@@ -422,7 +417,7 @@
                 <LinearLayout
                     android:id="@+id/old_maintainer_github_link"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:clickable="true"
                     android:focusable="true"
@@ -444,17 +439,16 @@
                         android:textStyle="bold" />
                 </LinearLayout>
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.CloudBridge.AboutCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/activity_horizontal_margin"
             android:layout_marginTop="16dp"
-            android:layout_marginEnd="8dp"
-            android:theme="@style/SecondaryCardStyle"
-            app:cardCornerRadius="@dimen/cardCornerRadius"
-            app:contentPadding="@dimen/cardPadding">
+            android:layout_marginEnd="@dimen/activity_horizontal_margin"
+            android:theme="@style/SecondaryCardStyle">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -469,7 +463,7 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
@@ -492,7 +486,7 @@
                 <LinearLayout
                     android:id="@+id/author_github_link"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"                    android:minHeight="48dp"
                     android:layout_gravity="center_vertical"
                     android:clickable="true"
                     android:focusable="true"
@@ -514,6 +508,6 @@
                         android:textStyle="bold" />
                 </LinearLayout>
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </ScrollView>

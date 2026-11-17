@@ -82,6 +82,12 @@
         <item name="android:tint">?attr/colorOnSurface</item>
     </style>
 
+    <style name="Widget.CloudBridge.AboutCard" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainerLow</item>
+        <item name="cardCornerRadius">24dp</item>
+        <item name="contentPadding">@dimen/cardPadding</item>
+    </style>
+
     <style name="RoundedCornersDialog" parent="@style/MaterialAlertDialog.Material3">
         <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.Dialog.Rounded</item>
     </style>
@@ -96,7 +102,7 @@
     <!-- Splash screen entry theme (androidx.core:core-splashscreen). MainActivity calls
          SplashScreen.installSplashScreen(this); postSplashScreenTheme restores the real theme. -->
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">?attr/colorSurface</item>
+        <item name="windowSplashScreenBackground">@color/splash_screen_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>

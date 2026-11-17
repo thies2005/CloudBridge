@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="splash_screen_background">@color/md_theme_dark_surface</color>
+
     <!-- Dark-mode overrides for the "convenience" color aliases declared in values/colors.xml.
          Pointing them at the md_theme_dark_* tokens so they no longer resolve to light colors. -->
     <color name="white">@android:color/white</color>
