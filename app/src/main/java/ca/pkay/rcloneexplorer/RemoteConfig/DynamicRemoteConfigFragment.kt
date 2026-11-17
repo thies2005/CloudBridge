@@ -114,7 +114,6 @@ class DynamicRemoteConfigFragment : Fragment() {
                     requireActivity().finish()
                     return
                 }
-                config.remove(RCLONE_CONFIG_NAME_KEY)
                 config.remove("type")
                 if (mProviderTitle.equals("protondrive", ignoreCase = true)) {
                     config.remove("client_uid")
