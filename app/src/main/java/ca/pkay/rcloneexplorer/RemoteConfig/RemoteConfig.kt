@@ -39,8 +39,8 @@ class RemoteConfig : AppCompatActivity(), ProviderSelectedListener {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         ActivityHelper.applyTheme(this)
+        super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_remote_config)
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)

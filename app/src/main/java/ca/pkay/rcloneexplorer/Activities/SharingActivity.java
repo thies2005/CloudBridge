@@ -66,8 +66,8 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sharing);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);

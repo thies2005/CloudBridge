@@ -590,10 +590,13 @@ public class Rclone {
     @Nullable
     public Process configCreate(List<String> options) {
         // https://rclone.org/commands/rclone_config_create/
-        // See the NB-comment why we need to pass --obscure.
-        // Otherwise long passwords fail.
-        options.add("--obscure");
-        return config("create" , options);
+        // Place --obscure BEFORE "--" so values starting with "-" are never parsed as flags.
+        // Keep configCreate interactive (without --non-interactive) for OauthHelper.createOptionsWithOauth.
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--obscure");
+        args.add("--");
+        args.addAll(options);
+        return config("create", args);
     }
 
     /**
@@ -603,15 +606,23 @@ public class Rclone {
      * step will handle the interactive auth.
      */
     public Process configCreateNoInteract(List<String> options) {
-        options.add("--obscure");
-        options.add("--non-interactive");
-        options.add("--no-output");
-        return config("create", options);
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--obscure");
+        args.add("--non-interactive");
+        args.add("--no-output");
+        args.add("--");
+        args.addAll(options);
+        return config("create", args);
     }
 
     @Nullable
     public Process configUpdate(List<String> options) {
-        return configCreate(options);
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--obscure");
+        args.add("--non-interactive");
+        args.add("--");
+        args.addAll(options);
+        return config("update", args);
     }
     
     public Process config(String task, List<String> options) {

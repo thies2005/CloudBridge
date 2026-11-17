@@ -123,8 +123,8 @@ class TaskActivity : AppCompatActivity(), FolderSelectorCallback{
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         ActivityHelper.applyTheme(this)
+        super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_task)
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)

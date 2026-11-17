@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Parcelable
 import android.util.AttributeSet
 import android.widget.ArrayAdapter
+import ca.pkay.rcloneexplorer.R
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 
 /** A non-editable exposed menu that retains the selected adapter position. */
@@ -19,6 +20,7 @@ class ExposedChoice @JvmOverloads constructor(
 
     init {
         keyListener = null
+        setDropDownBackgroundResource(R.drawable.bg_cloudbridge_popup)
         setOnItemClickListener { _, _, position, _ -> selectPosition(position) }
     }
 

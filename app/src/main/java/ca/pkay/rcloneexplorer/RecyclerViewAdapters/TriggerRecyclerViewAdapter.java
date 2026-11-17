@@ -226,6 +226,8 @@ public class TriggerRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerVie
         private void setTextViewValue(TextView view, boolean disabled){
             if(!disabled){
                 view.setPaintFlags(view.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+            } else {
+                view.setPaintFlags(view.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
             }
         }
 

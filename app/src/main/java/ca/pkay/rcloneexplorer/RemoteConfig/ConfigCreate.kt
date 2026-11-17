@@ -44,6 +44,7 @@ class ConfigCreate internal constructor(
         super.onPreExecute()
         mAuthView.visibility = View.VISIBLE
         mFormView.visibility = View.GONE
+        mFormView.rootView?.findViewById<View>(R.id.editor_actions)?.visibility = View.GONE
     }
 
     override fun doInBackground(vararg params: Void?): Boolean {
@@ -366,6 +367,8 @@ class ConfigCreate internal constructor(
 
     override fun onCancelled() {
         super.onCancelled()
+        mFormView.visibility = View.VISIBLE
+        mFormView.rootView?.findViewById<View>(R.id.editor_actions)?.visibility = View.VISIBLE
         process?.destroy()
     }
 

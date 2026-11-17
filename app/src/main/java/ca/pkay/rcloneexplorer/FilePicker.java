@@ -62,8 +62,8 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_file_picker);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);

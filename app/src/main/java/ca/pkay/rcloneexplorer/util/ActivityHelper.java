@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
@@ -114,8 +115,6 @@ public class ActivityHelper {
         if (getThemeMode(activity).equals(String.valueOf(AMOLED))) {
             activity.getTheme().applyStyle(R.style.ThemeOverlay_CloudBridge_Amoled, true);
             activity.getWindow().setBackgroundDrawableResource(android.R.color.black);
-            activity.getWindow().setStatusBarColor(Color.BLACK);
-            activity.getWindow().setNavigationBarColor(Color.BLACK);
         }
     }
 
@@ -125,6 +124,9 @@ public class ActivityHelper {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.setNavigationBarContrastEnforced(false);
+        }
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
         boolean lightBars = !isDarkTheme(activity);
         controller.setAppearanceLightStatusBars(lightBars);
@@ -138,8 +140,21 @@ public class ActivityHelper {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                     | WindowInsetsCompat.Type.displayCutout());
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-            view.setPadding(left + bars.left, top + bars.top, right + bars.right,
-                    bottom + Math.max(bars.bottom, ime.bottom));
+            int bottomInset = Math.max(bars.bottom, ime.bottom);
+            View drawerLayout = view.findViewById(R.id.drawer_layout);
+            View navView = view.findViewById(R.id.nav_view);
+            if (drawerLayout instanceof android.view.ViewGroup && navView != null) {
+                view.setPadding(0, 0, 0, 0);
+                android.view.ViewGroup dg = (android.view.ViewGroup) drawerLayout;
+                if (dg.getChildCount() > 0) {
+                    View mainChild = dg.getChildAt(0);
+                    mainChild.setPadding(bars.left, bars.top, bars.right, bottomInset);
+                }
+                navView.setPadding(bars.left, bars.top, 0, bars.bottom);
+            } else {
+                view.setPadding(left + bars.left, top + bars.top, right + bars.right,
+                        bottom + bottomInset);
+            }
             return WindowInsetsCompat.CONSUMED;
         });
         ViewCompat.requestApplyInsets(content);

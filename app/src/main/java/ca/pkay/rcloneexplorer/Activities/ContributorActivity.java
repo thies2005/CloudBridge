@@ -14,8 +14,8 @@ public class ContributorActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         try {
             setContentView(R.layout.activity_contributors);
         } catch (Exception e) {

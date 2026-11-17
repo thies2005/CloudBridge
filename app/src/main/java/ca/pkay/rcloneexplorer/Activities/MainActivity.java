@@ -114,9 +114,8 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen.installSplashScreen(this);
-        super.onCreate(savedInstanceState);
-
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
 
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         boolean allPermissionsGranted = (new PermissionManager(this)).hasAllRequiredPermissions();
@@ -141,7 +140,6 @@ public class MainActivity extends AppCompatActivity
         }
 
         drawer = findViewById(R.id.drawer_layout);
-        drawer.setStatusBarBackgroundColor(MaterialColors.getColor(drawer, R.attr.colorSurface));
         navigationView = findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
 

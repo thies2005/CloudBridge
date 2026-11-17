@@ -57,8 +57,8 @@ class TriggerActivity : AppCompatActivity() {
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         ActivityHelper.applyTheme(this)
+        super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_trigger)
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -210,7 +210,7 @@ class TriggerActivity : AppCompatActivity() {
         for (i in this.mTaskList.indices) {
             items[i] = this.mTaskList[i].title
         }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
         mTargetDropdown.setChoices(adapter)
         mTargetDropdown.onChoiceChanged = { pos ->
             if (pos in mTaskList.indices) {

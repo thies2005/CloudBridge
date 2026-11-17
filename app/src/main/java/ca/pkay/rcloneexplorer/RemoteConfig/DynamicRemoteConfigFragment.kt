@@ -26,6 +26,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.cardview.widget.CardView
+import androidx.core.view.ViewCompat
 import androidx.core.view.setPadding
 import androidx.core.view.size
 import androidx.core.widget.doAfterTextChanged
@@ -112,6 +113,15 @@ class DynamicRemoteConfigFragment : Fragment() {
                     Toast.makeText(mContext, R.string.remote_not_found, Toast.LENGTH_SHORT).show()
                     requireActivity().finish()
                     return
+                }
+                config.remove(RCLONE_CONFIG_NAME_KEY)
+                config.remove("type")
+                if (mProviderTitle.equals("protondrive", ignoreCase = true)) {
+                    config.remove("client_uid")
+                    config.remove("client_access_token")
+                    config.remove("client_refresh_token")
+                    config.remove("client_salted_key_pass")
+                    config.remove("2fa")
                 }
                 formState.options.putAll(config)
             }
@@ -271,19 +281,35 @@ class DynamicRemoteConfigFragment : Fragment() {
 
             when (it.type) {
                 "string" -> {
-                    if(it.isPassword) {
-                        val input = getAttachedEditText(it.name, layout)
-                        input.inputType =
-                            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                        //input.setText(mOptionMap[it.name])
+                    if (it.isPassword) {
+                        if (mIsEditTask) {
+                            // Do not re-submit already-obscured ciphertext from rclone config dump
+                            mOptionMap.remove(it.name)
+                        }
+                        val input = getAttachedEditText(
+                            it.name,
+                            layout,
+                            isPassword = true,
+                            isAdvanced = it.advanced
+                        )
+                        if (mIsEditTask) {
+                            (input.parent?.parent as? TextInputLayout)?.helperText =
+                                "Leave blank to keep existing password"
+                        }
                         updateValue(input, it)
                         setTextInputListener(input, it.name)
 
-                    } else if(it.examples.size > 0 && it.type != "CommaSepList") {
-                        createSpinnerFromExample(it, it.name ,layout)
+                    } else if (it.examples.size > 0 && it.type != "CommaSepList") {
+                        createSpinnerFromExample(it, it.name, layout)
                     } else {
                         val input = getAttachedEditText(it.name, layout)
-                        //input.setText(mOptionMap[it.name])
+                        if (it.name.equals("username", ignoreCase = true) ||
+                            it.name.equals("user", ignoreCase = true)
+                        ) {
+                            input.inputType = InputType.TYPE_CLASS_TEXT or
+                                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS or
+                                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                        }
                         updateValue(input, it)
                         setTextInputListener(input, it.name)
                     }
@@ -333,18 +359,19 @@ class DynamicRemoteConfigFragment : Fragment() {
     
     private fun updateValue(view: View, option: ProviderOption) {
         // check if this value was never set
-        if(!mOptionMap.containsKey(option.name)) {
+        if (!mOptionMap.containsKey(option.name)) {
+            val defaultVal = option.defaultStr.ifEmpty { option.default }
             // then set it to true if it is enabled by default
             when (view::class.java) {
                 AutoCompleteTextView::class.java -> {
                     // false keeps the full example list available when a value is preset.
-                    (view as AutoCompleteTextView).setText(option.default, false)
+                    (view as AutoCompleteTextView).setText(defaultVal, false)
                 }
                 TextInputEditText::class.java -> {
-                    (view as TextInputEditText).setText(option.default)
+                    (view as TextInputEditText).setText(if (mIsEditTask && option.isPassword) "" else defaultVal)
                 }
                 MaterialCheckBox::class.java -> {
-                    if(option.default.lowercase(Locale.ROOT).toBoolean()){
+                    if (defaultVal.lowercase(Locale.ROOT).toBoolean()) {
                         (view as CheckBox).isChecked = true
                     }
                 }
@@ -374,7 +401,7 @@ class DynamicRemoteConfigFragment : Fragment() {
     private fun createSpinnerFromExample(option: ProviderOption, hint: String, layout: LinearLayout): View {
 
         val padding = resources.getDimensionPixelOffset(R.dimen.cardPadding)
-        val textinput = TextInputLayout(ContextThemeWrapper(activity, R.style.Widget_Material3_TextInputLayout_OutlinedBox_ExposedDropdownMenu))
+        val textinput = TextInputLayout(mContext, null, com.google.android.material.R.attr.textInputOutlinedExposedDropdownMenuStyle)
         textinput.hint = hint
         textinput.boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
         textinput.setPadding(0, padding, 0, 0)
@@ -386,7 +413,7 @@ class DynamicRemoteConfigFragment : Fragment() {
         option.examples.forEach { example ->
             items.add(example.Value)
         }
-        val adapter = ArrayAdapter(this.mContext, android.R.layout.simple_spinner_item, items)
+        val adapter = ArrayAdapter(this.mContext, android.R.layout.simple_list_item_1, items)
 
         input.setAdapter(adapter)
         if (option.exclusive) input.keyListener = null
@@ -436,12 +463,12 @@ class DynamicRemoteConfigFragment : Fragment() {
 
 
         // Suffix Container
-        val suffixContainer = TextInputLayout(ContextThemeWrapper(activity, R.style.Widget_Material3_TextInputLayout_OutlinedBox_ExposedDropdownMenu))
+        val suffixContainer = TextInputLayout(mContext, null, com.google.android.material.R.attr.textInputOutlinedExposedDropdownMenuStyle)
         suffixContainer.boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
         suffixContainer.setPadding(padding, padding, 0, 0)
         suffixContainer.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, 1.3f)
         val items = listOf("P", "T", "G", "M", "K", "B")
-        val adapter = ArrayAdapter(this.mContext, android.R.layout.simple_spinner_item, items)
+        val adapter = ArrayAdapter(this.mContext, android.R.layout.simple_list_item_1, items)
 
         val suffixSpinner = AutoCompleteTextView(suffixContainer.context)
         suffixSpinner.setPadding(padding)
@@ -471,17 +498,31 @@ class DynamicRemoteConfigFragment : Fragment() {
         return leftright
     }
 
-    private fun getAttachedEditText(hint: String, layout: LinearLayout): EditText {
+    private fun getAttachedEditText(
+        hint: String,
+        layout: LinearLayout,
+        isPassword: Boolean = false,
+        isAdvanced: Boolean = false
+    ): EditText {
         val padding = resources.getDimensionPixelOffset(R.dimen.cardPadding)
 
         val textinput = TextInputLayout(mContext)
         textinput.hint = hint
         textinput.boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
         textinput.setPadding(0, padding, 0, 0)
+        if (isPassword) {
+            textinput.endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
+        }
 
         val editText = TextInputEditText(textinput.context)
         editText.setPadding(padding)
         editText.layoutParams = LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        if (isPassword) {
+            editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            if (isAdvanced) {
+                ViewCompat.setImportantForAutofill(editText, View.IMPORTANT_FOR_AUTOFILL_NO)
+            }
+        }
 
         textinput.addView(editText)
         layout.addView(textinput)
@@ -559,18 +600,31 @@ class DynamicRemoteConfigFragment : Fragment() {
             return
         }
         options.add(name)
-        options.add(mProviderTitle)
+        if (!mIsEditTask) {
+            options.add(mProviderTitle)
+        }
 
-
-        if(mIsEditTask) {
-            if(mUseOauth) {
+        if (mIsEditTask) {
+            if (mUseOauth) {
                 options.add("config_refresh_token")
                 options.add("false")
             }
         }
         for ((key, value) in mOptionMap) {
-            options.add(key)
-            options.add(value)
+            if (key == "type" || key == RCLONE_CONFIG_NAME_KEY) continue
+            val cleanedValue = if (
+                key.equals("username", ignoreCase = true) ||
+                key.equals("user", ignoreCase = true) ||
+                key.equals("2fa", ignoreCase = true)
+            ) {
+                value.trim()
+            } else {
+                value
+            }
+            if (cleanedValue.isNotEmpty()) {
+                options.add(key)
+                options.add(cleanedValue)
+            }
         }
 
         if(mIsEditTask) {

@@ -41,7 +41,7 @@ public class RuntimeConfiguration {
         }
 
         //ThemeHelper.applyDarkMode(host.getApplicationContext());
-        return new ContextThemeWrapper(context, R.style.AppTheme);
+        return context;
     }
 
     @NonNull
