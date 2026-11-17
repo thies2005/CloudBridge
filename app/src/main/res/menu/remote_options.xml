@@ -34,4 +34,12 @@
     <item
         android:id="@+id/action_add_to_home_screen"
         android:title="@string/add_to_home_screen" />
+
+    <item
+        android:id="@+id/action_toggle_search_index"
+        android:title="@string/remote_search_index_enable" />
+
+    <item
+        android:id="@+id/action_refresh_search_index"
+        android:title="@string/remote_search_index_refresh" />
 </menu>

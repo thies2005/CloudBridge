@@ -27,9 +27,18 @@ class FilesizeDialog(context: Context, private var filesizeBytes: Long, private 
         val ok = (findViewById<View>(R.id.ok) as TextView)
         val cancel = (findViewById<View>(R.id.cancel) as TextView)
 
-        textview.setText(filesizeBytes.toString())
-
-        dropdown.setText("B")
+        val mb = 1024L * 1024L
+        val kb = 1024L
+        if (filesizeBytes > 0 && filesizeBytes % mb == 0L) {
+            textview.setText((filesizeBytes / mb).toString())
+            dropdown.setText("MB")
+        } else if (filesizeBytes > 0 && filesizeBytes % kb == 0L) {
+            textview.setText((filesizeBytes / kb).toString())
+            dropdown.setText("KB")
+        } else {
+            textview.setText(filesizeBytes.toString())
+            dropdown.setText("B")
+        }
         dropdown.setAdapter(
             ArrayAdapter(
                 context,
@@ -39,7 +48,7 @@ class FilesizeDialog(context: Context, private var filesizeBytes: Long, private 
         )
 
         ok.setOnClickListener {
-            var size = textview.text.toString().toLong()
+            var size = textview.text?.toString()?.toLongOrNull() ?: 0L
             val selector = dropdown.text.toString()
 
             when(selector) {

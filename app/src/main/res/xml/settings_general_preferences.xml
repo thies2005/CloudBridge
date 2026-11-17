@@ -49,6 +49,17 @@
             app:summary="@string/cancel_all_transfers_summary" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/preference_category_header_cache">
+        <de.schuelken.cloudbridge.settings.preferences.FilesizePreference
+            android:defaultValue="524288000"
+            android:key="@string/pref_key_cache_max_size"
+            android:title="@string/pref_cache_max_size_title" />
+
+        <Preference
+            android:key="@string/pref_key_clear_cache"
+            android:title="@string/pref_clear_cache_title" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="@string/preference_category_header_proxy">
         <SwitchPreferenceCompat
             android:defaultValue="false"

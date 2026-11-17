@@ -710,4 +710,81 @@
     <string name="remote_options_content_description">Remote options</string>
     <string name="pinned_content_description">Pinned</string>
     <string name="no_log_entries">No sync log entries yet</string>
+
+    <!-- APK install & open -->
+    <string name="apk_install_permission_title">Install unknown apps</string>
+    <string name="apk_install_permission_message">CloudBridge needs permission to install Android packages (.apk). Grant access in Settings, then return to continue.</string>
+    <string name="apk_install_permission_action">Open Settings</string>
+    <string name="apk_split_not_supported">Split APK packages (.apks/.xapk/.apkm) require a dedicated split-APK installer.</string>
+    <string name="error_downloading_file">Failed to download file</string>
+    <string name="open_with">Open with…</string>
+    <string name="no_app_to_open_file">No app found to open this file</string>
+
+    <!-- Cache settings -->
+    <string name="preference_category_header_cache">Cache</string>
+    <string name="pref_cache_max_size_title">Maximum cache size</string>
+    <string name="pref_cache_max_size_summary">Limit: %1$.0f MB</string>
+    <string name="pref_clear_cache_title">Clear cache</string>
+    <string name="pref_clear_cache_summary">Using %1$s (cached files &amp; index)</string>
+    <string name="clear_cache_confirm_title">Clear cache?</string>
+    <string name="clear_cache_confirm_message">This removes all cached previews, thumbnails, directory listings, and search indexes.</string>
+    <string name="cache_cleared">Cache cleared</string>
+
+    <!-- Public link improvements -->
+    <string name="public_link_not_supported">This provider doesn\'t support public links</string>
+    <string name="public_link_forbidden">Sharing is disabled for this account or folder</string>
+    <string name="public_link_auth_error">Authentication failed. Re-authenticate the remote and try again.</string>
+    <string name="public_link_expiry_label">Expiry</string>
+    <string name="public_link_expiry_never">Default</string>
+    <string name="public_link_expiry_1h">1 hour</string>
+    <string name="public_link_expiry_1d">1 day</string>
+    <string name="public_link_expiry_7d">7 days</string>
+    <string name="public_link_copy">Copy</string>
+    <string name="public_link_share">Share</string>
+    <string name="public_link_unlink">Remove link</string>
+    <string name="public_link_unlinked">Public link removed</string>
+    <string name="public_link_multi_select_unsupported">Select a single item to create a public link</string>
+
+    <!-- Search Tiers 1, 2, 3 -->
+    <string name="search_scope_folder">This folder</string>
+    <string name="search_scope_recursive">Subfolders</string>
+    <string name="search_scope_indexed">All indexed</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_images">Images</string>
+    <string name="search_filter_video">Video</string>
+    <string name="search_filter_audio">Audio</string>
+    <string name="search_filter_docs">Documents</string>
+    <string name="search_filter_archives">Archives</string>
+    <string name="search_filter_apk">APKs</string>
+    <string name="search_filter_folders">Folders</string>
+    <string name="search_filter_size_any">Any size</string>
+    <string name="search_filter_size_gt_1mb">&gt; 1 MB</string>
+    <string name="search_filter_size_gt_10mb">&gt; 10 MB</string>
+    <string name="search_filter_size_gt_100mb">&gt; 100 MB</string>
+    <string name="search_filter_date_any">Any date</string>
+    <string name="search_filter_date_7d">7 days</string>
+    <string name="search_filter_date_30d">30 days</string>
+    <string name="search_filter_date_1y">1 year</string>
+    <string name="search_recursive_running">Searching subfolders… (%1$d found)</string>
+    <string name="search_recursive_truncated">Showing first %1$d results</string>
+    <string name="search_indexed_enable_hint">Enable offline search index in remote options to search across remotes</string>
+    <string name="remote_search_index_enable">Enable offline search index</string>
+    <string name="remote_search_index_disable">Disable offline search index</string>
+    <string name="remote_search_index_refresh">Refresh search index</string>
+    <string name="remote_search_index_started">Indexing %1$s in the background…</string>
+    <string name="remote_search_index_disabled">Search index disabled and cleared for %1$s</string>
+
+    <!-- Logs copy & clear -->
+    <string name="logs_copy_all">Copy all</string>
+    <string name="logs_clear">Clear logs</string>
+    <string name="logs_copied_full">Full log copied to clipboard</string>
+    <string name="logs_clear_confirm_title">Clear all logs?</string>
+    <string name="logs_clear_confirm_message">This will permanently delete all recorded sync and operation log entries.</string>
+    <string name="logs_cleared">Logs cleared</string>
+
+    <!-- Global search -->
+    <string name="global_search_title">Global Search</string>
+    <string name="global_search_hint">Search across indexed remotes…</string>
+    <string name="global_search_no_indexed_remotes">No remotes are indexed yet. Open a remote\'s 3-dot menu and enable \"Offline search index\" to search across remotes.</string>
+    <string name="global_search_no_results">No matching files found</string>
 </resources>

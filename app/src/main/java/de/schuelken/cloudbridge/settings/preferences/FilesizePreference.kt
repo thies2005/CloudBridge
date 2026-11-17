@@ -16,7 +16,7 @@ class FilesizePreference(context: Context, attrs: AttributeSet): DialogPreferenc
     override fun getDialogLayoutResource() = R.layout.preference_filesize
 
     override fun onClick() {
-        FilesizeDialog(this.context, getPersistedLong(0)) {
+        FilesizeDialog(this.context, getValue()) {
             persistLong(it)
             notifyChanged()
         }.show()

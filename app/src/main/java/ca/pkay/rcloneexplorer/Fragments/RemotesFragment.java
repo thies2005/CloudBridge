@@ -17,6 +17,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -49,6 +50,9 @@ import ca.pkay.rcloneexplorer.RecyclerViewAdapters.RemotesRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.RemoteConfig.InternxtReauth;
 import ca.pkay.rcloneexplorer.RemoteConfig.RemoteConfig;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
+import de.schuelken.cloudbridge.cache.CacheManager;
+import de.schuelken.cloudbridge.cache.SearchIndexWorker;
+import de.schuelken.cloudbridge.search.GlobalSearchFragment;
 
 public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdapter.OnRemoteOptionsClick {
 
@@ -132,6 +136,39 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
         });
 
         return view;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() != null) {
+            View searchBtn = getActivity().findViewById(R.id.searchButton);
+            if (searchBtn != null) {
+                searchBtn.setVisibility(View.VISIBLE);
+                searchBtn.setOnClickListener(v -> openGlobalSearch());
+            }
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (getActivity() != null) {
+            View searchBtn = getActivity().findViewById(R.id.searchButton);
+            if (searchBtn != null) {
+                searchBtn.setOnClickListener(null);
+                searchBtn.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private void openGlobalSearch() {
+        if (getActivity() == null || !isAdded()) return;
+        getActivity().getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.flFragment, new GlobalSearchFragment())
+                .addToBackStack("global_search")
+                .commit();
     }
 
     // Prepares special views if rclone does not work or does not have a config file
@@ -302,12 +339,39 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
                 }
             } else if (itemID == R.id.action_add_to_home_screen) {
                 AppShortcutsHelper.addRemoteToHomeScreen(context, remoteItem);
+            } else if (itemID == R.id.action_toggle_search_index) {
+                CacheManager cm = CacheManager.getInstance(context);
+                boolean currentlyEnabled = cm.isTier3SearchEnabled(remoteItem.getName());
+                if (currentlyEnabled) {
+                    cm.setTier3SearchEnabled(remoteItem.getName(), false);
+                    Toast.makeText(context, getString(R.string.remote_search_index_disabled, remoteItem.getDisplayName()), Toast.LENGTH_SHORT).show();
+                } else {
+                    cm.setTier3SearchEnabled(remoteItem.getName(), true);
+                    SearchIndexWorker.enqueueIndexRemote(context, remoteItem.getName());
+                    Toast.makeText(context, getString(R.string.remote_search_index_started, remoteItem.getDisplayName()), Toast.LENGTH_SHORT).show();
+                }
+            } else if (itemID == R.id.action_refresh_search_index) {
+                SearchIndexWorker.enqueueIndexRemote(context, remoteItem.getName());
+                Toast.makeText(context, getString(R.string.remote_search_index_started, remoteItem.getDisplayName()), Toast.LENGTH_SHORT).show();
             } else {
                 return false;
             }
 
             return true;
         });
+
+        CacheManager cm = CacheManager.getInstance(context);
+        boolean indexEnabled = cm.isTier3SearchEnabled(remoteItem.getName());
+        MenuItem toggleIndex = popupMenu.getMenu().findItem(R.id.action_toggle_search_index);
+        MenuItem refreshIndex = popupMenu.getMenu().findItem(R.id.action_refresh_search_index);
+        if (remoteItem.isCrypt()) {
+            toggleIndex.setVisible(false);
+            refreshIndex.setVisible(false);
+        } else {
+            toggleIndex.setTitle(indexEnabled ? R.string.remote_search_index_disable : R.string.remote_search_index_enable);
+            refreshIndex.setVisible(indexEnabled);
+        }
+
         popupMenu.show();
 
         MenuItem pinAction = popupMenu.getMenu().findItem(R.id.action_pin);

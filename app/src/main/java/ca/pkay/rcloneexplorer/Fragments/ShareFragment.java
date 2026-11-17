@@ -376,35 +376,8 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
 
     private void sortSelected(int sortById, int sortOrderId) {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-        switch (sortById) {
-            case R.id.radio_sort_name:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                    sortOrder = SortDialog.ALPHA_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                    sortOrder = SortDialog.ALPHA_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_date:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                    sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                    sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_size:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                    sortOrder = SortDialog.SIZE_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                    sortOrder = SortDialog.SIZE_DESCENDING;
-                }
-                break;
-        }
+        sortOrder = FileComparators.resolveSortOrder(sortById, sortOrderId);
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
         recyclerViewAdapter.updateSortedData(directoryContent);
         if (sortOrder > 0) {
@@ -415,32 +388,7 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
 
     private void sortDirectory() {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-        switch (sortOrder) {
-            case SortDialog.MOD_TIME_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                break;
-            case SortDialog.MOD_TIME_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                break;
-            case SortDialog.SIZE_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                sortOrder = SortDialog.SIZE_ASCENDING;
-                break;
-            case SortDialog.SIZE_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                sortOrder = SortDialog.SIZE_DESCENDING;
-                break;
-            case SortDialog.ALPHA_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                sortOrder = SortDialog.ALPHA_ASCENDING;
-                break;
-            case SortDialog.ALPHA_DESCENDING:
-            default:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                sortOrder = SortDialog.ALPHA_DESCENDING;
-        }
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
     }
 

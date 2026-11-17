@@ -433,6 +433,10 @@ public class MainActivity extends AppCompatActivity
 
         findViewById(R.id.searchButton).setVisibility(View.GONE);
         findViewById(R.id.search_bar).setVisibility(View.GONE);
+        View filtersBar = findViewById(R.id.search_filters_bar);
+        if (filtersBar != null) filtersBar.setVisibility(View.GONE);
+        View statusBar = findViewById(R.id.search_status_bar);
+        if (statusBar != null) statusBar.setVisibility(View.GONE);
         RemoteItem pinnedRemote = drawerPinnedRemoteIds.get(id);
         if (pinnedRemote != null) {
             startPinnedRemote(pinnedRemote);

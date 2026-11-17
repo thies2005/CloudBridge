@@ -15,6 +15,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceManager;
 
+import de.schuelken.cloudbridge.cache.CacheManager;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -351,12 +353,110 @@ public class Rclone {
             return null;
         }
 
+        return parseLsJsonArray(remote, path, results, startAtRoot, Integer.MAX_VALUE, process);
+    }
+
+    @Nullable
+    public List<FileItem> getDirectoryContentRecursive(
+            RemoteItem remote,
+            String path,
+            boolean startAtRoot,
+            int maxDepth,
+            int maxItems,
+            @Nullable java.util.concurrent.atomic.AtomicReference<Process> processOut) {
+        if (remote == null) {
+            return null;
+        }
+        String remoteAndPath = buildRemoteAndPath(remote, path, startAtRoot);
+        if (isSafDavRemote(remote)) {
+            try {
+                SafAccessProvider.getServer(context);
+            } catch (IOException e) {
+                FLog.e(TAG, "Cannot start SAF WebDAV bridge", e);
+                return null;
+            }
+        }
+
+        ArrayList<String> args = new ArrayList<>();
+        if (remote.isRemoteType(RemoteItem.LOCAL) || remote.isPathAlias()) {
+            args.add("--ignore-errors");
+        }
+        args.add("lsjson");
+        args.add("-R");
+        args.add("--fast-list");
+        if (maxDepth > 0) {
+            args.add("--max-depth");
+            args.add(String.valueOf(maxDepth));
+        }
+        args.add(remoteAndPath);
+
+        String[] command = createCommandWithOptions(args);
+        String[] env = getRcloneEnv();
+        Process process = null;
+        try {
+            process = getRuntimeProcess(command, env);
+            if (processOut != null) {
+                processOut.set(process);
+            }
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
+            }
+            process.waitFor();
+            if (process.exitValue() != 0 && (process.exitValue() != 6 || !remote.isRemoteType(RemoteItem.LOCAL, RemoteItem.ALIAS))) {
+                logErrorOutput(process);
+                return null;
+            }
+            JSONArray results = new JSONArray(output.toString());
+            return parseLsJsonArray(remote, path, results, startAtRoot, maxItems, process);
+        } catch (InterruptedException e) {
+            logErrorOutput(process);
+            return null;
+        } catch (IOException | JSONException e) {
+            logErrorOutput(process);
+            FLog.e(TAG, "getDirectoryContentRecursive: failed", e);
+            return null;
+        } finally {
+            if (processOut != null) {
+                processOut.set(null);
+            }
+        }
+    }
+
+    private String buildRemoteAndPath(RemoteItem remote, String path, boolean startAtRoot) {
+        String remoteAndPath = remote.getName() + ":";
+        if (startAtRoot) {
+            remoteAndPath += "/";
+        }
+        if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isCrypt() && !remote.isAlias() && !remote.isCache())) {
+            remoteAndPath += getLocalRemotePathPrefix(remote, context) + "/";
+        }
+        if (path != null && !path.isEmpty() && path.compareTo("//" + remote.getName()) != 0) {
+            remoteAndPath += path;
+        }
+        return remoteAndPath;
+    }
+
+    @Nullable
+    private List<FileItem> parseLsJsonArray(
+            RemoteItem remote,
+            String basePath,
+            JSONArray results,
+            boolean startAtRoot,
+            int maxItems,
+            Process process) {
         List<FileItem> fileItemList = new ArrayList<>();
-        for (int i = 0; i < results.length(); i++) {
+        int count = Math.min(results.length(), maxItems > 0 ? maxItems : results.length());
+        String prefix = (basePath == null || basePath.compareTo("//" + remote.getName()) == 0 || basePath.isEmpty())
+                ? ""
+                : basePath + "/";
+        for (int i = 0; i < count; i++) {
             try {
                 JSONObject jsonObject = results.getJSONObject(i);
-                String filePath = (path.compareTo("//" + remote.getName()) == 0) ? "" : path + "/";
-                filePath += jsonObject.getString("Path");
+                String filePath = prefix + jsonObject.getString("Path");
                 String fileName = jsonObject.getString("Name");
                 long fileSize = jsonObject.getLong("Size");
                 String fileModTime = jsonObject.getString("ModTime");
@@ -364,10 +464,12 @@ public class Rclone {
                 String mimeType = jsonObject.getString("MimeType");
 
                 if (remote.isCrypt()) {
-                    String extension = fileName.substring(fileName.lastIndexOf(".") + 1);
-                    String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
-                    if (type != null) {
-                        mimeType = type;
+                    String extension = FileItem.extractExtension(fileName);
+                    if (!extension.isEmpty()) {
+                        String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+                        if (type != null) {
+                            mimeType = type;
+                        }
                     }
                 }
 
@@ -375,7 +477,7 @@ public class Rclone {
                 fileItemList.add(fileItem);
             } catch (JSONException e) {
                 logErrorOutput(process);
-                FLog.e(TAG, "getDirectoryContent: Could not decode JSON", e);
+                FLog.e(TAG, "parseLsJsonArray: Could not decode JSON", e);
                 return null;
             }
         }
@@ -704,6 +806,7 @@ public class Rclone {
             return;
         }
         invalidateRemotesCache();
+        CacheManager.getInstance(context).clearRemoteCache(remoteName);
         String[] command = createCommandWithOptions("config", "delete", "--", remoteName);
         Process process;
 
@@ -1225,35 +1328,124 @@ public class Rclone {
         return process != null && process.exitValue() == 0;
     }
 
+    public static class LinkResult {
+        @Nullable public final String url;
+        @Nullable public final String errorMessage;
+        public final boolean unlinked;
+
+        public LinkResult(@Nullable String url, @Nullable String errorMessage, boolean unlinked) {
+            this.url = url;
+            this.errorMessage = errorMessage;
+            this.unlinked = unlinked;
+        }
+
+        public boolean isSuccess() {
+            return errorMessage == null && (unlinked || (url != null && !url.isEmpty()));
+        }
+    }
+
     public String link(RemoteItem remote, String filePath) {
+        return linkWithOptions(remote, filePath, null, false).url;
+    }
+
+    public LinkResult linkWithOptions(RemoteItem remote, String filePath, @Nullable String expire, boolean unlink) {
+        if (remote == null || !remote.hasLinkSupport()) {
+            return new LinkResult(null, context.getString(R.string.public_link_not_supported), false);
+        }
         String linkPath = remote.getName() + ":";
-        linkPath += (remote.isRemoteType(RemoteItem.LOCAL)) ? getLocalRemotePathPrefix(remote, context) + "/" : "";
-        if (!filePath.equals("//" + remote.getName())) {
+        if (remote.isRemoteType(RemoteItem.LOCAL)) {
+            linkPath += getLocalRemotePathPrefix(remote, context) + "/";
+        }
+        if (filePath != null && !filePath.isEmpty() && !filePath.equals("//" + remote.getName())) {
             linkPath += filePath;
         }
-        String[] command = createCommandWithOptions("link", linkPath);
+
+        ArrayList<String> args = new ArrayList<>();
+        args.add("link");
+        if (unlink) {
+            args.add("--unlink");
+        } else if (expire != null && !expire.isEmpty()) {
+            args.add("--expire");
+            args.add(expire);
+        }
+        args.add(linkPath);
+
+        String[] command = createCommandWithOptions(args);
         Process process = null;
         String[] env = getRcloneEnv();
 
         try {
             process = getRuntimeProcess(command, env);
-            process.waitFor();
-            if (process.exitValue() != 0) {
-                logErrorOutput(process);
-                return null;
-            }
+            final Process procRef = process;
+            final StringBuilder stderrBuilder = new StringBuilder();
+            Thread stderrThread = new Thread(() -> {
+                try (BufferedReader errReader = new BufferedReader(new InputStreamReader(procRef.getErrorStream()))) {
+                    String line;
+                    while ((line = errReader.readLine()) != null) {
+                        stderrBuilder.append(line).append("\n");
+                    }
+                } catch (IOException ignored) {
+                }
+            }, "rclone-link-stderr");
+            stderrThread.start();
 
+            String stdoutLine = null;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                return reader.readLine();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isEmpty() && stdoutLine == null) {
+                        stdoutLine = trimmed;
+                    }
+                }
             }
 
+            process.waitFor();
+            stderrThread.join(1000);
+
+            if (process.exitValue() != 0) {
+                String errText = stderrBuilder.toString().trim();
+                FLog.w(TAG, "linkWithOptions failed (%d): %s", process.exitValue(), errText);
+                return new LinkResult(null, mapLinkError(remote, errText), false);
+            }
+
+            CacheManager.getInstance(context).setPublicLinkSupport(remote.getName(), true);
+            if (unlink) {
+                return new LinkResult(null, null, true);
+            }
+            if (stdoutLine == null || stdoutLine.isEmpty()) {
+                return new LinkResult(null, context.getString(R.string.error_generating_link), false);
+            }
+            return new LinkResult(stdoutLine, null, false);
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "link: error running rclone", e);
-            if (process != null) {
-                logErrorOutput(process);
+            return new LinkResult(null, context.getString(R.string.error_generating_link), false);
+        }
+    }
+
+    private String mapLinkError(RemoteItem remote, String stderr) {
+        if (stderr == null || stderr.isEmpty()) {
+            return context.getString(R.string.error_generating_link);
+        }
+        String lower = stderr.toLowerCase(Locale.ROOT);
+        if (lower.contains("not implemented") || lower.contains("doesn't support") || lower.contains("not supported")) {
+            CacheManager.getInstance(context).setPublicLinkSupport(remote.getName(), false);
+            return context.getString(R.string.public_link_not_supported);
+        }
+        if (lower.contains("403") || lower.contains("forbidden") || lower.contains("permission") || lower.contains("not allowed")) {
+            return context.getString(R.string.public_link_forbidden);
+        }
+        if (lower.contains("401") || lower.contains("unauthorized") || lower.contains("token") || lower.contains("expired") || lower.contains("auth")) {
+            return context.getString(R.string.public_link_auth_error);
+        }
+        String[] lines = stderr.split("\n");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String line = lines[i].trim();
+            if (!line.isEmpty()) {
+                return line;
             }
         }
-        return null;
+        return context.getString(R.string.error_generating_link);
     }
 
     public String calculateMD5(RemoteItem remote, FileItem fileItem) {

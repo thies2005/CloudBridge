@@ -1,6 +1,7 @@
 <paths
     xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="preview" path="preview/" />
+    <cache-path name="cb-cache" path="cb/" />
     <cache-path name="share-staging" path="share_staging/" />
     <cache-path name="internal-cache" path="report/" />
 </paths>

@@ -19,6 +19,8 @@ import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.util.FLog
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager
 import ca.pkay.rcloneexplorer.workmanager.SyncManager
+import android.text.format.Formatter
+import de.schuelken.cloudbridge.cache.CacheManager
 import de.schuelken.cloudbridge.extensions.TAG
 import de.schuelken.cloudbridge.settings.language.LanguagePicker
 import de.schuelken.cloudbridge.settings.preferences.FilesizePreference
@@ -68,6 +70,44 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             true
         }
 
+        val cacheMaxPreference = findPreference(getString(R.string.pref_key_cache_max_size)) as FilesizePreference?
+        cacheMaxPreference?.summaryProvider =
+            Preference.SummaryProvider<FilesizePreference> { preference ->
+                val sizeMb = preference.getValue() / (1024.0 * 1024.0)
+                resources.getString(R.string.pref_cache_max_size_summary, sizeMb.toFloat())
+            }
+        cacheMaxPreference?.setOnPreferenceChangeListener { _, _ ->
+            CacheManager.getInstance(requireContext()).evictDataCacheIfNeeded()
+            true
+        }
+
+        val clearCachePreference = findPreference(getString(R.string.pref_key_clear_cache)) as Preference?
+        updateClearCacheSummary(clearCachePreference)
+        clearCachePreference?.setOnPreferenceClickListener { pref ->
+            showClearCacheConfirmation(pref)
+            true
+        }
+
+    }
+
+    private fun updateClearCacheSummary(preference: Preference?) {
+        preference ?: return
+        val usedBytes = CacheManager.getInstance(requireContext()).getTotalCacheSizeBytes()
+        val formatted = Formatter.formatShortFileSize(requireContext(), usedBytes)
+        preference.summary = getString(R.string.pref_clear_cache_summary, formatted)
+    }
+
+    private fun showClearCacheConfirmation(preference: Preference) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.clear_cache_confirm_title)
+            .setMessage(R.string.clear_cache_confirm_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.pref_clear_cache_title) { _, _ ->
+                CacheManager.getInstance(requireContext()).clearAllCache()
+                updateClearCacheSummary(preference)
+                Toast.makeText(requireContext(), R.string.cache_cleared, Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 
     private fun showCancelTransfersConfirmation() {

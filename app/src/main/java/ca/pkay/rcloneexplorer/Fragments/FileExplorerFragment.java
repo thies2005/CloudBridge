@@ -15,7 +15,10 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Base64;
@@ -31,6 +34,8 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBar;
@@ -94,7 +99,16 @@ import ca.pkay.rcloneexplorer.util.LargeParcel;
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager;
 import ca.pkay.rcloneexplorer.workmanager.SyncManager;
 import de.felixnuesse.ui.BreadcrumbView;
+import de.schuelken.cloudbridge.cache.CacheManager;
+import de.schuelken.cloudbridge.install.ApkInstallHelper;
+import de.schuelken.cloudbridge.search.SearchEngine;
+import de.schuelken.cloudbridge.search.SearchFilter;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.snackbar.Snackbar;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java9.util.stream.Collectors;
 import java9.util.stream.StreamSupport;
 import okhttp3.OkHttpClient;
@@ -172,6 +186,28 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private int thumbnailServerPort;
     private boolean wrapFilenames;
     private SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener;
+
+    private enum SearchScope { FOLDER, RECURSIVE, INDEXED }
+    private SearchScope searchScope = SearchScope.FOLDER;
+    private SearchFilter currentSearchFilter = new SearchFilter(SearchFilter.TypeFilter.ALL, 0L, 0L);
+    private View searchFiltersBar;
+    private View searchStatusBar;
+    private android.widget.TextView searchStatusText;
+    private final Handler searchDebounceHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingSearchRunnable;
+    private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicReference<Process> recursiveSearchProcess = new AtomicReference<>();
+    private File pendingApkInstallFile;
+    private final ActivityResultLauncher<Intent> installPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (pendingApkInstallFile != null && context != null) {
+                    File file = pendingApkInstallFile;
+                    pendingApkInstallFile = null;
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.getPackageManager().canRequestPackageInstalls()) {
+                        ApkInstallHelper.launchViewIntent(context, file, ApkInstallHelper.MIME_APK);
+                    }
+                }
+            });
 
     /**
      * Mandatory empty constructor for the fragment manager to instantiate the
@@ -344,9 +380,12 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 searchDirContent("");
                 searchField.setText("");
                 InputMethodManager keyboard = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-                keyboard.hideSoftInputFromWindow(getActivity().getCurrentFocus().getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
+                if (keyboard != null && getActivity().getCurrentFocus() != null) {
+                    keyboard.hideSoftInputFromWindow(getActivity().getCurrentFocus().getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
+                }
             }
         });
+        setupSearchFiltersUi();
 
         if (view.findViewById(R.id.background) != null) {
             view.findViewById(R.id.background).setOnClickListener(v -> onClickOutsideOfView());
@@ -581,7 +620,8 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         if (!remote.hasTrashCan()) {
             menu.findItem(R.id.action_empty_trash).setVisible(false);
         }
-        if (!remote.hasLinkSupport()) {
+        Boolean cachedLinkSupport = CacheManager.getInstance(context).getPublicLinkSupport(remote.getName());
+        if (!remote.hasLinkSupport() || Boolean.FALSE.equals(cachedLinkSupport)) {
             menu.findItem(R.id.action_link).setVisible(false);
         }
         if (!remote.isRemoteType(RemoteItem.SFTP)) {
@@ -753,25 +793,171 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         throw new IllegalStateException("No port available");
     }
 
+    private void setupSearchFiltersUi() {
+        FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        searchFiltersBar = activity.findViewById(R.id.search_filters_bar);
+        searchStatusBar = activity.findViewById(R.id.search_status_bar);
+        searchStatusText = activity.findViewById(R.id.search_status_text);
+        View cancelBtn = activity.findViewById(R.id.search_cancel_btn);
+        if (cancelBtn != null) {
+            cancelBtn.setOnClickListener(v -> cancelActiveSearch());
+        }
+        ChipGroup scopeGroup = activity.findViewById(R.id.search_scope_group);
+        if (scopeGroup != null) {
+            scopeGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
+                if (checkedIds.isEmpty()) return;
+                int id = checkedIds.get(0);
+                if (id == R.id.chip_scope_recursive) {
+                    searchScope = SearchScope.RECURSIVE;
+                } else if (id == R.id.chip_scope_indexed) {
+                    searchScope = SearchScope.INDEXED;
+                    if (CacheManager.getInstance(context).getTier3EnabledRemotes().isEmpty()) {
+                        Toast.makeText(context, R.string.search_indexed_enable_hint, Toast.LENGTH_LONG).show();
+                    }
+                } else {
+                    searchScope = SearchScope.FOLDER;
+                }
+                searchDirContent(searchString != null ? searchString : "");
+            });
+        }
+
+        Chip typeChip = activity.findViewById(R.id.chip_filter_type);
+        if (typeChip != null) {
+            typeChip.setOnClickListener(v -> showTypeFilterMenu(typeChip));
+        }
+        Chip sizeChip = activity.findViewById(R.id.chip_filter_size);
+        if (sizeChip != null) {
+            sizeChip.setOnClickListener(v -> showSizeFilterMenu(sizeChip));
+        }
+        Chip dateChip = activity.findViewById(R.id.chip_filter_date);
+        if (dateChip != null) {
+            dateChip.setOnClickListener(v -> showDateFilterMenu(dateChip));
+        }
+    }
+
+    private void showTypeFilterMenu(Chip anchor) {
+        PopupMenu menu = new PopupMenu(context, anchor);
+        SearchFilter.TypeFilter[] values = SearchFilter.TypeFilter.values();
+        int[] labels = {
+                R.string.search_filter_all, R.string.search_filter_images, R.string.search_filter_video,
+                R.string.search_filter_audio, R.string.search_filter_docs, R.string.search_filter_archives,
+                R.string.search_filter_apk, R.string.search_filter_folders
+        };
+        for (int i = 0; i < values.length; i++) {
+            menu.getMenu().add(0, i, i, labels[i]);
+        }
+        menu.setOnMenuItemClickListener(item -> {
+            SearchFilter.TypeFilter chosen = values[item.getItemId()];
+            currentSearchFilter = new SearchFilter(chosen, currentSearchFilter.getMinSizeBytes(), currentSearchFilter.getMaxAgeMs());
+            anchor.setText(labels[item.getItemId()]);
+            anchor.setChecked(chosen != SearchFilter.TypeFilter.ALL);
+            searchDirContent(searchString != null ? searchString : "");
+            return true;
+        });
+        menu.show();
+    }
+
+    private void showSizeFilterMenu(Chip anchor) {
+        PopupMenu menu = new PopupMenu(context, anchor);
+        long[] sizes = {0L, 1024L * 1024L, 10L * 1024L * 1024L, 100L * 1024L * 1024L};
+        int[] labels = {
+                R.string.search_filter_size_any, R.string.search_filter_size_gt_1mb,
+                R.string.search_filter_size_gt_10mb, R.string.search_filter_size_gt_100mb
+        };
+        for (int i = 0; i < sizes.length; i++) {
+            menu.getMenu().add(0, i, i, labels[i]);
+        }
+        menu.setOnMenuItemClickListener(item -> {
+            long minSize = sizes[item.getItemId()];
+            currentSearchFilter = new SearchFilter(currentSearchFilter.getType(), minSize, currentSearchFilter.getMaxAgeMs());
+            anchor.setText(labels[item.getItemId()]);
+            anchor.setChecked(minSize > 0L);
+            searchDirContent(searchString != null ? searchString : "");
+            return true;
+        });
+        menu.show();
+    }
+
+    private void showDateFilterMenu(Chip anchor) {
+        PopupMenu menu = new PopupMenu(context, anchor);
+        long day = 24L * 60L * 60L * 1000L;
+        long[] ages = {0L, 7L * day, 30L * day, 365L * day};
+        int[] labels = {
+                R.string.search_filter_date_any, R.string.search_filter_date_7d,
+                R.string.search_filter_date_30d, R.string.search_filter_date_1y
+        };
+        for (int i = 0; i < ages.length; i++) {
+            menu.getMenu().add(0, i, i, labels[i]);
+        }
+        menu.setOnMenuItemClickListener(item -> {
+            long maxAge = ages[item.getItemId()];
+            currentSearchFilter = new SearchFilter(currentSearchFilter.getType(), currentSearchFilter.getMinSizeBytes(), maxAge);
+            anchor.setText(labels[item.getItemId()]);
+            anchor.setChecked(maxAge > 0L);
+            searchDirContent(searchString != null ? searchString : "");
+            return true;
+        });
+        menu.show();
+    }
+
+    private void cancelActiveSearch() {
+        if (pendingSearchRunnable != null) {
+            searchDebounceHandler.removeCallbacks(pendingSearchRunnable);
+        }
+        Process proc = recursiveSearchProcess.getAndSet(null);
+        if (proc != null) {
+            proc.destroy();
+        }
+        if (searchStatusBar != null) {
+            searchStatusBar.setVisibility(View.GONE);
+        }
+    }
+
     private void searchClicked() {
-        InputMethodManager keyboard = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
+        FragmentActivity activity = getActivity();
+        if (activity == null || searchBar == null || searchButton == null) return;
+        InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
 
         if (isSearchMode) {
+            cancelActiveSearch();
             searchBar.setVisibility(View.GONE);
+            if (searchFiltersBar != null) {
+                searchFiltersBar.setVisibility(View.GONE);
+            }
             searchButton.setVisibility(View.VISIBLE);
-            searchDirContent("");
-            ((EditText)searchBar.findViewById(R.id.search_field)).setText("");
+            searchScope = SearchScope.FOLDER;
+            currentSearchFilter = new SearchFilter(SearchFilter.TypeFilter.ALL, 0L, 0L);
+            recyclerViewAdapter.setSearchDisplay("", false);
+            searchString = "";
+            ((EditText) searchBar.findViewById(R.id.search_field)).setText("");
             recyclerViewAdapter.setSearchMode(false);
             isSearchMode = false;
+            recyclerViewAdapter.newData(directoryObject.getDirectoryContent());
         } else {
             searchBar.setVisibility(View.VISIBLE);
+            if (searchFiltersBar != null) {
+                searchFiltersBar.setVisibility(View.VISIBLE);
+            }
             searchButton.setVisibility(View.GONE);
             recyclerViewAdapter.setSearchMode(true);
             isSearchMode = true;
             EditText search = searchBar.findViewById(R.id.search_field);
             search.requestFocus();
-            keyboard.showSoftInput(search, InputMethodManager.SHOW_IMPLICIT);
+            if (keyboard != null) {
+                keyboard.showSoftInput(search, InputMethodManager.SHOW_IMPLICIT);
+            }
         }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        cancelActiveSearch();
+        if (searchBar != null) searchBar.setVisibility(View.GONE);
+        if (searchFiltersBar != null) searchFiltersBar.setVisibility(View.GONE);
+        if (searchStatusBar != null) searchStatusBar.setVisibility(View.GONE);
+        if (searchButton != null) searchButton.setVisibility(View.GONE);
     }
 
     private void showOpenAsDialog(FileItem fileItem) {
@@ -855,31 +1041,98 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     }
 
     private void searchDirContent(String search) {
-        List<FileItem> content = directoryObject.getDirectoryContent();
-        List<FileItem> currentShown = recyclerViewAdapter.getCurrentContent();
-        List<FileItem> results = new ArrayList<>();
+        searchString = search != null ? search : "";
+        if (pendingSearchRunnable != null) {
+            searchDebounceHandler.removeCallbacks(pendingSearchRunnable);
+        }
 
-        searchString = search;
+        final String querySnapshot = searchString;
+        final SearchScope scopeSnapshot = searchScope;
+        final SearchFilter filterSnapshot = currentSearchFilter;
 
-        if (search.isEmpty()) {
-            if (currentShown.equals(content)) {
-                return;
-            } else {
+        if (scopeSnapshot == SearchScope.FOLDER && querySnapshot.isEmpty() && filterSnapshot.isDefault()) {
+            if (searchStatusBar != null) searchStatusBar.setVisibility(View.GONE);
+            recyclerViewAdapter.setSearchDisplay("", false);
+            List<FileItem> content = directoryObject.getDirectoryContent();
+            if (!recyclerViewAdapter.getCurrentContent().equals(content)) {
                 recyclerViewAdapter.newData(content);
             }
-        }
-
-        for (FileItem item : content) {
-            String fileName = item.getName().toLowerCase(Locale.ROOT);
-            if (fileName.contains(search.toLowerCase(Locale.ROOT))) {
-                results.add(item);
-            }
-        }
-
-        if (currentShown.equals(results)) {
             return;
         }
-        recyclerViewAdapter.newData(results);
+
+        pendingSearchRunnable = () -> executeSearch(querySnapshot, scopeSnapshot, filterSnapshot);
+        long delayMs = (scopeSnapshot == SearchScope.RECURSIVE) ? 400L : 180L;
+        searchDebounceHandler.postDelayed(pendingSearchRunnable, delayMs);
+    }
+
+    private void executeSearch(String query, SearchScope scope, SearchFilter filter) {
+        if (!isAdded() || context == null) return;
+        Process prev = recursiveSearchProcess.getAndSet(null);
+        if (prev != null) {
+            prev.destroy();
+        }
+
+        if (scope == SearchScope.RECURSIVE) {
+            if (searchStatusBar != null && searchStatusText != null) {
+                searchStatusBar.setVisibility(View.VISIBLE);
+                searchStatusText.setText(getString(R.string.search_recursive_running, 0));
+            }
+        } else if (searchStatusBar != null) {
+            searchStatusBar.setVisibility(View.GONE);
+        }
+
+        final List<FileItem> folderSnapshot = new ArrayList<>(directoryObject.getDirectoryContent());
+        final String currentPath = directoryObject.getCurrentPath();
+        final int activeSort = sortOrder;
+
+        searchExecutor.execute(() -> {
+            List<FileItem> results;
+            boolean showPath = scope != SearchScope.FOLDER;
+            boolean truncated = false;
+
+            if (scope == SearchScope.INDEXED) {
+                List<RemoteItem> allRemotes = rclone.getRemotes();
+                Map<String, RemoteItem> remoteMap = new HashMap<>();
+                for (RemoteItem r : allRemotes) {
+                    remoteMap.put(r.getName(), r);
+                }
+                results = CacheManager.getInstance(context).searchIndexed(query, remoteMap, filter, 300);
+                if (results.size() >= 300) truncated = true;
+            } else if (scope == SearchScope.RECURSIVE) {
+                if (query.trim().isEmpty() && filter.isDefault()) {
+                    results = folderSnapshot;
+                } else {
+                    int maxItems = 500;
+                    List<FileItem> allItems = rclone.getDirectoryContentRecursive(
+                            remote, currentPath, startAtRoot, 8, maxItems, recursiveSearchProcess);
+                    if (allItems == null) {
+                        allItems = Collections.emptyList();
+                    }
+                    if (allItems.size() >= maxItems) truncated = true;
+                    results = SearchEngine.filterItems(allItems, query, filter, true);
+                }
+            } else {
+                results = SearchEngine.filterItems(folderSnapshot, query, filter, false);
+            }
+
+            FileComparators.sortFileItems(results, activeSort);
+            final List<FileItem> finalResults = results;
+            final boolean wasTruncated = truncated;
+
+            searchDebounceHandler.post(() -> {
+                if (!isAdded() || !isSearchMode || recyclerViewAdapter == null) return;
+                if (searchStatusBar != null) {
+                    if (wasTruncated && searchStatusText != null) {
+                        searchStatusBar.setVisibility(View.VISIBLE);
+                        searchStatusText.setText(getString(R.string.search_recursive_truncated, finalResults.size()));
+                    } else {
+                        searchStatusBar.setVisibility(View.GONE);
+                    }
+                }
+                recyclerViewAdapter.setSearchDisplay(query, showPath);
+                recyclerViewAdapter.newData(finalResults);
+            });
+        });
     }
 
     private void cancelMoveClicked() {
@@ -987,46 +1240,13 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
     private void sortSelected(int sortById, int sortOrderId) {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-
-        switch (sortById) {
-            case R.id.radio_sort_name:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                    sortOrder = SortDialog.ALPHA_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                    sortOrder = SortDialog.ALPHA_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_date:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                    sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                    sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_size:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                    sortOrder = SortDialog.SIZE_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                    sortOrder = SortDialog.SIZE_DESCENDING;
-                }
-                break;
-        }
+        sortOrder = FileComparators.resolveSortOrder(sortById, sortOrderId);
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
 
         if (isSearchMode) {
-            List<FileItem> sortedSearch = new ArrayList<>();
-            List<FileItem> searchResult = recyclerViewAdapter.getCurrentContent();
-            for (FileItem item : directoryContent) {
-                if (searchResult.contains(item)) {
-                    sortedSearch.add(item);
-                }
-            }
+            List<FileItem> sortedSearch = new ArrayList<>(recyclerViewAdapter.getCurrentContent());
+            FileComparators.sortFileItems(sortedSearch, sortOrder);
             recyclerViewAdapter.updateSortedData(sortedSearch);
         } else {
             recyclerViewAdapter.updateSortedData(directoryContent);
@@ -1039,32 +1259,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
     private void sortDirectory() {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-        switch (sortOrder) {
-            case SortDialog.MOD_TIME_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                break;
-            case SortDialog.MOD_TIME_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                break;
-            case SortDialog.SIZE_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                sortOrder = SortDialog.SIZE_ASCENDING;
-                break;
-            case SortDialog.SIZE_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                sortOrder = SortDialog.SIZE_DESCENDING;
-                break;
-            case SortDialog.ALPHA_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                sortOrder = SortDialog.ALPHA_ASCENDING;
-                break;
-            case SortDialog.ALPHA_DESCENDING:
-            default:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                sortOrder = SortDialog.ALPHA_DESCENDING;
-        }
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
     }
 
@@ -1338,7 +1533,8 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             // TODO: remove once destination sync is added.
             popupMenu.getMenu().findItem(R.id.action_sync).setVisible(false);
         }
-        if (!remote.hasLinkSupport()) {
+        Boolean cachedLinkSupport = CacheManager.getInstance(context).getPublicLinkSupport(remote.getName());
+        if (!remote.hasLinkSupport() || Boolean.FALSE.equals(cachedLinkSupport)) {
             popupMenu.getMenu().findItem(R.id.action_link).setVisible(false);
         }
         if (remote.isRemoteType(RemoteItem.LOCAL, RemoteItem.SAFW) || remote.isPathAlias()) {
@@ -1655,8 +1851,23 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
         @Override
         protected List<FileItem> doInBackground(Void... voids) {
-            List<FileItem> fileItemList;
-            fileItemList = rclone.getDirectoryContent(remote, directoryObject.getCurrentPath(), startAtRoot);
+            String curPath = directoryObject.getCurrentPath();
+            CacheManager cm = CacheManager.getInstance(context);
+            if (!silentFetch) {
+                CacheManager.CachedListing cached = cm.getDirectoryListing(remote, curPath);
+                if (cached != null && !cached.isStale()) {
+                    return cached.getItems();
+                }
+            }
+            List<FileItem> fileItemList = rclone.getDirectoryContent(remote, curPath, startAtRoot);
+            if (fileItemList != null) {
+                cm.saveDirectoryListing(remote.getName(), curPath, fileItemList);
+            } else if (!silentFetch) {
+                CacheManager.CachedListing fallback = cm.getDirectoryListing(remote, curPath);
+                if (fallback != null) {
+                    return fallback.getItems();
+                }
+            }
             return fileItemList;
         }
 
@@ -1732,6 +1943,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             if (result) {
+                CacheManager.getInstance(context).invalidateDirectory(remote.getName(), pathWhenTaskStarted);
                 Toast.makeText(context, getString(R.string.file_renamed_success), Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT).show();
@@ -1775,6 +1987,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             if (result) {
+                CacheManager.getInstance(context).invalidateDirectory(remote.getName(), pathWhenTaskStarted);
                 Toast.makeText(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT).show();
@@ -1839,6 +2052,19 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         protected Boolean doInBackground(FileItem... fileItems) {
             FileItem fileItem = fileItems[0];
             mimeType = fileItem.getMimeType();
+            CacheManager cacheManager = CacheManager.getInstance(context);
+            File cachedFile = cacheManager.getCachedFile(
+                    remote.getName(),
+                    fileItem.getPath(),
+                    fileItem.getSize(),
+                    fileItem.getModTime(),
+                    fileItem.getName()
+            );
+            if (cachedFile != null) {
+                fileLocation = cachedFile.getAbsolutePath();
+                return true;
+            }
+
             File previewCacheDir = new File(context.getCacheDir(), "preview");
             if (!previewCacheDir.exists() && !previewCacheDir.mkdirs()) {
                 return false;
@@ -1855,6 +2081,10 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 }
             } catch (IOException e) {
                 return false;
+            }
+            if (targetFile.exists()) {
+                targetFile.setWritable(true);
+                targetFile.delete();
             }
             fileLocation = targetFile.getAbsolutePath();
 
@@ -1873,7 +2103,20 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
             if (process != null && process.exitValue() == 0) {
                 File savedFile = new File(fileLocation);
-                savedFile.setReadOnly();
+                File stored = cacheManager.putCachedFile(
+                        remote.getName(),
+                        fileItem.getPath(),
+                        fileItem.getSize(),
+                        fileItem.getModTime(),
+                        fileItem.getName(),
+                        savedFile
+                );
+                if (stored != null) {
+                    savedFile.delete();
+                    fileLocation = stored.getAbsolutePath();
+                } else {
+                    savedFile.setReadOnly();
+                }
             }
 
             if (process != null && process.exitValue() != 0) {
@@ -1888,28 +2131,21 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             super.onPostExecute(status);
             Dialogs.dismissSilently(loadingDialog);
             if (!status) {
+                if (context != null && !isCancelled) {
+                    Toast.makeText(context, R.string.error_downloading_file, Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
             if (null == context) {
                 FLog.e(TAG, "Cannot provide file %s using dead context", fileLocation);
                 return;
             }
-            Uri sharedFileUri = FileProvider.getUriForFile(context, BuildConfig.APPLICATION_ID + ".fileprovider", new File(fileLocation));
-            Intent intent = new Intent(Intent.ACTION_VIEW, sharedFileUri);
-
-            if (openAs == OPEN_AS_TEXT) {
-                intent.setDataAndType(sharedFileUri,"text/*");
-            } else if (openAs == OPEN_AS_IMAGE) {
-                intent.setDataAndType(sharedFileUri, "image/*");
-            } else {
-                if (mimeType != null && !"application/octet-stream".equals(mimeType)) {
-                    intent.setDataAndTypeAndNormalize(sharedFileUri, mimeType);
-                } else {
-                    intent.setDataAndType(sharedFileUri, "*/*");
-                }
-            }
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            tryStartActivity(context, intent);
+            File file = new File(fileLocation);
+            ApkInstallHelper.openFile(context, file, mimeType, openAs, (settingsIntent, apkFile) -> {
+                pendingApkInstallFile = apkFile;
+                installPermissionLauncher.launch(settingsIntent);
+                return kotlin.Unit.INSTANCE;
+            });
         }
     }
 
@@ -2081,9 +2317,10 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class LinkTask extends AsyncTask<String, Void, String> {
+    private class LinkTask extends AsyncTask<String, Void, Rclone.LinkResult> {
 
         private LoadingDialog loadingDialog;
+        private String linkPath;
 
         @Override
         protected void onPreExecute() {
@@ -2096,36 +2333,32 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         }
 
         @Override
-        protected String doInBackground(String... strings) {
-            String linkPath = strings[0];
-            return rclone.link(remote, linkPath);
+        protected Rclone.LinkResult doInBackground(String... strings) {
+            linkPath = strings[0];
+            return rclone.linkWithOptions(remote, linkPath, null, false);
         }
 
         @Override
-        protected void onPostExecute(String link) {
+        protected void onPostExecute(Rclone.LinkResult result) {
             Dialogs.dismissSilently(loadingDialog);
             if (null == getContext()) {
                 return;
             }
 
-            if (link == null) {
-                Toast.makeText(context, getString(R.string.error_generating_link), Toast.LENGTH_SHORT).show();
+            if (result == null || !result.isSuccess() || result.url == null) {
+                String msg = (result != null && result.errorMessage != null)
+                        ? result.errorMessage
+                        : getString(R.string.error_generating_link);
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show();
                 return;
             }
 
             LinkDialog linkDialog = new LinkDialog()
-                    .setLinkUrl(link);
+                    .setLinkUrl(result.url)
+                    .setTarget(remote, linkPath);
             if (getFragmentManager() != null && !getChildFragmentManager().isStateSaved()) {
                 linkDialog.show(getChildFragmentManager(), "link dialog");
             }
-
-            ClipboardManager clipboardManager = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clipData = ClipData.newPlainText("Copied link", link);
-            if (clipboardManager == null) {
-                return;
-            }
-            clipboardManager.setPrimaryClip(clipData);
-            Toast.makeText(context, getString(R.string.link_copied_to_clipboard), Toast.LENGTH_SHORT).show();
         }
 
         @Override
