@@ -25,6 +25,7 @@ import ca.pkay.rcloneexplorer.RuntimeConfiguration;
 
 public class SettingsActivity extends AppCompatActivity implements SettingsFragment.OnSettingCategorySelectedListener {
 
+    public static final String EXTRA_OPEN_LOGS = "open_logs";
     public final static String THEME_CHANGED = "ca.pkay.rcexplorer.SettingsActivity.THEME_CHANGED";
     private final String SAVED_THEME_CHANGE = "ca.pkay.rcexplorer.SettingsActivity.OUTSTATE_THEME_CHANGED";
     private final String SAVED_FRAGMENT = "ca.pkay.rcexplorer.SettingsActivity.RESTORE_FRAGMENT";
@@ -48,17 +49,11 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
             actionBar.setDisplayShowHomeEnabled(true);
         }
 
-        FragmentManager fragmentManager = getSupportFragmentManager();
-        for (int i = 0; i < fragmentManager.getBackStackEntryCount(); i++) {
-            fragmentManager.popBackStack();
-        }
-
-        startSettingsFragment();
-
-        if (savedInstanceState != null) {
-            Fragment fragment = getSupportFragmentManager().findFragmentByTag(SAVED_FRAGMENT);
-            if (fragment != null) {
-                restoreFragment(fragment);
+        if (savedInstanceState == null) {
+            startSettingsFragment();
+            if (getIntent().getBooleanExtra(EXTRA_OPEN_LOGS, false)) {
+                startLoggingSettingsActivity();
+                showLogs();
             }
         }
 
@@ -91,20 +86,6 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
-    }
-
-    private void restoreFragment(Fragment fragment) {
-        if (fragment instanceof GeneralPreferencesFragment) {
-            startGeneralSettingsFragment();
-        } else if (fragment instanceof FileAccessSettingsFragment) {
-            startFileAccessSettingsFragment();
-        } else if (fragment instanceof ThemingPreferencesFragment) {
-            startLookAndFeelSettingsFragment();
-        } else if (fragment instanceof NotificationPreferencesFragment) {
-            startNotificationSettingsFragment();
-        } else if (fragment instanceof LogPreferencesFragment) {
-            startLoggingSettingsActivity();
-        }
     }
 
     private void startSettingsFragment() {
@@ -148,6 +129,12 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
         transaction.replace(R.id.flFragment, new LogPreferencesFragment(), SAVED_FRAGMENT);
         transaction.addToBackStack(null);
         transaction.commit();
+    }
+
+    public void showLogs() {
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.flFragment, ca.pkay.rcloneexplorer.Fragments.LogFragment.newInstance())
+                .addToBackStack(null).commit();
     }
 
     @Override

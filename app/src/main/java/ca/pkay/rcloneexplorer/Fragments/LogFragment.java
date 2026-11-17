@@ -1,137 +1,106 @@
 package ca.pkay.rcloneexplorer.Fragments;
 
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
-
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-
 import org.json.JSONObject;
-
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Locale;
-
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.LogRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.util.SyncLog;
 
 public class LogFragment extends Fragment {
-
-    private View fragmentView;
-
-    public LogFragment() {
-        // Required empty public constructor
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private ArrayList<JSONObject> entries = new ArrayList<>();
+    private View root;
+    private int generation;
+    private boolean logFilesExist;
+    public static LogFragment newInstance() { return new LogFragment(); }
+    @Override public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        root = inflater.inflate(R.layout.fragment_logs, container, false);
+        RecyclerView list = root.findViewById(R.id.log_list);
+        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        root.findViewById(R.id.btn_copy_all_logs).setOnClickListener(v -> copyLogs());
+        root.findViewById(R.id.btn_clear_logs).setOnClickListener(v -> confirmClearLogs());
+        setEntries(new ArrayList<>());
+        return root;
     }
-
-    public static LogFragment newInstance() {
-        return new LogFragment();
+    @Override public void onResume() { super.onResume(); requireActivity().setTitle(R.string.logFragment); load(); }
+    private void load() {
+        final int request = ++generation;
+        Context context = requireContext().getApplicationContext();
+        executor.execute(() -> {
+            ArrayList<JSONObject> result = SyncLog.getLog(context);
+            boolean legacy = SyncLog.hasLogFiles(context);
+            main.post(() -> { if (root != null && request == generation) { logFilesExist = legacy; setEntries(result); } });
+        });
     }
-
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        ((FragmentActivity) getContext()).setTitle(R.string.logFragment);
-        setHasOptionsMenu(false);
-    }
-
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_logs, container, false);
-        fragmentView = view;
-
-        MaterialButton copyBtn = view.findViewById(R.id.btn_copy_all_logs);
-        MaterialButton clearBtn = view.findViewById(R.id.btn_clear_logs);
-        copyBtn.setOnClickListener(v -> copyAllLogs());
-        clearBtn.setOnClickListener(v -> confirmClearLogs());
-
-        populateLogs(fragmentView);
-        return view;
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        populateLogs(fragmentView);
-    }
-
-    private void populateLogs(View v) {
-        if (v == null) return;
-        Context c = v.getContext();
-
-        RecyclerView recyclerView = v.findViewById(R.id.log_list);
-        recyclerView.setLayoutManager(new LinearLayoutManager(c));
-
-        ArrayList<JSONObject> logs = SyncLog.getLog(c);
-        LogRecyclerViewAdapter recyclerViewAdapter = new LogRecyclerViewAdapter(logs);
-        recyclerView.setAdapter(recyclerViewAdapter);
-
-        View emptyState = v.findViewById(R.id.logs_empty_state);
-        View actionBar = v.findViewById(R.id.logs_action_bar);
-        int itemCount = recyclerViewAdapter.getItemCount();
-        recyclerView.setVisibility(itemCount == 0 ? View.GONE : View.VISIBLE);
-        if (emptyState != null) {
-            emptyState.setVisibility(itemCount == 0 ? View.VISIBLE : View.GONE);
+    private void setEntries(ArrayList<JSONObject> result) {
+        entries = result;
+        RecyclerView list = root.findViewById(R.id.log_list);
+        list.setAdapter(new LogRecyclerViewAdapter(entries));
+        list.setVisibility(entries.isEmpty() ? View.GONE : View.VISIBLE);
+        root.findViewById(R.id.logs_empty_state).setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
+        View guidance = root.findViewById(R.id.logs_oauth_guidance);
+        if (guidance != null) {
+            guidance.setVisibility(entries.isEmpty() ? View.GONE : View.VISIBLE);
         }
-        if (actionBar != null) {
-            actionBar.setVisibility(itemCount == 0 ? View.GONE : View.VISIBLE);
-        }
+        root.findViewById(R.id.btn_copy_all_logs).setEnabled(!entries.isEmpty());
+        root.findViewById(R.id.btn_clear_logs).setEnabled(!entries.isEmpty() || logFilesExist);
     }
-
-    private void copyAllLogs() {
-        Context c = getContext();
-        if (c == null) return;
-        ArrayList<JSONObject> logs = SyncLog.getLog(c);
-        if (logs.isEmpty()) return;
-
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
-        StringBuilder sb = new StringBuilder();
-        for (JSONObject entry : logs) {
-            long ts = entry.optLong(SyncLog.TIMESTAMP, 0L);
-            String title = entry.optString(SyncLog.TITLE, "");
-            String content = entry.optString(SyncLog.CONTENT, "");
-            int type = entry.optInt(SyncLog.TYPE, SyncLog.TYPE_INFO);
-            String level = (type == SyncLog.TYPE_ERROR) ? "ERROR" : "INFO";
-            String timeStr = ts > 0 ? sdf.format(new Date(ts)) : "";
-            sb.append('[').append(timeStr).append("] [").append(level).append("] ")
-                    .append(title);
-            if (!content.isEmpty()) {
-                sb.append(": ").append(content);
-            }
-            sb.append('\n');
-        }
-
-        ClipboardManager clipboard = (ClipboardManager) c.getSystemService(Context.CLIPBOARD_SERVICE);
-        if (clipboard != null) {
-            clipboard.setPrimaryClip(ClipData.newPlainText("CloudBridge Logs", sb.toString()));
-            Toast.makeText(c, R.string.logs_copied_full, Toast.LENGTH_SHORT).show();
-        }
-    }
-
     private void confirmClearLogs() {
-        Context c = getContext();
-        if (c == null) return;
-        new MaterialAlertDialogBuilder(c, R.style.RoundedCornersDialog)
+        new MaterialAlertDialogBuilder(requireContext(), R.style.RoundedCornersDialog)
                 .setTitle(R.string.logs_clear_confirm_title)
                 .setMessage(R.string.logs_clear_confirm_message)
                 .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.logs_clear, (dialog, which) -> {
-                    SyncLog.delete(c);
-                    populateLogs(fragmentView);
-                    Toast.makeText(c, R.string.logs_cleared, Toast.LENGTH_SHORT).show();
-                })
+                .setPositiveButton(R.string.logs_clear, (dialog, which) -> clearLogs())
                 .show();
     }
+
+    private void clearLogs() {
+        ++generation;
+        Context context = requireContext().getApplicationContext();
+        root.findViewById(R.id.btn_clear_logs).setEnabled(false);
+        root.findViewById(R.id.btn_copy_all_logs).setEnabled(false);
+        executor.execute(() -> {
+            boolean ok = SyncLog.delete(context);
+            ArrayList<JSONObject> result = SyncLog.getLog(context);
+            boolean legacy = SyncLog.hasLogFiles(context);
+            main.post(() -> {
+                if (root == null) return;
+                logFilesExist = legacy;
+                setEntries(result);
+                if (ok) {
+                    Toast.makeText(context, R.string.logs_cleared, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(context, R.string.logs_clear_failed, Toast.LENGTH_LONG).show();
+                }
+            });
+        });
+    }
+    private void copyLogs() {
+        StringBuilder text = new StringBuilder();
+        for (JSONObject entry : entries) {
+            if (text.length() > 0) text.append("\n\n");
+            text.append(LogRecyclerViewAdapter.formatEntry(entry));
+            if (text.length() > ca.pkay.rcloneexplorer.util.LogClipboard.MAX_CHARS) {
+                Toast.makeText(requireContext(), R.string.logs_too_large, Toast.LENGTH_LONG).show(); return;
+            }
+        }
+        ca.pkay.rcloneexplorer.util.LogClipboard.copy(requireContext(), text.toString());
+    }
+    @Override public void onDestroyView() { ++generation; root = null; super.onDestroyView(); }
+    @Override public void onDestroy() { executor.shutdown(); super.onDestroy(); }
 }

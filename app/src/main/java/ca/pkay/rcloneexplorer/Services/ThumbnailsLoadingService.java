@@ -18,6 +18,7 @@ public class ThumbnailsLoadingService extends IntentService {
 
     private Rclone rclone;
     private Process process;
+    private volatile boolean stopping;
 
     public ThumbnailsLoadingService() {
         super("ca.pkay.rcexplorer.ThumbnailLoadingService");
@@ -50,29 +51,23 @@ public class ThumbnailsLoadingService extends IntentService {
         if (process != null) {
             boolean exited = false;
             try {
-                if(PreferenceManager.getDefaultSharedPreferences(this).
-                        getBoolean(getString(R.string.pref_key_logs), false)) {
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            rclone.logErrorOutput(process);
-                        }
-                    }.start();
-                }
+                rclone.collectDiagnostics(process);
                 process.waitFor();
                 exited = true;
             } catch (InterruptedException e) {
                 FLog.e(TAG, "onHandleIntent: error waiting for process", e);
                 Thread.currentThread().interrupt();
             }
-            if (exited && process.exitValue() != 0) {
-                rclone.logErrorOutput(process);
+            if (exited) {
+                if (stopping) rclone.discardDiagnostics(process);
+                else rclone.logErrorOutput(process);
             }
         }
     }
 
     @Override
     public void onDestroy() {
+        stopping = true;
         super.onDestroy();
         if (process != null) {
             process.destroy();

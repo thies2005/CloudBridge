@@ -78,7 +78,6 @@ public class Rclone {
     private Context context;
     private String rclone;
     private String rcloneConf;
-    private Log2File log2File;
     // RC-38: cache of the parsed `rclone config dump` JSON. Validated against the rclone.conf
     // file's mtime/length on every read so per-instance caches self-invalidate when another
     // Rclone instance (e.g. a config dialog) mutates the config. Volatile for cross-thread visibility.
@@ -90,7 +89,6 @@ public class Rclone {
         this.context = context;
         this.rclone = context.getApplicationInfo().nativeLibraryDir + "/librclone.so";
         this.rcloneConf = context.getFilesDir().getPath() + "/rclone.conf";
-        log2File = new Log2File(context);
     }
 
     private String[] createCommand(ArrayList<String> args) {
@@ -250,36 +248,72 @@ public class Rclone {
         }
     }
 
+    // Only commands whose stderr has no other consumer use this collector.
+    private static final java.util.Map<Process, DiagnosticCollector> diagnostics =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    private static class DiagnosticCollector extends Thread {
+        private final InputStream stream;
+        private final StringBuilder warnings = new StringBuilder();
+        private final StringBuilder output = new StringBuilder();
+        DiagnosticCollector(Process process) { this.stream = process.getErrorStream(); setDaemon(true); }
+        @Override public void run() {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String lower = line.toLowerCase(Locale.ROOT);
+                    if (warnings.length() < 8192 && RcloneDiagnostics.isSharedClientRetirement(lower))
+                        warnings.append(line, 0, Math.min(line.length(), 8192 - warnings.length())).append('\n');
+                    if (line.length() > 262144) line = line.substring(line.length() - 262144);
+                    output.append(line).append('\n');
+                    if (output.length() > 262144) output.delete(0, output.length() - 262144);
+                }
+            } catch (IOException ignored) { }
+        }
+    }
+
+    public void collectDiagnostics(Process process) {
+        DiagnosticCollector collector = new DiagnosticCollector(process);
+        diagnostics.put(process, collector);
+        collector.start();
+    }
+
+    public void discardDiagnostics(Process process) { if (process != null) diagnostics.remove(process); }
+
     public void logErrorOutput(Process process) {
-        if (process == null) {
-            return;
+        if (process == null) return;
+        final int exit;
+        try { exit = process.exitValue(); } catch (IllegalThreadStateException stillRunning) { return; }
+        DiagnosticCollector collector = diagnostics.remove(process);
+        String output;
+        if (collector != null) {
+            try { collector.join(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+            output = collector.isAlive() ? "" : collector.warnings.toString() + collector.output.toString();
+        } else {
+            if (exit == 0) return;
+            StringBuilder buffer = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null && buffer.length() < 262144) buffer.append(line).append('\n');
+            } catch (IOException ignored) { /* Report the exit status if stderr is unavailable. */ }
+            output = buffer.toString();
         }
-
-        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
-        boolean isLoggingEnable = sharedPreferences.getBoolean(context.getString(R.string.pref_key_logs), false);
-        if (!isLoggingEnable) {
-            return;
-        }
-
-        StringBuilder stringBuilder = new StringBuilder(100);
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                stringBuilder.append(line).append("\n");
+        if (!PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(context.getString(R.string.pref_key_logs), false)) return;
+        // Standard shell signal statuses represent cancellation, not a completed failure.
+        if (RcloneDiagnostics.isCancellation(exit)) return;
+        if (exit != 0) {
+            String message = context.getString(R.string.rclone_exit_status, exit);
+            if (!output.trim().isEmpty()) message += "\n" + output;
+            SyncLog.error(context, context.getString(R.string.rclone_operation), message);
+        } else {
+            java.util.LinkedHashSet<String> warnings = new java.util.LinkedHashSet<>();
+            for (String line : output.split("\\r?\\n")) {
+                String lower = line.toLowerCase(Locale.ROOT);
+                if (RcloneDiagnostics.isSharedClientRetirement(lower)) warnings.add(line);
             }
-        } catch (InterruptedIOException iioe) {
-            FLog.i(TAG, "logErrorOutput: process died while reading. Log may be incomplete.");
-        } catch (IOException e) {
-            if("Stream closed".equals(e.getMessage())) {
-                FLog.d(TAG, "logErrorOutput: could not read stderr, process stream is already closed");
-            } else {
-                FLog.e(TAG, "logErrorOutput: ", e);
-            }
-            return;
+            if (!warnings.isEmpty()) SyncLog.info(context, context.getString(R.string.rclone_operation), android.text.TextUtils.join("\n", warnings));
         }
-        String logOutput = stringBuilder.toString();
-        log2File.log(logOutput);
-        SyncLog.error(context, "Rclone operation", logOutput);
     }
 
     @Nullable
@@ -320,6 +354,7 @@ public class Rclone {
         try {
             FLog.d(TAG, "getDirectoryContent[ENV]: %s", Arrays.toString(env));
             process = getRuntimeProcess(command, env);
+            collectDiagnostics(process);
 
             StringBuilder output = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -336,6 +371,8 @@ public class Rclone {
                 return null;
             }
 
+            if (process.exitValue() == 0) logErrorOutput(process);
+            else diagnostics.remove(process); // Accepted local exit status.
             String outputStr = output.toString();
             results = new JSONArray(outputStr);
             if (remote.isRemoteType(RemoteItem.INTERNXT)) {
@@ -344,7 +381,8 @@ public class Rclone {
             }
 
         } catch (InterruptedException e) {
-            logErrorOutput(process);
+            if (process != null) process.destroy();
+            Thread.currentThread().interrupt();
             FLog.d(TAG, "getDirectoryContent: Aborted refreshing folder");
             return null;
         } catch (IOException | JSONException e) {
@@ -598,7 +636,9 @@ public class Rclone {
     }
 
     private Process getRuntimeProcess(String[] command, String[] env) throws IOException {
-        return Runtime.getRuntime().exec(command, env);
+        Process process = Runtime.getRuntime().exec(command, env);
+        ProcessRegistry.register(process, command);
+        return process;
     }
 
     private static String remoteType(JSONObject config) {
@@ -1279,6 +1319,7 @@ public class Rclone {
         String[] command = createCommandWithOptions("cat", "--", rclonePath);
         String[] env = getRcloneEnv();
         final Process process = getRuntimeProcess(command, env);
+        collectDiagnostics(process);
         new Thread() {
             @Override
             public void run() {
@@ -1297,6 +1338,7 @@ public class Rclone {
         String[] command = createCommandWithOptions("rcat", "--streaming-upload-cutoff", "500K", "--", rclonePath);
         String[] env = getRcloneEnv();
         final Process process = getRuntimeProcess(command, env);
+        collectDiagnostics(process);
         new Thread() {
             @Override
             public void run() {
@@ -1577,11 +1619,12 @@ public class Rclone {
         String[] command = createCommand("about", "--json", remoteName);
         StringBuilder output = new StringBuilder();
         AboutResult stats;
-        Process process;
+        Process process = null;
         JSONObject aboutJSON;
 
         try {
             process = getRuntimeProcess(command, getRcloneEnv());
+            collectDiagnostics(process);
             try(BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))){
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -1596,8 +1639,14 @@ public class Rclone {
                 return new AboutResult();
             }
 
+            logErrorOutput(process);
             aboutJSON = new JSONObject(output.toString());
-        } catch (IOException | InterruptedException | JSONException e) {
+        } catch (InterruptedException e) {
+            if (process != null) { discardDiagnostics(process); process.destroy(); }
+            Thread.currentThread().interrupt();
+            return new AboutResult();
+        } catch (IOException | JSONException e) {
+            if (process != null) discardDiagnostics(process);
             FLog.e(TAG, "aboutRemote: unexpected error", e);
             return new AboutResult();
         }

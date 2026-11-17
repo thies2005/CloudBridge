@@ -159,6 +159,7 @@ public class RcloneRcd {
             }
             parameters.add("rcd");
             rcd = Runtime.getRuntime().exec(parameters.toArray(new String[0]), getEnv());
+            ProcessRegistry.registerRcd(rcd);
         } catch (IOException e) {
             FLog.e(TAG, "startRcd: error", e);
             throw new RuntimeException(e);

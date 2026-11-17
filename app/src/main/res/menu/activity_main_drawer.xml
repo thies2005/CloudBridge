@@ -22,7 +22,7 @@
         <item
             android:id="@+id/nav_logs"
             android:icon="@drawable/ic_round_list_24"
-            android:title="@string/logFragment" />
+            android:title="@string/current_processes" />
         <item
             android:id="@+id/nav_permissions"
             android:icon="@drawable/ic_twotone_error_24"

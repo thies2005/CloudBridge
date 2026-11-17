@@ -2119,7 +2119,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 }
             }
 
-            if (process != null && process.exitValue() != 0) {
+            if (process != null && !isCancelled && process.exitValue() != 0) {
                 rclone.logErrorOutput(process);
             }
 

@@ -40,6 +40,7 @@ public class StreamingService extends IntentService {
     private final int PERSISTENT_NOTIFICATION_ID = 179;
     private Rclone rclone;
     private Process runningProcess;
+    private volatile boolean stopping;
 
     /**
      * Creates an IntentService.  Invoked by your subclass's constructor.*
@@ -131,6 +132,7 @@ public class StreamingService extends IntentService {
 
         boolean exitedNormally = false;
         if (runningProcess != null) {
+            rclone.collectDiagnostics(runningProcess);
             try {
                 runningProcess.waitFor();
                 exitedNormally = true;
@@ -139,8 +141,9 @@ public class StreamingService extends IntentService {
             }
         }
 
-        if (exitedNormally && runningProcess.exitValue() != 0) {
-            rclone.logErrorOutput(runningProcess);
+        if (exitedNormally) {
+            if (stopping) rclone.discardDiagnostics(runningProcess);
+            else rclone.logErrorOutput(runningProcess);
         }
 
         stopForeground(true);
@@ -148,6 +151,7 @@ public class StreamingService extends IntentService {
 
     @Override
     public void onDestroy() {
+        stopping = true;
         super.onDestroy();
         if (null != runningProcess) {
             runningProcess.destroy();

@@ -157,8 +157,8 @@
     <string name="pref_locale">Language</string>
     <string name="pref_locale_dlg_title">Select Language</string>
     <string name="pref_locale_restart_notice">Changing the language will take effect after restarting the app</string>
-    <string name="use_logs">Log rclone errors</string>
-    <string name="use_logs_summary">Error logs will be saved to a local file at (Android/data/de.schuelken.cloudbridge/files/logs)</string>
+    <string name="use_logs">Log rclone diagnostics</string>
+    <string name="use_logs_summary">Save rclone failure diagnostics and important warnings in the app’s private storage.</string>
     <string name="notifications_pref_title">Notifications</string>
     <string name="open_notification_settings_title">More notification settings</string>
     <string name="open_notification_settings_summary">Open the settings to further change how we notify you!</string>
@@ -787,4 +787,13 @@
     <string name="global_search_hint">Search across indexed remotes…</string>
     <string name="global_search_no_indexed_remotes">No remotes are indexed yet. Open a remote\'s 3-dot menu and enable \"Offline search index\" to search across remotes.</string>
     <string name="global_search_no_results">No matching files found</string>
+    <string name="rclone_operation">Rclone operation</string>
+    <string name="rclone_exit_status">Rclone exited with status %1$d.</string>
+    <string name="rclone_daemon">rclone daemon</string>
+    <string name="current_processes">Current processes</string>
+    <string name="no_current_processes">No current processes</string>
+    <string name="logs_copied">Logs copied</string>
+    <string name="logs_too_large">Logs are too large to copy to the clipboard.</string>
+    <string name="logs_clear_failed">Could not clear all logs.</string>
+    <string name="logs_oauth_guidance">Google Drive quota or authorization problems? Create your own OAuth client ID, then use Edit remote to enter the client ID and secret and Re-authenticate the remote. See https://rclone.org/drive/#making-your-own-client-id</string>
 </resources>

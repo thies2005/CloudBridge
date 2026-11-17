@@ -65,8 +65,8 @@ import ca.pkay.rcloneexplorer.Dialogs.Dialogs;
 import ca.pkay.rcloneexplorer.Dialogs.InputDialog;
 import ca.pkay.rcloneexplorer.Dialogs.LoadingDialog;
 import ca.pkay.rcloneexplorer.Fragments.FileExplorerFragment;
-import ca.pkay.rcloneexplorer.Fragments.LogFragment;
 import ca.pkay.rcloneexplorer.Fragments.PermissionFragment;
+import ca.pkay.rcloneexplorer.Fragments.ProcessesFragment;
 import ca.pkay.rcloneexplorer.Fragments.RemotesFragment;
 import ca.pkay.rcloneexplorer.Fragments.TasksFragment;
 import ca.pkay.rcloneexplorer.Fragments.TriggerFragment;
@@ -214,8 +214,9 @@ public class MainActivity extends AppCompatActivity
         String action = intent.getAction();
         boolean hasInternalToken = INTERNAL_ACTION_TOKEN.equals(intent.getStringExtra(EXTRA_INTERNAL_ACTION_TOKEN));
         if (MAIN_ACTIVITY_START_LOG.equals(action) && hasInternalToken) {
-            startLogFragment();
-            navigationView.setCheckedItem(R.id.nav_logs);
+            Intent logsIntent = new Intent(this, SettingsActivity.class);
+            logsIntent.putExtra(SettingsActivity.EXTRA_OPEN_LOGS, true);
+            startActivity(logsIntent);
         } else if (MAIN_ACTIVITY_START_IMPORT.equals(action) && hasInternalToken) {
             //todo: Migrate import and export out of the main activity
             startConfigImportFlow();
@@ -381,7 +382,7 @@ public class MainActivity extends AppCompatActivity
             }
             fragment = null;
         } else if (fragment instanceof TasksFragment || fragment instanceof TriggerFragment
-                || fragment instanceof LogFragment || fragment instanceof PermissionFragment) {
+                || fragment instanceof ProcessesFragment || fragment instanceof PermissionFragment) {
             startRemotesFragment();
             return;
         }
@@ -396,7 +397,7 @@ public class MainActivity extends AppCompatActivity
             destination = R.id.nav_tasks;
         } else if (fragment instanceof TriggerFragment) {
             destination = R.id.nav_trigger;
-        } else if (fragment instanceof LogFragment) {
+        } else if (fragment instanceof ProcessesFragment) {
             destination = R.id.nav_logs;
         } else if (fragment instanceof PermissionFragment) {
             destination = R.id.nav_permissions;
@@ -461,7 +462,7 @@ public class MainActivity extends AppCompatActivity
                 startTriggerFragment();
                 break;
             case R.id.nav_logs:
-                startLogFragment();
+                startFragment(new ProcessesFragment());
                 break;
             case R.id.nav_permissions:
                 startPermissionFragment();
@@ -494,10 +495,6 @@ public class MainActivity extends AppCompatActivity
 
     private void startTriggerFragment() {
         startFragment(TriggerFragment.newInstance());
-    }
-
-    private void startLogFragment() {
-        startFragment(LogFragment.newInstance());
     }
 
     private void startPermissionFragment() {
