@@ -114,4 +114,7 @@
         android:layout_height="match_parent"
         android:layout_gravity="center"
         android:visibility="invisible" />
+    <include
+        android:id="@+id/no_search_results_view"
+        layout="@layout/no_search_results" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

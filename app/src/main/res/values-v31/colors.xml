@@ -15,7 +15,13 @@
     <color name="md_theme_light_tertiaryContainer">@android:color/system_accent3_400</color>
     <color name="md_theme_light_onTertiaryContainer">@android:color/system_accent3_800</color>
 
-
+    <color name="md_theme_light_background">@android:color/system_neutral1_10</color>
+    <color name="md_theme_light_onBackground">@android:color/system_neutral1_900</color>
+    <color name="md_theme_light_surface">@android:color/system_neutral1_10</color>
+    <color name="md_theme_light_onSurface">@android:color/system_neutral1_900</color>
+    <color name="md_theme_light_surfaceVariant">@android:color/system_neutral2_100</color>
+    <color name="md_theme_light_onSurfaceVariant">@android:color/system_neutral2_700</color>
+    <color name="md_theme_light_outline">@android:color/system_neutral2_500</color>
 
     <color name="md_theme_dark_primary">@android:color/system_accent1_200</color>
     <color name="md_theme_dark_onPrimary">@android:color/system_accent1_900</color>
@@ -32,19 +38,24 @@
     <color name="md_theme_dark_tertiaryContainer">@android:color/system_accent3_400</color>
     <color name="md_theme_dark_onTertiaryContainer">@android:color/system_accent3_100</color>
 
-
+    <color name="md_theme_dark_background">@android:color/system_neutral1_900</color>
+    <color name="md_theme_dark_onBackground">@android:color/system_neutral1_100</color>
+    <color name="md_theme_dark_surface">@android:color/system_neutral1_900</color>
+    <color name="md_theme_dark_onSurface">@android:color/system_neutral1_100</color>
+    <color name="md_theme_dark_surfaceVariant">@android:color/system_neutral2_700</color>
+    <color name="md_theme_dark_onSurfaceVariant">@android:color/system_neutral2_200</color>
+    <color name="md_theme_dark_outline">@android:color/system_neutral2_400</color>
 
     <color name="selectedItem">@android:color/system_neutral2_500</color>
 
     <color name="white">@android:color/white</color>
     <color name="colorAccent">@color/md_theme_light_secondary</color>
     <color name="textColorTertiary">@color/md_theme_light_tertiary</color>
-    <color name="textColorPrimary">@color/md_theme_light_onPrimary</color>
-    <color name="textColorSecondary">@color/md_theme_light_onSecondary</color>
+    <color name="textColorPrimary">@color/md_theme_light_onSurface</color>
+    <color name="textColorSecondary">@color/md_theme_light_onSurfaceVariant</color>
     <color name="textColorHighlight">@android:color/system_accent1_400</color>
     <color name="cardColor">@color/md_theme_light_primaryContainer</color>
     <color name="iconTint">@color/white</color>
-
 
     <color name="dividerColor">@color/md_theme_light_secondaryContainer</color>
     <color name="fabOverlayColor">@color/md_theme_light_secondary</color>
