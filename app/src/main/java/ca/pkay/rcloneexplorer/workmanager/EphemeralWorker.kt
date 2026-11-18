@@ -18,6 +18,7 @@ import androidx.work.WorkerParameters
 import ca.pkay.rcloneexplorer.Items.FileItem
 import ca.pkay.rcloneexplorer.Items.RemoteItem
 import ca.pkay.rcloneexplorer.Log2File
+import ca.pkay.rcloneexplorer.ProcessRegistry
 import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.notifications.prototypes.WorkerNotification
@@ -343,6 +344,8 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             mNotificationManager?.cancelSyncNotification(ongoingNotificationID)
             return
         }
+        val totalProcs = sPendingProcesses.size.coerceAtLeast(1)
+        var procIndex = 0
         while (!isStopped && sPendingProcesses.isNotEmpty()) {
             // Fold the finished process's deletions into the running total; its stats are
             // replaced as soon as the next process starts reporting.
@@ -351,8 +354,21 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             if (sRcloneProcess == null) {
                 failureReason = FAILURE_REASON.RCLONE_ERROR
                 log("Sync: Rclone process could not be started")
+                procIndex++
                 continue
             }
+            val basePercent = (procIndex * 100) / totalProcs
+            ProcessRegistry.updateProgress(
+                sRcloneProcess,
+                title,
+                basePercent,
+                totalProcs > 1,
+                title,
+                "",
+                "",
+                emptyList()
+            )
+            procIndex++
             readProcess(sRcloneProcess!!, title)
         }
         mNotificationManager?.cancelSyncNotification(ongoingNotificationID)
@@ -380,6 +396,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
 
                     // Process all log lines so stats/progress advance the notification
                     statusObject.parseLoglineToStatusObject(logline)
+                    if (statusObject.notificationContent.isNotEmpty() || statusObject.notificationPercent > 0) {
+                        ProcessRegistry.updateFromStatusObject(localProcessReference, title, statusObject)
+                    }
 
                     // Only rebuild when there is content to show, and at most once per
                     // minNotifyIntervalMs to avoid notification churn on busy logs.

@@ -88,11 +88,13 @@ import ca.pkay.rcloneexplorer.Items.FileItem;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.Items.SyncDirectionObject;
 import ca.pkay.rcloneexplorer.Items.Task;
+import ca.pkay.rcloneexplorer.ProcessRegistry;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.FileExplorerRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.Services.StreamingService;
 import ca.pkay.rcloneexplorer.Services.ThumbnailsLoadingService;
+import ca.pkay.rcloneexplorer.notifications.support.StatusObject;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.LargeParcel;
@@ -127,6 +129,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     public static final int STREAMING_INTENT_RESULT = 468;
     private static final String TAG = "FileExplorerFragment";
     private static final String ARG_REMOTE = "remote_param";
+    private static final String ARG_INITIAL_PATH = "initial_path_param";
     private static final String SHARED_PREFS_SORT_ORDER = "ca.pkay.rcexplorer.sort_order";
     private static final int FILE_PICKER_UPLOAD_RESULT = 186;
     private static final int FILE_PICKER_DOWNLOAD_RESULT = 204;
@@ -218,9 +221,16 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
     @SuppressWarnings("unused")
     public static FileExplorerFragment newInstance(RemoteItem remoteItem) {
+        return newInstance(remoteItem, null);
+    }
+
+    public static FileExplorerFragment newInstance(RemoteItem remoteItem, @Nullable String initialPath) {
         FileExplorerFragment fragment = new FileExplorerFragment();
         Bundle args = new Bundle();
         args.putParcelable(ARG_REMOTE, remoteItem);
+        if (initialPath != null && !initialPath.isEmpty()) {
+            args.putString(ARG_INITIAL_PATH, initialPath);
+        }
         fragment.setArguments(args);
         return fragment;
     }
@@ -248,8 +258,20 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
         String path;
         if (savedInstanceState == null) {
-            path = "//" + remoteName;
-            directoryObject.setPath(path);
+            String initialPath = getArguments().getString(ARG_INITIAL_PATH);
+            if (initialPath != null && !initialPath.equals("//" + remoteName)) {
+                initialPath = initialPath.replaceAll("^/+|/+$", "");
+            } else {
+                initialPath = null;
+            }
+            if (initialPath != null && !initialPath.isEmpty()) {
+                path = initialPath;
+                directoryObject.setPath(path);
+                buildStackFromPath(remoteName, path);
+            } else {
+                path = "//" + remoteName;
+                directoryObject.setPath(path);
+            }
         } else {
             path = savedInstanceState.getString(SAVED_PATH);
             if (path == null) {
@@ -359,11 +381,10 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         breadcrumbView = ((FragmentActivity) context).findViewById(R.id.breadcrumb_view);
         breadcrumbView.setOnClickListener(this);
         breadcrumbView.setVisibility(View.VISIBLE);
+        breadcrumbView.clearCrumbs();
         breadcrumbView.addCrumb(remote.getDisplayName(), "//" + remoteName);
-        if (savedInstanceState != null) {
-            if (!directoryObject.getCurrentPath().equals("//" + remoteName)) {
-                breadcrumbView.buildBreadCrumbsFromPath(directoryObject.getCurrentPath());
-            }
+        if (!directoryObject.getCurrentPath().equals("//" + remoteName)) {
+            breadcrumbView.buildBreadCrumbsFromPath(directoryObject.getCurrentPath());
         }
 
         searchBar = ((FragmentActivity) context).findViewById(R.id.search_bar);
@@ -1103,8 +1124,58 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                     results = folderSnapshot;
                 } else {
                     int maxItems = 500;
+                    final long searchStartMs = System.currentTimeMillis();
+                    final StatusObject statusHelper = new StatusObject(context.getApplicationContext());
+                    final String procTitle = getString(R.string.search_recursive_process_title, remote.getDisplayName());
                     List<FileItem> allItems = rclone.getDirectoryContentRecursive(
-                            remote, currentPath, startAtRoot, 8, maxItems, recursiveSearchProcess);
+                            remote,
+                            currentPath,
+                            startAtRoot,
+                            8,
+                            maxItems,
+                            recursiveSearchProcess,
+                            (itemsFound, bytesFound, entryPath) -> {
+                                Process proc = recursiveSearchProcess.get();
+                                if (proc != null) {
+                                    int pct = itemsFound <= 0
+                                            ? 0
+                                            : Math.min(95, Math.max(1, (int) ((itemsFound * 95.0) / (itemsFound + 300.0))));
+                                    long elapsedMs = Math.max(1000L, System.currentTimeMillis() - searchStartMs);
+                                    int elapsedSec = (int) (elapsedMs / 1000L);
+                                    int itemsPerSec = Math.max(1, (int) ((itemsFound * 1000L) / elapsedMs));
+                                    int etaSec = itemsFound <= 0 ? 0 : Math.max(1, (int) ((elapsedMs * (100 - pct)) / Math.max(pct, 1) / 1000L));
+                                    String etaFormatted = itemsFound <= 0 ? "" : statusHelper.prettyPrintDuration(etaSec);
+                                    String elapsedFormatted = statusHelper.prettyPrintDuration(elapsedSec);
+                                    String contentText = itemsFound <= 0
+                                            ? getString(R.string.search_recursive_running, 0)
+                                            : getString(R.string.search_recursive_progress_eta, itemsFound, etaFormatted);
+                                    List<String> details = new ArrayList<>();
+                                    details.add(getString(R.string.search_index_items_mapped, itemsFound));
+                                    if (itemsFound > 0) {
+                                        details.add(getString(R.string.search_index_speed, itemsPerSec));
+                                        details.add(getString(R.string.sync_notification_remaining, etaFormatted));
+                                    }
+                                    details.add(getString(R.string.sync_notification_elapsed, elapsedFormatted));
+                                    if (entryPath != null && !entryPath.isEmpty()) {
+                                        details.add(getString(R.string.search_index_current_path, entryPath));
+                                    }
+                                    ProcessRegistry.updateProgress(
+                                            proc,
+                                            procTitle,
+                                            pct,
+                                            itemsFound > 0,
+                                            contentText,
+                                            etaFormatted,
+                                            itemsFound > 0 ? itemsPerSec + " items/s" : "",
+                                            details
+                                    );
+                                }
+                                searchDebounceHandler.post(() -> {
+                                    if (isAdded() && isSearchMode && searchStatusText != null) {
+                                        searchStatusText.setText(getString(R.string.search_recursive_running, itemsFound));
+                                    }
+                                });
+                            });
                     if (allItems == null) {
                         allItems = Collections.emptyList();
                     }
@@ -1372,10 +1443,29 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
     @Override
     public void onDirectoryClicked(FileItem fileItem, int position) {
+        if (isSearchMode && fileItem.getRemote() != null && !fileItem.getRemote().getName().equals(remoteName)) {
+            RemoteItem targetRemote = fileItem.getRemote();
+            String targetPath = fileItem.getPath();
+            searchClicked();
+            Activity host = getActivity();
+            if (host instanceof MainActivity) {
+                ((MainActivity) host).openRemoteAtPath(targetRemote, targetPath);
+            }
+            return;
+        }
+
+        boolean wasDeepSearch = isSearchMode && searchScope != SearchScope.FOLDER;
         directoryPosition.put(directoryObject.getCurrentPath(), position);
-        breadcrumbView.addCrumb(fileItem.getName(), fileItem.getPath());
+        if (wasDeepSearch) {
+            buildStackFromPath(remoteName, fileItem.getPath());
+            breadcrumbView.clearCrumbs();
+            breadcrumbView.addCrumb(remote.getDisplayName(), "//" + remoteName);
+            breadcrumbView.buildBreadCrumbsFromPath(fileItem.getPath());
+        } else {
+            breadcrumbView.addCrumb(fileItem.getName(), fileItem.getPath());
+            pathStack.push(directoryObject.getCurrentPath());
+        }
         swipeRefreshLayout.setRefreshing(true);
-        pathStack.push(directoryObject.getCurrentPath());
         if (!isInMoveMode && !recyclerViewAdapter.isInSelectMode()) {
             fab.show();
         }
@@ -2051,10 +2141,11 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         @Override
         protected Boolean doInBackground(FileItem... fileItems) {
             FileItem fileItem = fileItems[0];
+            RemoteItem targetRemote = fileItem.getRemote() != null ? fileItem.getRemote() : remote;
             mimeType = fileItem.getMimeType();
             CacheManager cacheManager = CacheManager.getInstance(context);
             File cachedFile = cacheManager.getCachedFile(
-                    remote.getName(),
+                    targetRemote.getName(),
                     fileItem.getPath(),
                     fileItem.getSize(),
                     fileItem.getModTime(),
@@ -2088,13 +2179,25 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             }
             fileLocation = targetFile.getAbsolutePath();
 
-            process = rclone.downloadFile(remote, fileItem, saveLocation);
-
+            process = rclone.downloadFile(targetRemote, fileItem, saveLocation);
             if (process != null) {
+                rclone.collectDiagnostics(process);
+                ProcessRegistry.updateProgress(
+                        process,
+                        fileItem.getName(),
+                        0,
+                        false,
+                        getString(R.string.loading_file),
+                        "",
+                        "",
+                        Collections.emptyList()
+                );
                 try {
                     process.waitFor();
                 } catch (InterruptedException e) {
-                    if (!isCancelled) {
+                    if (isCancelled) {
+                        rclone.discardDiagnostics(process);
+                    } else {
                         FLog.e(TAG, "DownloadAndOpen/doInBackground: error waiting for process", e);
                     }
                     return false;
@@ -2102,9 +2205,10 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             }
 
             if (process != null && process.exitValue() == 0) {
+                rclone.logErrorOutput(process);
                 File savedFile = new File(fileLocation);
                 File stored = cacheManager.putCachedFile(
-                        remote.getName(),
+                        targetRemote.getName(),
                         fileItem.getPath(),
                         fileItem.getSize(),
                         fileItem.getModTime(),
@@ -2119,8 +2223,12 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 }
             }
 
-            if (process != null && !isCancelled && process.exitValue() != 0) {
-                rclone.logErrorOutput(process);
+            if (process != null && process.exitValue() != 0) {
+                if (isCancelled) {
+                    rclone.discardDiagnostics(process);
+                } else {
+                    rclone.logErrorOutput(process);
+                }
             }
 
             return process != null && process.exitValue() == 0;
@@ -2188,6 +2296,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return false;
             }
             fileItem = fileItems[0];
+            RemoteItem targetRemote = fileItem.getRemote() != null ? fileItem.getRemote() : remote;
             int port = allocatePort(8080, true);
             byte[] tokenBytes = new byte[16];
             new java.security.SecureRandom().nextBytes(tokenBytes);
@@ -2195,7 +2304,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                     tokenBytes, android.util.Base64.NO_WRAP | android.util.Base64.NO_PADDING | android.util.Base64.URL_SAFE);
             serveIntent = new Intent(context, StreamingService.class);
             serveIntent.putExtra(StreamingService.SERVE_PATH_ARG, fileItem.getPath());
-            serveIntent.putExtra(StreamingService.REMOTE_ARG, remote);
+            serveIntent.putExtra(StreamingService.REMOTE_ARG, targetRemote);
             serveIntent.putExtra(StreamingService.SHOW_NOTIFICATION_TEXT, false);
             serveIntent.putExtra(StreamingService.SERVE_PORT, port);
             serveIntent.putExtra(StreamingService.SERVE_BASE_URL, streamToken);

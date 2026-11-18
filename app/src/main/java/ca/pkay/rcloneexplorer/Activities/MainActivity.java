@@ -82,6 +82,7 @@ import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.PermissionManager;
 import ca.pkay.rcloneexplorer.util.SharedPreferencesUtil;
+import de.schuelken.cloudbridge.search.GlobalSearchFragment;
 import de.schuelken.cloudbridge.updates.UpdateChecker;
 import java9.util.stream.Stream;
 
@@ -401,6 +402,10 @@ public class MainActivity extends AppCompatActivity
             destination = R.id.nav_logs;
         } else if (fragment instanceof PermissionFragment) {
             destination = R.id.nav_permissions;
+        } else if (fragment instanceof GlobalSearchFragment) {
+            setTitle(R.string.global_search_title);
+            navigationView.setCheckedItem(R.id.nav_remotes);
+            return true;
         } else if (fragment instanceof RemotesFragment || fragment instanceof FileExplorerFragment) {
             destination = R.id.nav_remotes;
         } else {
@@ -657,11 +662,19 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onRemoteClick(RemoteItem remote) {
-        startRemote(remote, true);
+        startRemote(remote, null, true);
+    }
+
+    public void openRemoteAtPath(RemoteItem remote, @Nullable String initialPath) {
+        startRemote(remote, initialPath, true);
     }
 
     private void startRemote(RemoteItem remote, boolean addToBackStack) {
-        fragment = FileExplorerFragment.newInstance(remote);
+        startRemote(remote, null, addToBackStack);
+    }
+
+    private void startRemote(RemoteItem remote, @Nullable String initialPath, boolean addToBackStack) {
+        fragment = FileExplorerFragment.newInstance(remote, initialPath);
         FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
         transaction.replace(R.id.flFragment, fragment, FILE_EXPLORER_FRAGMENT_TAG);
         if (addToBackStack) {

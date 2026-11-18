@@ -41,6 +41,7 @@ import java.net.ServerSocket;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -160,6 +161,16 @@ public class RcloneRcd {
             parameters.add("rcd");
             rcd = Runtime.getRuntime().exec(parameters.toArray(new String[0]), getEnv());
             ProcessRegistry.registerRcd(rcd);
+            ProcessRegistry.updateProgress(
+                    rcd,
+                    context.getString(R.string.rclone_daemon),
+                    0,
+                    false,
+                    context.getString(R.string.rcd_service_notification_no_active_jobs),
+                    "",
+                    "",
+                    Collections.emptyList()
+            );
         } catch (IOException e) {
             FLog.e(TAG, "startRcd: error", e);
             throw new RuntimeException(e);
@@ -523,11 +534,44 @@ public class RcloneRcd {
                 }
             }
             pendingJobs.addAll(pending);
-            if (null != jobsUpdateHandler) {
-                SparseArray<JobStatusResponse> snapshot;
-                synchronized (lastStatus) {
-                    snapshot = lastStatus.clone();
+            SparseArray<JobStatusResponse> snapshot;
+            synchronized (lastStatus) {
+                snapshot = lastStatus.clone();
+            }
+            if (rcd != null) {
+                long running = 0;
+                long finished = 0;
+                long failed = 0;
+                for (int i = 0; i < snapshot.size(); i++) {
+                    JobStatusResponse resp = snapshot.valueAt(i);
+                    if (resp == null) continue;
+                    if (resp.finished) {
+                        if (resp.success) finished++;
+                        else failed++;
+                    } else {
+                        running++;
+                    }
                 }
+                long total = running + finished + failed;
+                if (total > 0) {
+                    int pct = running == 0 ? 100 : (int) (((finished + failed) * 100L) / total);
+                    String statusLine = context.getString(
+                            R.string.rcd_service_notification_stats_template,
+                            running, finished, failed
+                    );
+                    ProcessRegistry.updateProgress(
+                            rcd,
+                            context.getString(R.string.rclone_daemon),
+                            pct,
+                            running > 0,
+                            statusLine,
+                            "",
+                            "",
+                            Collections.emptyList()
+                    );
+                }
+            }
+            if (null != jobsUpdateHandler) {
                 mainThread(() -> jobsUpdateHandler.onRcdJobsUpdate(snapshot));
             }
         }

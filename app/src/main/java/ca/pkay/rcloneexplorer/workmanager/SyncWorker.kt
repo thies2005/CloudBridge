@@ -17,6 +17,7 @@ import ca.pkay.rcloneexplorer.Database.DatabaseHandler
 import ca.pkay.rcloneexplorer.Items.SyncDirectionObject
 import ca.pkay.rcloneexplorer.Items.Task
 import ca.pkay.rcloneexplorer.Log2File
+import ca.pkay.rcloneexplorer.ProcessRegistry
 import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.notifications.GenericSyncNotification
@@ -228,6 +229,16 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
                     log("Sync: Rclone process could not be started for direction ${mTask.direction}")
                     return
                 }
+                ProcessRegistry.updateProgress(
+                    sRcloneProcess,
+                    mTitle,
+                    0,
+                    false,
+                    mContext.getString(R.string.sync_service_notification_startingsync),
+                    "",
+                    "",
+                    emptyList()
+                )
                 val processExitCode = handleSync(mTitle)
                 failureReason = processFailureReason(processExitCode, failureReason)
                 if (failureReason != FAILURE_REASON.NO_FAILURE) {
@@ -281,6 +292,9 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
                         // Process all log lines for stats/progress updates, not just error/warning
                         // This fixes the notification being stuck on "starting sync"
                         statusObject.parseLoglineToStatusObject(logline)
+                        if (statusObject.notificationContent.isNotEmpty() || statusObject.notificationPercent > 0) {
+                            ProcessRegistry.updateFromStatusObject(localProcessReference, title, statusObject)
+                        }
 
                         // Only update notification if we have content to show
                         if (statusObject.notificationContent.isNotEmpty()) {

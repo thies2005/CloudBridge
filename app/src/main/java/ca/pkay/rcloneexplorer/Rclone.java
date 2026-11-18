@@ -57,6 +57,7 @@ import ca.pkay.rcloneexplorer.Items.FileItem;
 import ca.pkay.rcloneexplorer.Items.FilterEntry;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.Items.SyncDirectionObject;
+import ca.pkay.rcloneexplorer.notifications.support.StatusObject;
 import ca.pkay.rcloneexplorer.rclone.Provider;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.SyncLog;
@@ -253,14 +254,31 @@ public class Rclone {
             java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 
     private static class DiagnosticCollector extends Thread {
+        private final Process process;
         private final InputStream stream;
+        @Nullable private final StatusObject statusObject;
         private final StringBuilder warnings = new StringBuilder();
         private final StringBuilder output = new StringBuilder();
-        DiagnosticCollector(Process process) { this.stream = process.getErrorStream(); setDaemon(true); }
+        DiagnosticCollector(@Nullable Context context, Process process) {
+            this.process = process;
+            this.stream = process.getErrorStream();
+            this.statusObject = context != null ? new StatusObject(context.getApplicationContext()) : null;
+            setDaemon(true);
+        }
         @Override public void run() {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (statusObject != null && trimmed.startsWith("{") && trimmed.contains("\"stats\"")) {
+                        try {
+                            JSONObject logline = new JSONObject(trimmed);
+                            if (logline.has("stats")) {
+                                statusObject.parseLoglineToStatusObject(logline);
+                                ProcessRegistry.updateFromStatusObject(process, null, statusObject);
+                            }
+                        } catch (JSONException ignored) { }
+                    }
                     String lower = line.toLowerCase(Locale.ROOT);
                     if (warnings.length() < 8192 && RcloneDiagnostics.isSharedClientRetirement(lower))
                         warnings.append(line, 0, Math.min(line.length(), 8192 - warnings.length())).append('\n');
@@ -273,7 +291,8 @@ public class Rclone {
     }
 
     public void collectDiagnostics(Process process) {
-        DiagnosticCollector collector = new DiagnosticCollector(process);
+        if (process == null) return;
+        DiagnosticCollector collector = new DiagnosticCollector(context, process);
         diagnostics.put(process, collector);
         collector.start();
     }
@@ -394,6 +413,10 @@ public class Rclone {
         return parseLsJsonArray(remote, path, results, startAtRoot, Integer.MAX_VALUE, process);
     }
 
+    public interface RecursiveListProgressListener {
+        void onProgress(int itemsFound, long bytesFound, @Nullable String currentPath);
+    }
+
     @Nullable
     public List<FileItem> getDirectoryContentRecursive(
             RemoteItem remote,
@@ -402,6 +425,18 @@ public class Rclone {
             int maxDepth,
             int maxItems,
             @Nullable java.util.concurrent.atomic.AtomicReference<Process> processOut) {
+        return getDirectoryContentRecursive(remote, path, startAtRoot, maxDepth, maxItems, processOut, null);
+    }
+
+    @Nullable
+    public List<FileItem> getDirectoryContentRecursive(
+            RemoteItem remote,
+            String path,
+            boolean startAtRoot,
+            int maxDepth,
+            int maxItems,
+            @Nullable java.util.concurrent.atomic.AtomicReference<Process> processOut,
+            @Nullable RecursiveListProgressListener progressListener) {
         if (remote == null) {
             return null;
         }
@@ -433,24 +468,62 @@ public class Rclone {
         Process process = null;
         try {
             process = getRuntimeProcess(command, env);
+            collectDiagnostics(process);
             if (processOut != null) {
                 processOut.set(process);
             }
+            if (progressListener != null) {
+                progressListener.onProgress(0, 0L, null);
+            }
             StringBuilder output = new StringBuilder();
+            int itemsFound = 0;
+            long bytesFound = 0L;
+            long lastProgressMs = 0L;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line);
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("{")) {
+                        itemsFound++;
+                        String entryPath = null;
+                        long entrySize = 0L;
+                        try {
+                            String jsonText = trimmed.endsWith(",")
+                                    ? trimmed.substring(0, trimmed.length() - 1)
+                                    : trimmed;
+                            JSONObject entryJson = new JSONObject(jsonText);
+                            entrySize = Math.max(0L, entryJson.optLong("Size", 0L));
+                            entryPath = entryJson.optString("Path", null);
+                        } catch (JSONException ignored) {
+                        }
+                        bytesFound += entrySize;
+                        long now = System.currentTimeMillis();
+                        if (progressListener != null && (itemsFound == 1 || now - lastProgressMs >= 200L)) {
+                            lastProgressMs = now;
+                            progressListener.onProgress(itemsFound, bytesFound, entryPath);
+                        }
+                    }
                 }
+            }
+            if (progressListener != null && itemsFound > 0) {
+                progressListener.onProgress(itemsFound, bytesFound, null);
             }
             process.waitFor();
             if (process.exitValue() != 0 && (process.exitValue() != 6 || !remote.isRemoteType(RemoteItem.LOCAL, RemoteItem.ALIAS))) {
                 logErrorOutput(process);
                 return null;
             }
+            if (process.exitValue() == 0) {
+                logErrorOutput(process);
+            } else {
+                discardDiagnostics(process);
+            }
             JSONArray results = new JSONArray(output.toString());
             return parseLsJsonArray(remote, path, results, startAtRoot, maxItems, process);
         } catch (InterruptedException e) {
+            if (process != null) process.destroy();
+            Thread.currentThread().interrupt();
             logErrorOutput(process);
             return null;
         } catch (IOException | JSONException e) {
@@ -1282,7 +1355,9 @@ public class Rclone {
 
         oldFilePath = remoteName + ":" + localRemotePath + moveItem.getPath();
         newFilePath = (newLocation.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath + moveItem.getName() : remoteName + ":" + localRemotePath + newLocation + "/" + moveItem.getName();
-        return startFileTransfer("moveto", Collections.emptyList(), oldFilePath, newFilePath, remote, remote);
+        return startFileTransfer("moveto",
+                Arrays.asList("--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log"),
+                oldFilePath, newFilePath, remote, remote);
     }
 
     public Boolean moveTo(RemoteItem remote, String oldFile, String newFile) {
@@ -1297,16 +1372,20 @@ public class Rclone {
 
         String oldFilePath = remoteName + ":" + localRemotePath + oldFile;
         String newFilePath = remoteName + ":" + localRemotePath + newFile;
-        Process process = startFileTransfer("moveto", Collections.emptyList(), oldFilePath, newFilePath, remote, remote);
+        Process process = startFileTransfer("moveto",
+                Arrays.asList("--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log"),
+                oldFilePath, newFilePath, remote, remote);
         if (process == null) {
             return false;
         }
+        collectDiagnostics(process);
         try {
             process.waitFor();
             if (process.exitValue() != 0) {
                 logErrorOutput(process);
                 return false;
             }
+            logErrorOutput(process);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             FLog.e(TAG, "moveTo: error running rclone", e);

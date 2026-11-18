@@ -25,6 +25,12 @@ class CacheManager private constructor(context: Context) {
         val fetchedAt: Long
     )
 
+    data class IndexStats(
+        val itemCount: Int,
+        val totalBytes: Long,
+        val fetchedAt: Long
+    )
+
     fun getMaxCacheBytes(): Long {
         val key = appContext.getString(R.string.pref_key_cache_max_size)
         return prefs.getLong(key, DEFAULT_MAX_CACHE_BYTES).coerceAtLeast(MIN_CACHE_BYTES)
@@ -316,8 +322,25 @@ class CacheManager private constructor(context: Context) {
         }
     }
 
+    fun getIndexStats(remoteName: String): IndexStats? {
+        val fetchedAt = getLastIndexTime(remoteName) ?: return null
+        val db = dbHelper.readableDatabase
+        db.rawQuery(
+            "SELECT COUNT(*), COALESCE(SUM(size), 0) FROM ${CacheDatabaseHelper.TABLE_FILE_ENTRIES} WHERE remote_name = ?",
+            arrayOf(remoteName)
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return IndexStats(0, 0L, fetchedAt)
+            return IndexStats(cursor.getInt(0), cursor.getLong(1), fetchedAt)
+        }
+    }
+
+    @JvmOverloads
     @Synchronized
-    fun saveRecursiveIndex(remoteName: String, items: List<FileItem>) {
+    fun saveRecursiveIndex(
+        remoteName: String,
+        items: List<FileItem>,
+        onProgress: ((written: Int, total: Int) -> Unit)? = null
+    ) {
         val now = System.currentTimeMillis()
         val db = dbHelper.writableDatabase
         db.beginTransaction()
@@ -339,7 +362,10 @@ class CacheManager private constructor(context: Context) {
                 SQLiteDatabase.CONFLICT_REPLACE
             )
 
-            insertEntries(db, remoteName, null, items)
+            insertEntries(db, remoteName, null, items, onProgress)
+            if (items.isEmpty()) {
+                onProgress?.invoke(0, 0)
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -458,7 +484,8 @@ class CacheManager private constructor(context: Context) {
         db: SQLiteDatabase,
         remoteName: String,
         fixedParentPath: String?,
-        items: List<FileItem>
+        items: List<FileItem>,
+        onProgress: ((written: Int, total: Int) -> Unit)? = null
     ) {
         val entryStmt = db.compileStatement(
             """
@@ -475,6 +502,8 @@ class CacheManager private constructor(context: Context) {
             """.trimIndent()
         )
 
+        val total = items.size
+        var written = 0
         for (item in items) {
             val itemPath = normalizePath(item.path)
             val parent = fixedParentPath ?: parentOf(itemPath)
@@ -497,6 +526,11 @@ class CacheManager private constructor(context: Context) {
             ftsStmt.bindString(3, itemPath)
             ftsStmt.bindString(4, item.name ?: "")
             ftsStmt.executeInsert()
+
+            written++
+            if (onProgress != null && (written % 250 == 0 || written == total)) {
+                onProgress(written, total)
+            }
         }
     }
 
