@@ -78,7 +78,7 @@ jobs:
     needs: build-debug-apk
     steps:
       - name: Download debug APK
-        uses: actions/download-artifact@d3f86a106a0bac45b974a6288b6c92c90c0083c5 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: debug-apk-for-scan
           path: scanned-apk
