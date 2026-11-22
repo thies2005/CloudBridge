@@ -400,12 +400,15 @@ class CacheManager private constructor(context: Context) {
         val args = ArrayList<String>(enabledRemotes)
 
         val trimmed = query.trim()
-        val useFts = trimmed.isNotEmpty()
+        val ftsQuery = if (trimmed.isNotEmpty()) buildFtsMatchQuery(trimmed) else ""
+        if (trimmed.isNotEmpty() && ftsQuery.isEmpty()) {
+            return runLikeFallback(enabledRemotes, placeholders, remotesByName, trimmed, filter, limit)
+        }
+
         val results = ArrayList<FileItem>()
         val db = dbHelper.readableDatabase
 
-        val sql = if (useFts) {
-            val ftsQuery = buildFtsMatchQuery(trimmed)
+        val sql = if (ftsQuery.isNotEmpty()) {
             args.add(ftsQuery)
             """
             SELECT e.remote_name, e.path, e.name, e.size, e.mod_time, e.mime_type, e.is_dir
@@ -428,56 +431,68 @@ class CacheManager private constructor(context: Context) {
         try {
             db.rawQuery(sql, args.toTypedArray()).use { cursor ->
                 while (cursor.moveToNext()) {
-                    val remoteName = cursor.getString(0)
-                    val remote = remotesByName[remoteName] ?: continue
-                    val item = FileItem(
-                        remote,
-                        cursor.getString(1),
-                        cursor.getString(2),
-                        cursor.getLong(3),
-                        cursor.getLong(4),
-                        cursor.getString(5),
-                        cursor.getInt(6) == 1,
-                        false
-                    )
+                    val item = readFileItemFromCursor(cursor, remotesByName) ?: continue
                     if (filter.matches(item)) {
                         results.add(item)
                     }
                 }
             }
         } catch (e: Exception) {
-            // Fallback to LIKE query if FTS syntax rejects special characters
-            val likeArgs = ArrayList<String>(enabledRemotes)
-            likeArgs.add("%${trimmed.lowercase(Locale.ROOT)}%")
-            val likeSql = """
-                SELECT remote_name, path, name, size, mod_time, mime_type, is_dir
-                FROM ${CacheDatabaseHelper.TABLE_FILE_ENTRIES}
-                WHERE remote_name IN ($placeholders)
-                  AND LOWER(name) LIKE ?
-                LIMIT $limit
-            """.trimIndent()
-            db.rawQuery(likeSql, likeArgs.toTypedArray()).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val remoteName = cursor.getString(0)
-                    val remote = remotesByName[remoteName] ?: continue
-                    val item = FileItem(
-                        remote,
-                        cursor.getString(1),
-                        cursor.getString(2),
-                        cursor.getLong(3),
-                        cursor.getLong(4),
-                        cursor.getString(5),
-                        cursor.getInt(6) == 1,
-                        false
-                    )
-                    if (filter.matches(item)) {
-                        results.add(item)
-                    }
-                }
-            }
+            return runLikeFallback(enabledRemotes, placeholders, remotesByName, trimmed, filter, limit)
         }
 
         return results
+    }
+
+    private fun runLikeFallback(
+        enabledRemotes: List<String>,
+        placeholders: String,
+        remotesByName: Map<String, RemoteItem>,
+        trimmedQuery: String,
+        filter: SearchFilter,
+        limit: Int
+    ): List<FileItem> {
+        val results = ArrayList<FileItem>()
+        val escaped = trimmedQuery.lowercase(Locale.ROOT)
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        val likeArgs = ArrayList<String>(enabledRemotes)
+        likeArgs.add("%$escaped%")
+        val likeSql = """
+            SELECT remote_name, path, name, size, mod_time, mime_type, is_dir
+            FROM ${CacheDatabaseHelper.TABLE_FILE_ENTRIES}
+            WHERE remote_name IN ($placeholders)
+              AND LOWER(name) LIKE ? ESCAPE '\'
+            LIMIT $limit
+        """.trimIndent()
+        dbHelper.readableDatabase.rawQuery(likeSql, likeArgs.toTypedArray()).use { cursor ->
+            while (cursor.moveToNext()) {
+                val item = readFileItemFromCursor(cursor, remotesByName) ?: continue
+                if (filter.matches(item)) {
+                    results.add(item)
+                }
+            }
+        }
+        return results
+    }
+
+    private fun readFileItemFromCursor(
+        cursor: android.database.Cursor,
+        remotesByName: Map<String, RemoteItem>
+    ): FileItem? {
+        val remoteName = cursor.getString(0)
+        val remote = remotesByName[remoteName] ?: return null
+        return FileItem(
+            remote,
+            cursor.getString(1),
+            cursor.getString(2),
+            cursor.getLong(3),
+            cursor.getLong(4),
+            cursor.getString(5),
+            cursor.getInt(6) == 1,
+            false
+        )
     }
 
     private fun insertEntries(
@@ -532,14 +547,6 @@ class CacheManager private constructor(context: Context) {
                 onProgress(written, total)
             }
         }
-    }
-
-    private fun buildFtsMatchQuery(raw: String): String {
-        val tokens = raw.split(Regex("\\s+"))
-            .map { it.replace(Regex("[^\\p{L}\\p{N}_]"), "") }
-            .filter { it.isNotEmpty() }
-        if (tokens.isEmpty()) return raw
-        return tokens.joinToString(" ") { "$it*" }
     }
 
     private fun collectDataCacheFiles(): List<File> {
@@ -597,6 +604,16 @@ class CacheManager private constructor(context: Context) {
             return instance ?: synchronized(this) {
                 instance ?: CacheManager(context).also { instance = it }
             }
+        }
+
+        @JvmStatic
+        @androidx.annotation.VisibleForTesting
+        internal fun buildFtsMatchQuery(raw: String): String {
+            val tokens = raw.split(Regex("\\s+"))
+                .map { it.replace(Regex("[^\\p{L}\\p{N}_]"), "") }
+                .filter { it.isNotEmpty() }
+            if (tokens.isEmpty()) return ""
+            return tokens.joinToString(" ") { "$it*" }
         }
     }
 }

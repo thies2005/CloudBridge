@@ -199,11 +199,6 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
             startAtRoot = savedInstanceState.getBoolean(SAVED_START_AT_BOOT);
         }
 
-        if (showThumbnails) {
-            initializeThumbnailParams();
-            startThumbnailService();
-        }
-
         swipeRefreshLayout = view.findViewById(R.id.file_explorer_srl);
         swipeRefreshLayout.setOnRefreshListener(this);
 
@@ -273,6 +268,7 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
         registerReceivers();
 
         if (showThumbnails) {
+            initializeThumbnailParams();
             startThumbnailService();
         }
 
@@ -459,15 +455,15 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
         byte[] values = new byte[16];
         random.nextBytes(values);
         thumbnailServerAuth = Base64.encodeToString(values, Base64.NO_PADDING | Base64.NO_WRAP | Base64.URL_SAFE);
-        thumbnailServerPort = allocatePort(29179, true);
+        thumbnailServerPort = allocatePort(0, false);
     }
 
     private static int allocatePort(int port, boolean allocateFallback) {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket(port, 1, java.net.InetAddress.getLoopbackAddress())) {
             serverSocket.setReuseAddress(true);
             return serverSocket.getLocalPort();
         } catch (IOException e) {
-            if (allocateFallback) {
+            if (allocateFallback && port != 0) {
                 return allocatePort(0, false);
             }
         }

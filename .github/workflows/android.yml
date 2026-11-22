@@ -18,7 +18,7 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 # Publication and asset replacement are not safe to cancel partway through. Keep
 # every invocation of this workflow in one serialized queue.
@@ -61,10 +61,20 @@ jobs:
           echo "Published APK certificate SHA-256: $certificate"
           [[ "$certificate" == a352eceb86e3d2fdd6a68ff68ab0637e978b843c8d885fa79e87e16b0cd06993 ]]
 
-  build-and-release:
+  build:
     if: '!inputs.inspect_signing'
-    name: Build & Release
+    name: Build & Verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_kind: ${{ steps.channel.outputs.release_kind }}
+      version_name: ${{ steps.channel.outputs.version_name }}
+      version_code: ${{ steps.channel.outputs.version_code }}
+      base_version: ${{ steps.channel.outputs.base_version }}
+      release_title: ${{ steps.channel.outputs.release_title }}
+      tag: ${{ steps.channel.outputs.tag }}
+      publish: ${{ steps.channel.outputs.publish }}
 
     steps:
       - name: Checkout code
@@ -196,7 +206,7 @@ jobs:
       - name: Run unit tests
         run: |
           set -euo pipefail
-          ./gradlew testOssDebugUnitTest
+          ./gradlew testOssDebugUnitTest :safdav:testDebugUnitTest
 
       - name: Run lint
         run: |
@@ -326,15 +336,46 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  release:
+    needs: build
+    if: ${{ !inputs.inspect_signing && needs.build.outputs.publish == 'true' }}
+    name: Publish Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Download verified build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a6288b6c92c90c0083c5 # v4
+        with:
+          name: cloudbridge-${{ needs.build.outputs.version_name }}
+          path: app/build/outputs/release
+
+      - name: Verify downloaded checksums
+        env:
+          CB_VERSION_NAME: ${{ needs.build.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          cd app/build/outputs/release
+          CHECKSUM_NAME=SHA256SUMS
+          if [[ "$CB_VERSION_NAME" == *-beta.* ]]; then
+            CHECKSUM_NAME="SHA256SUMS-${CB_VERSION_NAME}.txt"
+          fi
+          sha256sum -c "$CHECKSUM_NAME"
+
       - name: Check publication preconditions
         id: publication
-        if: steps.channel.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           TRIGGER_SHA: ${{ github.sha }}
-          RELEASE_KIND: ${{ steps.channel.outputs.release_kind }}
-          STABLE_TAG: ${{ steps.channel.outputs.tag }}
+          RELEASE_KIND: ${{ needs.build.outputs.release_kind }}
+          STABLE_TAG: ${{ needs.build.outputs.tag }}
+          CB_VERSION_NAME: ${{ needs.build.outputs.version_name }}
           STAGING_DIR: app/build/outputs/release
         run: |
           set -euo pipefail
@@ -373,8 +414,7 @@ jobs:
 
       - name: Publish development release
         if: >-
-          steps.channel.outputs.publish == 'true' &&
-          steps.channel.outputs.release_kind == 'development' &&
+          needs.build.outputs.release_kind == 'development' &&
           steps.publication.outputs.master_is_current == 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -386,9 +426,9 @@ jobs:
           body: |
             ## CloudBridge Development Build
 
-            **Version:** ${{ steps.channel.outputs.version_name }}
+            **Version:** ${{ needs.build.outputs.version_name }}
             **Commit:** ${{ github.sha }}
-            **Checksums:** See `SHA256SUMS-${{ steps.channel.outputs.version_name }}.txt`
+            **Checksums:** See `SHA256SUMS-${{ needs.build.outputs.version_name }}.txt`
 
             Automatic build from the verified latest `master` commit.
             This prerelease and its `development` tag move with master. Use the
@@ -405,8 +445,7 @@ jobs:
 
       - name: Remove superseded development assets
         if: >-
-          steps.channel.outputs.publish == 'true' &&
-          steps.channel.outputs.release_kind == 'development' &&
+          needs.build.outputs.release_kind == 'development' &&
           steps.publication.outputs.master_is_current == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -430,17 +469,17 @@ jobs:
 
       - name: Move development tag after successful upload
         if: >-
-          steps.channel.outputs.publish == 'true' &&
-          steps.channel.outputs.release_kind == 'development' &&
+          needs.build.outputs.release_kind == 'development' &&
           steps.publication.outputs.master_is_current == 'true'
         env:
           TRIGGER_SHA: ${{ github.sha }}
         run: git push --force origin "$TRIGGER_SHA:refs/tags/development"
 
       - name: Prepare stable notes with provenance
-        if: steps.channel.outputs.release_kind == 'stable'
+        if: needs.build.outputs.release_kind == 'stable'
         env:
           TRIGGER_SHA: ${{ github.sha }}
+          CB_VERSION_NAME: ${{ needs.build.outputs.version_name }}
         run: |
           cp "docs/releases/${CB_VERSION_NAME}.md" "$RUNNER_TEMP/stable-notes.md"
           printf '\n**Commit:** %s\n' "$TRIGGER_SHA" >> "$RUNNER_TEMP/stable-notes.md"
@@ -448,13 +487,12 @@ jobs:
       - name: Upload stable release draft
         id: stable-release
         if: >-
-          steps.channel.outputs.publish == 'true' &&
-          steps.channel.outputs.release_kind == 'stable' &&
+          needs.build.outputs.release_kind == 'stable' &&
           steps.publication.outputs.upload == 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: ${{ steps.channel.outputs.tag }}
-          name: ${{ steps.channel.outputs.release_title }}
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: ${{ needs.build.outputs.release_title }}
           draft: true
           prerelease: false
           body_path: ${{ runner.temp }}/stable-notes.md
@@ -465,13 +503,12 @@ jobs:
 
       - name: Publish completed stable release
         if: >-
-          steps.channel.outputs.publish == 'true' &&
-          steps.channel.outputs.release_kind == 'stable' &&
+          needs.build.outputs.release_kind == 'stable' &&
           steps.publication.outputs.upload == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          STABLE_TAG: ${{ steps.channel.outputs.tag }}
+          STABLE_TAG: ${{ needs.build.outputs.tag }}
           RELEASE_ID: ${{ steps.stable-release.outputs.id }}
         run: |
           set -euo pipefail

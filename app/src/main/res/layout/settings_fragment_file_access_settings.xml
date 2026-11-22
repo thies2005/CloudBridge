@@ -273,7 +273,7 @@
             android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom"
-            android:visibility="visible">
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="wrap_content"

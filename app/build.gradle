@@ -15,9 +15,18 @@ android {
     }
     def releaseStorePath = unsignedRelease ? null : (keystoreProperties['storeFile'] ?: System.getenv('CB_STORE_FILE'))
     def releaseKeyConfigured = releaseStorePath != null && file(releaseStorePath).exists() && file(releaseStorePath).length() > 0
+    def allowDebugReleaseSigning = project.findProperty('allowDebugReleaseSigning')?.toString()?.toBoolean() ?: false
     def isReleaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') || it.toLowerCase() == 'build' }
-    if (System.getenv('CI') == 'true' && isReleaseRequested && !unsignedRelease && !releaseKeyConfigured) {
-        throw new GradleException("CI release build requires a valid release keystore (CB_STORE_FILE).")
+    if (isReleaseRequested && !unsignedRelease && !releaseKeyConfigured) {
+        if (System.getenv('CI') == 'true') {
+            throw new GradleException("CI release build requires a valid release keystore (CB_STORE_FILE).")
+        }
+        if (!allowDebugReleaseSigning) {
+            throw new GradleException(
+                "Release build requires keystore.properties or CB_STORE_FILE. " +
+                "Pass -PunsignedRelease=true for an unsigned build or -PallowDebugReleaseSigning=true to sign with the debug key."
+            )
+        }
     }
     signingConfigs {
         release {
@@ -81,7 +90,7 @@ android {
                     appIcon: "@mipmap/ic_launcher",
                     appIconRound: "@mipmap/ic_launcher_round"
             ]
-            signingConfig unsignedRelease ? null : (releaseKeyConfigured ? signingConfigs.release : signingConfigs.debug)
+            signingConfig unsignedRelease ? null : (releaseKeyConfigured ? signingConfigs.release : (allowDebugReleaseSigning ? signingConfigs.debug : null))
         }
     }
 
@@ -210,9 +219,9 @@ dependencies {
     // REST Client
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     // JSON
-    implementation 'com.fasterxml.jackson.core:jackson-core:2.14.1'
-    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.14.1'
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.14.1'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.18.3'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.18.3'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
     // Timestmps
     implementation 'com.github.x0b:rfc3339parser:2.0.0'
     // SAF/WebDAV

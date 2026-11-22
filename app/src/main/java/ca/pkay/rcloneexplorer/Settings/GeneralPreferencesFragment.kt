@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
@@ -17,6 +18,7 @@ import ca.pkay.rcloneexplorer.Items.RemoteItem
 import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.util.FLog
+import ca.pkay.rcloneexplorer.util.ProxyPasswordStore
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager
 import ca.pkay.rcloneexplorer.workmanager.SyncManager
 import android.text.format.Formatter
@@ -88,6 +90,45 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             true
         }
 
+        configureProxyPasswordPreference()
+
+    }
+
+    private fun configureProxyPasswordPreference() {
+        val proxyPasswordPref = findPreference<EditTextPreference>(getString(R.string.pref_key_proxy_password))
+            ?: return
+        val appContext = requireContext().applicationContext
+        // Migrate any legacy plaintext preference into AndroidKeyStore-backed storage immediately.
+        ProxyPasswordStore.getDecryptedPassword(appContext)
+        proxyPasswordPref.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+            if (ProxyPasswordStore.hasPassword(appContext)) {
+                getString(R.string.pref_proxy_password_masked)
+            } else {
+                getString(R.string.pref_proxy_password_not_set)
+            }
+        }
+        proxyPasswordPref.setOnBindEditTextListener { editText ->
+            editText.setText("")
+            editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            if (ProxyPasswordStore.hasPassword(appContext)) {
+                editText.setHint(R.string.pref_proxy_password_hint_saved)
+            } else {
+                editText.hint = null
+            }
+        }
+        proxyPasswordPref.setOnPreferenceChangeListener { pref, newValue ->
+            val password = newValue as? String ?: ""
+            ProxyPasswordStore.setPassword(appContext, password)
+            if (pref is EditTextPreference) {
+                pref.text = ""
+                pref.summary = if (ProxyPasswordStore.hasPassword(appContext)) {
+                    getString(R.string.pref_proxy_password_masked)
+                } else {
+                    getString(R.string.pref_proxy_password_not_set)
+                }
+            }
+            false
+        }
     }
 
     private fun updateClearCacheSummary(preference: Preference?) {

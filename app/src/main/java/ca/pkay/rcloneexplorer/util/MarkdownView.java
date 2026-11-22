@@ -9,6 +9,7 @@ import com.google.android.material.color.MaterialColors;
 import java.util.Locale;
 import android.os.Build;
 import android.util.AttributeSet;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.Toast;
 
@@ -34,10 +35,19 @@ public class MarkdownView extends WebView {
 
     public MarkdownView(Context context) {
         super(patchContext(context));
+        initSettings();
     }
 
     public MarkdownView(Context context, AttributeSet attrs) {
         super(patchContext(context), attrs);
+        initSettings();
+    }
+
+    private void initSettings() {
+        WebSettings settings = getSettings();
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setJavaScriptEnabled(false);
     }
 
     public static void closeOnMissingWebView(Activity host, Exception exception) {

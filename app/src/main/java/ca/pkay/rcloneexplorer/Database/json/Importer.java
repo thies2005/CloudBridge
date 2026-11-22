@@ -3,11 +3,18 @@ package ca.pkay.rcloneexplorer.Database.json;
 
 import android.content.Context;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.regex.Pattern;
 
 import ca.pkay.rcloneexplorer.Database.DatabaseHandler;
 import ca.pkay.rcloneexplorer.Items.Filter;
@@ -16,6 +23,8 @@ import ca.pkay.rcloneexplorer.Items.Trigger;
 
 public class Importer {
 
+    private static final Pattern SAFE_REMOTE_NAME_PATTERN =
+            Pattern.compile("^[A-Za-z0-9_][A-Za-z0-9_. -]*$");
 
     public static void importJson(String json, Context context) throws JSONException {
         validateJson(json);
@@ -23,24 +32,73 @@ public class Importer {
         ArrayList<Filter> filters = createFilterList(json);
         ArrayList<Task> tasks = createTasklist(json);
         String internalDataDir = null;
-        try {
-            internalDataDir = new java.io.File(context.getApplicationInfo().dataDir).getCanonicalPath();
-        } catch (java.io.IOException ignored) {
+        if (context != null && context.getApplicationInfo() != null && context.getApplicationInfo().dataDir != null) {
+            try {
+                internalDataDir = new File(context.getApplicationInfo().dataDir).getCanonicalPath();
+            } catch (IOException ignored) {
+                internalDataDir = null;
+            }
         }
         ArrayList<Task> safeTasks = new ArrayList<>();
         for (Task task : tasks) {
-            if (task.getRemoteId() != null && task.getRemoteId().startsWith("-")) continue;
-            if (task.getLocalPath() != null && !task.getLocalPath().isEmpty() && internalDataDir != null) {
-                try {
-                    String canonicalLocal = new java.io.File(task.getLocalPath()).getCanonicalPath();
-                    if (canonicalLocal.equals(internalDataDir) || canonicalLocal.startsWith(internalDataDir + java.io.File.separator)) continue;
-                } catch (java.io.IOException e) {
-                    continue;
-                }
+            if (isSafeTask(task, internalDataDir)) {
+                safeTasks.add(task);
             }
-            safeTasks.add(task);
         }
         new DatabaseHandler(context).replaceAll(triggers, filters, safeTasks);
+    }
+
+    @VisibleForTesting
+    public static boolean isSafeTask(@Nullable Task task, @Nullable String internalDataDir) {
+        if (task == null || internalDataDir == null || internalDataDir.isEmpty()) {
+            return false;
+        }
+        String remoteId = task.getRemoteId();
+        if (remoteId != null && !remoteId.isEmpty() && !isSafeRemoteName(remoteId)) {
+            return false;
+        }
+        String remoteId2 = task.getRemoteId2();
+        if (remoteId2 != null && !remoteId2.isEmpty() && !isSafeRemoteName(remoteId2)) {
+            return false;
+        }
+        String localPath = task.getLocalPath();
+        if (localPath != null && !localPath.isEmpty()) {
+            return isSafeLocalPath(localPath, internalDataDir);
+        }
+        return true;
+    }
+
+    public static boolean isSafeRemoteName(@Nullable String remoteName) {
+        return remoteName != null && SAFE_REMOTE_NAME_PATTERN.matcher(remoteName).matches();
+    }
+
+    public static boolean isSafeLocalPath(@Nullable String localPath, @Nullable String internalDataDir) {
+        if (localPath == null || localPath.isEmpty()
+                || internalDataDir == null || internalDataDir.isEmpty()) {
+            return false;
+        }
+        if (!localPath.startsWith("/") || localPath.indexOf(':') >= 0 || localPath.indexOf('\0') >= 0) {
+            return false;
+        }
+        try {
+            String canonicalDataDir = new File(internalDataDir).getCanonicalPath();
+            String canonicalLocal = new File(localPath).getCanonicalPath();
+            if ("/".equals(canonicalLocal)) {
+                return false;
+            }
+            if (canonicalLocal.equals(canonicalDataDir)) {
+                return false;
+            }
+            if (canonicalLocal.startsWith(canonicalDataDir + File.separator)) {
+                return false;
+            }
+            if (canonicalDataDir.startsWith(canonicalLocal + File.separator)) {
+                return false;
+            }
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     public static void validateJson(String json) throws JSONException {

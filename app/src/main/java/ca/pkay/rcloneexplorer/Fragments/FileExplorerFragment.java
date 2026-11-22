@@ -201,13 +201,16 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor();
     private final AtomicReference<Process> recursiveSearchProcess = new AtomicReference<>();
     private File pendingApkInstallFile;
+    private String pendingApkRemoteLabel;
     private final ActivityResultLauncher<Intent> installPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (pendingApkInstallFile != null && context != null) {
                     File file = pendingApkInstallFile;
+                    String label = pendingApkRemoteLabel;
                     pendingApkInstallFile = null;
+                    pendingApkRemoteLabel = null;
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.getPackageManager().canRequestPackageInstalls()) {
-                        ApkInstallHelper.launchViewIntent(context, file, ApkInstallHelper.MIME_APK);
+                        ApkInstallHelper.confirmAndInstallApk(context, file, label);
                     }
                 }
             });
@@ -325,11 +328,6 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             startAtRoot = savedInstanceState.getBoolean(SAVED_START_AT_BOOT);
         }
 
-        if (showThumbnails) {
-            initializeThumbnailParams();
-            startThumbnailService();
-        }
-
         swipeRefreshLayout = view.findViewById(R.id.file_explorer_srl);
         swipeRefreshLayout.setOnRefreshListener(this);
 
@@ -429,6 +427,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         registerReceivers();
 
         if (showThumbnails) {
+            initializeThumbnailParams();
             startThumbnailService();
         }
 
@@ -726,7 +725,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
     // serve callback
     @Override
-    public void onServeOptionsSelected(int protocol, boolean allowRemoteAccess, String user, String password) {
+    public void onServeOptionsSelected(int protocol, boolean allowRemoteAccess, boolean allowWriteAccess, String user, String password) {
         // GH-87: Release old stream
         context.stopService(new Intent(context, StreamingService.class));
 
@@ -735,6 +734,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         intent.putExtra(StreamingService.REMOTE_ARG, remote);
         intent.putExtra(StreamingService.SHOW_NOTIFICATION_TEXT, true);
         intent.putExtra(StreamingService.ALLOW_REMOTE_ACCESS, allowRemoteAccess);
+        intent.putExtra(StreamingService.ALLOW_WRITE, allowWriteAccess);
         intent.putExtra(StreamingService.AUTHENTICATION_USERNAME, user);
         intent.putExtra(StreamingService.AUTHENTICATION_PASSWORD, password);
 
@@ -799,15 +799,15 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         byte[] values = new byte[16];
         random.nextBytes(values);
         thumbnailServerAuth = Base64.encodeToString(values, Base64.NO_PADDING | Base64.NO_WRAP | Base64.URL_SAFE);
-        thumbnailServerPort = allocatePort(29179, true);
+        thumbnailServerPort = allocatePort(0, false);
     }
 
     private static int allocatePort(int port, boolean allocateFallback) {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket(port, 1, java.net.InetAddress.getLoopbackAddress())) {
             serverSocket.setReuseAddress(true);
             return serverSocket.getLocalPort();
         } catch (IOException e) {
-            if (allocateFallback) {
+            if (allocateFallback && port != 0) {
                 return allocatePort(0, false);
             }
         }
@@ -1564,6 +1564,8 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                     AlertDialog.Builder builder = new AlertDialog.Builder(context);
                     builder.setItems(serveOptions, (dialog, which) -> {
                         Intent intent = new Intent(getContext(), StreamingService.class);
+                        intent.putExtra(StreamingService.ALLOW_REMOTE_ACCESS, false);
+                        intent.putExtra(StreamingService.ALLOW_WRITE, false);
                         switch (which) {
                             case 0: // HTTP
                                 intent.putExtra(StreamingService.SERVE_PATH_ARG, fileItem.getPath());
@@ -2249,8 +2251,10 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             File file = new File(fileLocation);
-            ApkInstallHelper.openFile(context, file, mimeType, openAs, (settingsIntent, apkFile) -> {
+            String remoteLabel = remote != null ? remote.getDisplayName() : null;
+            ApkInstallHelper.openFile(context, file, mimeType, openAs, remoteLabel, (settingsIntent, apkFile) -> {
                 pendingApkInstallFile = apkFile;
+                pendingApkRemoteLabel = remoteLabel;
                 installPermissionLauncher.launch(settingsIntent);
                 return kotlin.Unit.INSTANCE;
             });
@@ -2297,7 +2301,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             }
             fileItem = fileItems[0];
             RemoteItem targetRemote = fileItem.getRemote() != null ? fileItem.getRemote() : remote;
-            int port = allocatePort(8080, true);
+            int port = allocatePort(0, false);
             byte[] tokenBytes = new byte[16];
             new java.security.SecureRandom().nextBytes(tokenBytes);
             String streamToken = android.util.Base64.encodeToString(
@@ -2378,28 +2382,28 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
         @Override
         protected void onPostExecute(Boolean success) {
+            Dialogs.dismissSilently(loadingDialog);
             if (!isRunning) {
-                // TODO: restructure user flow
-                //       1) Start the host service and display a notification
-                //          "Loading file for streaming"
-                //       2) If the stream becomes available, set notification
-                //          intent to start stream
-                //          a) The user has not navigated away -> invoke Intent
-                //          b) The user has navigated away -> Send an intent to
-                //             the service to update its notification
                 FLog.w(TAG, "Streaming failed: user navigated away before stream could load");
+                if (context != null && serveIntent != null) {
+                    context.stopService(serveIntent);
+                }
                 return;
             }
-            Dialogs.dismissSilently(loadingDialog);
-            if(success) {
+            if (success) {
                 Activity activity = getActivity();
                 if (null == activity) {
+                    if (context != null && serveIntent != null) {
+                        context.stopService(serveIntent);
+                    }
                     return;
                 }
                 tryStartActivityForResult(activity, intent, STREAMING_INTENT_RESULT);
             } else {
                 Toast.makeText(context, getString(R.string.streaming_task_failed), Toast.LENGTH_LONG).show();
-                context.stopService(serveIntent);
+                if (context != null && serveIntent != null) {
+                    context.stopService(serveIntent);
+                }
             }
         }
     }

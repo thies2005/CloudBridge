@@ -105,9 +105,7 @@
             android:key="@string/pref_key_proxy_password"
             android:title="@string/pref_proxy_password"
             app:dependency="@string/pref_key_use_proxy"
-            android:inputType="textPassword"
-            android:password="true"
-            app:useSimpleSummaryProvider="true" />
+            android:inputType="textPassword" />
     </PreferenceCategory>
 
 </PreferenceScreen>

@@ -1,12 +1,10 @@
 package io.github.x0b.safdav;
 
-import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.SharedPreferences;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.PreferenceManager;
-import android.util.Base64;
-import io.github.x0b.safdav.file.SafConstants;
 
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -18,120 +16,117 @@ public class SafAccessProvider {
 
     private static final String PREF_KEY_SAF_USER = "io.github.x0b.safdav.safDavUser";
     private static final String PREF_KEY_SAF_PASS = "io.github.x0b.safdav.safDavPass";
+    private static final String SESSION_USER = "dav";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private static SafDAVServer davServer;
     private static SafDirectServer directServer;
-    private static String user;
-    private static String password;
+    private static String sessionUser;
+    private static String sessionPassword;
+    private static String sessionAuthHeader;
 
     public static synchronized SafDAVServer getServer(Context context) throws IOException {
-        if(null == davServer) {
-            initAuth(context);
-            SafDAVServer server = new SafDAVServer(SafConstants.SAF_REMOTE_PORT, user, password,
-                    context.getApplicationContext());
-            server.start();
-            davServer = server;
+        if (davServer == null || !davServer.isAlive()) {
+            if (davServer != null) {
+                try {
+                    davServer.stop();
+                } catch (Exception ignored) {
+                }
+                davServer = null;
+            }
+            Context appCtx = context.getApplicationContext();
+            clearLegacyPersistedCredentials(appCtx);
+
+            String user = SESSION_USER;
+            String pass = generateSessionPassword();
+            SafDAVServer server = new SafDAVServer(0, user, pass, appCtx);
+            try {
+                server.start();
+                if (server.getListeningPort() <= 0 || !server.isAlive()) {
+                    throw new IOException("SafDAVServer failed to bind ephemeral loopback port");
+                }
+                davServer = server;
+                sessionUser = user;
+                sessionPassword = pass;
+                sessionAuthHeader = SafBase64.encodeBasicAuth(user, pass);
+            } catch (IOException | RuntimeException e) {
+                try {
+                    server.stop();
+                } catch (Exception ignored) {
+                }
+                throw e instanceof IOException ? (IOException) e : new IOException(e);
+            }
         }
         return davServer;
     }
 
-    private static final String KEYSTORE_ALIAS = "cloudbridge_safdav_aes_key";
-    private static final String ENC_PREFIX = "ks_gcm_v1:";
-
-    @TargetApi(android.os.Build.VERSION_CODES.M)
-    private static javax.crypto.SecretKey getOrCreateKeystoreKey() throws Exception {
-        java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidKeyStore");
-        ks.load(null);
-        if (!ks.containsAlias(KEYSTORE_ALIAS)) {
-            javax.crypto.KeyGenerator kg = javax.crypto.KeyGenerator.getInstance(
-                    android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
-            kg.init(new android.security.keystore.KeyGenParameterSpec.Builder(
-                    KEYSTORE_ALIAS,
-                    android.security.keystore.KeyProperties.PURPOSE_ENCRYPT | android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
-                    .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .build());
-            return kg.generateKey();
-        }
-        return ((java.security.KeyStore.SecretKeyEntry) ks.getEntry(KEYSTORE_ALIAS, null)).getSecretKey();
+    @VisibleForTesting
+    static String generateSessionPassword() {
+        byte[] values = new byte[32];
+        SECURE_RANDOM.nextBytes(values);
+        return SafBase64.encodeUrlSafeNoPadding(values);
     }
 
-    @TargetApi(android.os.Build.VERSION_CODES.M)
-    private static String encryptSecret(String plain) throws Exception {
-        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, getOrCreateKeystoreKey());
-        byte[] iv = cipher.getIV();
-        byte[] ct = cipher.doFinal(plain.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        return ENC_PREFIX + Base64.encodeToString(iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP);
-    }
-
-    @TargetApi(android.os.Build.VERSION_CODES.M)
-    private static String decryptSecret(String stored) throws Exception {
-        String payload = stored.substring(ENC_PREFIX.length());
-        String[] parts = payload.split(":", 2);
-        byte[] iv = Base64.decode(parts[0], Base64.NO_WRAP);
-        byte[] ct = Base64.decode(parts[1], Base64.NO_WRAP);
-        javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, getOrCreateKeystoreKey(), new javax.crypto.spec.GCMParameterSpec(128, iv));
-        return new String(cipher.doFinal(ct), java.nio.charset.StandardCharsets.UTF_8);
-    }
-
-    @SuppressLint("ApplySharedPref")
-    private static void initAuth(Context context){
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        if(preferences.contains(PREF_KEY_SAF_PASS) && preferences.contains((PREF_KEY_SAF_USER))){
-            String storedPass = preferences.getString(PREF_KEY_SAF_PASS, "");
-            user = preferences.getString(PREF_KEY_SAF_USER, "dav");
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                try {
-                    if (storedPass.startsWith(ENC_PREFIX)) {
-                        password = decryptSecret(storedPass);
-                    } else {
-                        password = storedPass;
-                        preferences.edit().putString(PREF_KEY_SAF_PASS, encryptSecret(password)).commit();
-                    }
-                    return;
-                } catch (Exception ignored) {
-                    // Fall through to regenerate if Keystore key was invalidated
-                }
-            } else {
-                password = storedPass;
-                return;
+    private static void clearLegacyPersistedCredentials(Context context) {
+        try {
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+            if (preferences.contains(PREF_KEY_SAF_PASS) || preferences.contains(PREF_KEY_SAF_USER)) {
+                preferences.edit()
+                        .remove(PREF_KEY_SAF_PASS)
+                        .remove(PREF_KEY_SAF_USER)
+                        .apply();
             }
+        } catch (Exception ignored) {
         }
-        SecureRandom random = new SecureRandom();
-        byte[] values = new byte[16];
-        random.nextBytes(values);
-        password = Base64.encodeToString(values, Base64.NO_WRAP);
-        user = "dav";
-        String valueToStore = password;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+    }
+
+    @Nullable
+    public static synchronized String getServerUrl() {
+        if (davServer != null && davServer.isAlive()) {
+            return davServer.getBaseUrl();
+        }
+        return null;
+    }
+
+    @Nullable
+    public static synchronized String getSessionAuthHeader() {
+        if (davServer != null && davServer.isAlive()) {
+            return sessionAuthHeader;
+        }
+        return null;
+    }
+
+    public static synchronized boolean isServerRunning() {
+        return davServer != null && davServer.isAlive();
+    }
+
+    public static synchronized void stopServer() {
+        if (davServer != null) {
             try {
-                valueToStore = encryptSecret(password);
+                davServer.stop();
             } catch (Exception ignored) {
             }
+            davServer = null;
         }
-        preferences.edit()
-                .putString(PREF_KEY_SAF_PASS, valueToStore)
-                .putString(PREF_KEY_SAF_USER, user)
-                .commit();
+        sessionUser = null;
+        sessionPassword = null;
+        sessionAuthHeader = null;
     }
 
-    public static SafDirectServer getDirectServer(Context context) {
-        if(null == directServer) {
-            directServer = new SafDirectServer(context);
+    public static synchronized SafDirectServer getDirectServer(Context context) {
+        if (null == directServer) {
+            directServer = new SafDirectServer(context.getApplicationContext());
         }
         return directServer;
     }
 
-    public static String getUser(Context context) {
-        initAuth(context);
-        return user;
+    @Nullable
+    public static synchronized String getUser(Context context) {
+        return sessionUser;
     }
 
-    public static String getPassword(Context context) {
-        initAuth(context);
-        return password;
+    @Nullable
+    public static synchronized String getPassword(Context context) {
+        return sessionPassword;
     }
 }

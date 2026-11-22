@@ -3,9 +3,16 @@ package de.schuelken.cloudbridge.install
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.nio.charset.StandardCharsets
 
 class ApkInstallHelperTest {
+
+    @Rule
+    @JvmField
+    val tempFolder = TemporaryFolder()
 
     @Test
     fun detectsApkByExtensionOrMime() {
@@ -36,6 +43,16 @@ class ApkInstallHelperTest {
         assertEquals(
             "image/*",
             ApkInstallHelper.resolveMimeType("photo.bin", "application/octet-stream", ApkInstallHelper.OPEN_AS_IMAGE)
+        )
+    }
+
+    @Test
+    fun computesExpectedSha256HexDigest() {
+        val file = tempFolder.newFile("sample.apk")
+        file.writeBytes("abc".toByteArray(StandardCharsets.US_ASCII))
+        assertEquals(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ApkInstallHelper.computeSha256Hex(file)
         )
     }
 }

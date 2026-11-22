@@ -110,8 +110,7 @@ object SearchEngine {
         val norm = normalize(candidate)
         for (term in terms) {
             if (term.contains('*') || term.contains('?')) {
-                val regex = globToRegex(term)
-                if (!regex.matches(norm)) return false
+                if (!globMatches(term, norm)) return false
             } else {
                 if (!norm.contains(term)) return false
             }
@@ -173,18 +172,30 @@ object SearchEngine {
         return if (anyMatch) spannable else text
     }
 
-    private fun globToRegex(glob: String): Regex {
-        val sb = StringBuilder()
-        for (c in glob) {
-            when (c) {
-                '*' -> sb.append(".*")
-                '?' -> sb.append('.')
-                '.', '(', ')', '+', '|', '^', '$', '@', '%', '[', ']', '{', '}', '\\' -> {
-                    sb.append('\\').append(c)
-                }
-                else -> sb.append(c)
+    private fun globMatches(pattern: String, text: String): Boolean {
+        var p = 0
+        var t = 0
+        var starIdx = -1
+        var matchIdx = 0
+        while (t < text.length) {
+            if (p < pattern.length && (pattern[p] == '?' || pattern[p] == text[t])) {
+                p++
+                t++
+            } else if (p < pattern.length && pattern[p] == '*') {
+                starIdx = p
+                matchIdx = t
+                p++
+            } else if (starIdx != -1) {
+                p = starIdx + 1
+                matchIdx++
+                t = matchIdx
+            } else {
+                return false
             }
         }
-        return Regex(sb.toString())
+        while (p < pattern.length && pattern[p] == '*') {
+            p++
+        }
+        return p == pattern.length
     }
 }

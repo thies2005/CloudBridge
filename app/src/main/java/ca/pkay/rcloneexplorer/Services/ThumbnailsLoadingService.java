@@ -3,9 +3,8 @@ package ca.pkay.rcloneexplorer.Services;
 import android.app.IntentService;
 import android.content.Intent;
 import androidx.annotation.Nullable;
-import androidx.preference.PreferenceManager;
+import androidx.annotation.VisibleForTesting;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
-import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.util.FLog;
 
@@ -30,6 +29,14 @@ public class ThumbnailsLoadingService extends IntentService {
         rclone = new Rclone(this);
     }
 
+    @VisibleForTesting
+    static boolean isValidServeRequest(@Nullable RemoteItem remote, @Nullable String token, int port) {
+        return remote != null
+                && remote.getName() != null && !remote.getName().isEmpty()
+                && token != null && !token.trim().isEmpty()
+                && port > 0 && port <= 65535;
+    }
+
     @Override
     protected void onHandleIntent(@Nullable Intent intent) {
         if (intent == null) {
@@ -37,17 +44,14 @@ public class ThumbnailsLoadingService extends IntentService {
         }
 
         RemoteItem remote = intent.getParcelableExtra(REMOTE_ARG);
-        if (remote == null) {
+        String hiddenPathExtra = intent.getStringExtra(HIDDEN_PATH);
+        int serverPort = intent.getIntExtra(SERVER_PORT, -1);
+        if (!isValidServeRequest(remote, hiddenPathExtra, serverPort)) {
+            FLog.w(TAG, "onHandleIntent: refusing thumbnail server start without valid port and token");
             return;
         }
-        String hiddenPathExtra = intent.getStringExtra(HIDDEN_PATH);
-        if (hiddenPathExtra == null) {
-            hiddenPathExtra = "";
-        }
         String hiddenPath = "/" + hiddenPathExtra + '/' + remote.getName();
-        int serverPort = intent.getIntExtra(SERVER_PORT, 29179);
-        FLog.d(TAG, "onHandleIntent: hiddenPath=%s", hiddenPath);
-        process = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, serverPort, false, null, null, remote, "", hiddenPath);
+        process = rclone.serve(Rclone.SERVE_PROTOCOL_HTTP, serverPort, false, null, null, remote, "", hiddenPath, true, null, null);
         if (process != null) {
             boolean exited = false;
             try {

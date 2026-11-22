@@ -3,6 +3,7 @@ package io.github.x0b.safdav.xml;
 import android.util.Log;
 import android.util.TimingLogger;
 
+import androidx.annotation.VisibleForTesting;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
@@ -79,24 +80,25 @@ public class XmlResponseSerialization {
                 .append(baseUrl)
                 .append(flattenUrl ? "" : timed(child.getLink()))
                 .append("</D:href><D:propstat><D:status>")
-                .append(timed(child.getStatus()))
+                .append(timed(xmlEscape(child.getStatus())))
                 .append("</D:status><D:prop><D:getcontenttype>")
-                .append(timed(child.getContentType()))
+                .append(timed(xmlEscape(child.getContentType())))
                 .append("</D:getcontenttype><D:getlastmodified>")
-                .append(timed(child.getLastModified()))
+                .append(timed(xmlEscape(child.getLastModified())))
                 .append("</D:getlastmodified><D:lockdiscovery/><D:ishidden>0</D:ishidden><D:getetag>")
-                .append(timed(child.getETag()))
+                .append(timed(xmlEscape(child.getETag())))
                 .append("</D:getetag><D:displayname>")
                 .append(timed(xmlEscape(child.getName())))
                 .append("</D:displayname><D:getcontentlanguage/><D:getcontentlength>")
-                .append(timed(child.getContentLength()))
+                .append(timed(xmlEscape(child.getContentLength())))
                 .append("</D:getcontentlength><D:iscollection>0</D:iscollection><D:creationdate>")
-                .append(timed(child.getCreationDate()))
+                .append(timed(xmlEscape(child.getCreationDate())))
                 .append("</D:creationdate><D:resourcetype/></D:prop></D:propstat></D:response>");
         timings.addSplit("end:child");
     }
 
-    private String xmlEscape(String input){
+    @VisibleForTesting
+    public static String xmlEscape(String input){
         if(input == null)
             return "";
         char[] problems = {'"', '\'', '<', '>', '&'};

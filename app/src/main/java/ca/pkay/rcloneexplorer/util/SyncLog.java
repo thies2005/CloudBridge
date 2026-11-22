@@ -70,10 +70,12 @@ public class SyncLog {
     public static long log(Context c, String title, String content, int type){
         JSONObject json = new JSONObject();
         long now = System.currentTimeMillis();
+        String safeTitle = SecretRedactor.redact(title);
+        String safeContent = SecretRedactor.redact(content);
         try {
             json.put(TIMESTAMP, now);
-            json.put(CONTENT, content);
-            json.put(TITLE, title);
+            json.put(CONTENT, safeContent);
+            json.put(TITLE, safeTitle);
             json.put(TYPE, type);
         } catch (JSONException e) {
             e.printStackTrace();
@@ -97,9 +99,10 @@ public class SyncLog {
         if (log.length() / 1024 > 10000 && !log.delete()) {
             Log.w("SyncLog", "Could not rotate legacy log");
         }
+        String safeMessage = SecretRedactor.redact(message);
         String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
         try (FileWriter writer = new FileWriter(log, true)) {
-            writer.append(timestamp).append(" - ").append(message).append('\n');
+            writer.append(timestamp).append(" - ").append(safeMessage != null ? safeMessage : "").append('\n');
         } catch (IOException e) { Log.e("SyncLog", "Could not write legacy log", e); }
     }
 

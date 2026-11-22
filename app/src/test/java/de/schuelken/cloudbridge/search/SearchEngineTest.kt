@@ -54,4 +54,17 @@ class SearchEngineTest {
         val result = SearchEngine.filterItems(items, "", filter)
         assertEquals(listOf("app.apk"), result.map { it.name })
     }
+
+    @Test
+    fun handlesPathologicalGlobsInLinearTime() {
+        val evilPattern = "*a".repeat(30) + "*b"
+        val candidate = "a".repeat(200) + "c"
+        val startNs = System.nanoTime()
+        assertFalse(SearchEngine.matchesQuery(candidate, listOf(evilPattern)))
+        val elapsedMs = (System.nanoTime() - startNs) / 1_000_000L
+        assertTrue("Glob matcher took too long: ${elapsedMs}ms", elapsedMs < 500L)
+        assertTrue(SearchEngine.matchesQuery("a".repeat(200) + "b", listOf(evilPattern)))
+        assertTrue(SearchEngine.matchesQuery("abc", listOf("a?c")))
+        assertFalse(SearchEngine.matchesQuery("ac", listOf("a?c")))
+    }
 }

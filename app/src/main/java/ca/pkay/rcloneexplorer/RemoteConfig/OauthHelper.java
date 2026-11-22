@@ -3,6 +3,8 @@ package ca.pkay.rcloneexplorer.RemoteConfig;
 import android.content.Context;
 import android.net.Uri;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.browser.customtabs.CustomTabsIntent;
 import ca.pkay.rcloneexplorer.InteractiveRunner;
 import ca.pkay.rcloneexplorer.R;
@@ -13,7 +15,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.ref.WeakReference;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -160,7 +165,52 @@ public class OauthHelper {
         }
     }
 
+    @VisibleForTesting
+    public static boolean isAllowedOauthUrl(@Nullable String url) {
+        if (url == null || url.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < url.length(); i++) {
+            char c = url.charAt(i);
+            if (c <= 0x20 || c == 0x7F) {
+                return false;
+            }
+        }
+        try {
+            URI uri = new URI(url);
+            if (uri.isOpaque()) {
+                return false;
+            }
+            String scheme = uri.getScheme();
+            if (scheme == null) {
+                return false;
+            }
+            scheme = scheme.toLowerCase(Locale.ROOT);
+            if (uri.getRawUserInfo() != null || uri.getUserInfo() != null) {
+                return false;
+            }
+            String host = uri.getHost();
+            if (host == null || host.isEmpty()) {
+                return false;
+            }
+            if ("https".equals(scheme)) {
+                return true;
+            }
+            if ("http".equals(scheme)) {
+                return ("127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host))
+                        && uri.getPort() == 53682;
+            }
+            return false;
+        } catch (URISyntaxException e) {
+            return false;
+        }
+    }
+
     static void launchBrowser(@NonNull Context context, @NonNull String url) {
+        if (!isAllowedOauthUrl(url)) {
+            FLog.w(TAG, "launchBrowser: refused disallowed OAuth URL");
+            return;
+        }
         CustomTabsIntent.Builder builder = new CustomTabsIntent.Builder();
         CustomTabsIntent customTabsIntent = builder.build();
         try {
@@ -191,7 +241,7 @@ public class OauthHelper {
                     launchBrowser(context, url);
                 }
             } else {
-                FLog.w(TAG, "onTrigger: could not extract auth URL from buffer: %s", cliBuffer);
+                FLog.w(TAG, "onTrigger: could not extract auth URL from buffer");
             }
         }
 

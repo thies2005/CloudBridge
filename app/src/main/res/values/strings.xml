@@ -819,4 +819,18 @@
     <string name="logs_too_large">Logs are too large to copy to the clipboard.</string>
     <string name="logs_clear_failed">Could not clear all logs.</string>
     <string name="logs_oauth_guidance">Google Drive quota or authorization problems? Create your own OAuth client ID, then use Edit remote to enter the client ID and secret and Re-authenticate the remote. See https://rclone.org/drive/#making-your-own-client-id</string>
+
+    <!-- Security remediation UI strings -->
+    <string name="serve_allow_write_access">Allow write access</string>
+    <string name="serve_dlna_warning">Warning: DLNA broadcasts media over your local network without encryption or authentication. Only use on trusted networks.</string>
+    <string name="streaming_service_notification_ftp_credentials">FTP credentials: user %1$s / pass %2$s</string>
+    <string name="streaming_service_notification_tls_url">Serving HTTPS on %1$s</string>
+    <string name="streaming_service_notification_tls_fingerprint">Cert SHA-256: %1$s</string>
+    <string name="apk_install_confirm_title">Confirm APK installation</string>
+    <string name="apk_install_confirm_message">Install package from remote?\n\nFile: %1$s\nOrigin: %2$s\nSize: %3$s\nSHA-256:\n%4$s</string>
+    <string name="apk_install_confirm_action">Install</string>
+    <string name="apk_install_origin_unknown">Unknown remote</string>
+    <string name="pref_proxy_password_masked">••••••</string>
+    <string name="pref_proxy_password_not_set">Not set</string>
+    <string name="pref_proxy_password_hint_saved">Leave blank to clear, or enter a new password</string>
 </resources>

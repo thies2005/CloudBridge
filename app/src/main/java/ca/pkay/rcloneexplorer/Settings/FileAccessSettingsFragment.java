@@ -134,8 +134,9 @@ public class FileAccessSettingsFragment extends Fragment {
         vcpEnabledSwitch.setChecked(vcpEnabled);
         boolean vcpDeclareLocal = sharedPreferences.getBoolean(getString(R.string.pref_key_vcp_declare_local), true);
         vcpDeclareLocalSwitch.setChecked(vcpDeclareLocal);
-        boolean vcpGrantAll = sharedPreferences.getBoolean(getString(R.string.pref_key_vcp_grant_all), false);
-        vcpGrantAllSwitch.setChecked(vcpGrantAll);
+        sharedPreferences.edit().putBoolean(getString(R.string.pref_key_vcp_grant_all), false).apply();
+        vcpGrantAllContainer.setVisibility(View.GONE);
+        vcpGrantAllSwitch.setChecked(false);
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             openAllFilesPerm.setVisibility(View.GONE);
         }
@@ -152,8 +153,6 @@ public class FileAccessSettingsFragment extends Fragment {
         vcpEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> setVcpEnabled(isChecked));
         vcpDeclareLocalContainer.setOnClickListener(v -> vcpDeclareLocalSwitch.setChecked(!vcpDeclareLocalSwitch.isChecked()));
         vcpDeclareLocalSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> setDeclareLocalEnabled(isChecked));
-        vcpGrantAllContainer.setOnClickListener(v -> vcpGrantAllSwitch.setChecked(!vcpGrantAllSwitch.isChecked()));
-        vcpGrantAllSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> setGrantAllEnabled(isChecked));
     }
 
     private void setSafEnabled(boolean isChecked) {
@@ -202,12 +201,6 @@ public class FileAccessSettingsFragment extends Fragment {
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putBoolean(getString(R.string.pref_key_vcp_declare_local), isChecked).apply();
-    }
-
-    private void setGrantAllEnabled(boolean isChecked) {
-        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
-        SharedPreferences.Editor editor = sharedPreferences.edit();
-        editor.putBoolean(getString(R.string.pref_key_vcp_grant_all), isChecked).apply();
     }
 
     private void createSafRemote() {

@@ -1,5 +1,6 @@
 package ca.pkay.rcloneexplorer.Database.json;
 
+import static ca.pkay.rcloneexplorer.util.ActivityHelper.AMOLED;
 import static ca.pkay.rcloneexplorer.util.ActivityHelper.DARK;
 import static ca.pkay.rcloneexplorer.util.ActivityHelper.FOLLOW_SYSTEM;
 import static ca.pkay.rcloneexplorer.util.ActivityHelper.LIGHT;
@@ -7,6 +8,8 @@ import static ca.pkay.rcloneexplorer.util.ActivityHelper.LIGHT;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.PreferenceManager;
 
 import org.json.JSONException;
@@ -102,46 +105,26 @@ public class SharedPreferencesBackup {
         //General Settings
         editor.putBoolean(context.getString(R.string.pref_key_show_thumbnails), jsonObject.getBoolean("showThumbnails"));
         editor.putBoolean(context.getString(R.string.pref_key_wifi_only_transfers), jsonObject.getBoolean("isWifiOnly"));
-        // Never silently enable outbound proxy interception from an imported backup
+        // Never silently enable outbound proxy interception or import attacker proxy endpoints/credentials
         editor.putBoolean(context.getString(R.string.pref_key_use_proxy), false);
         editor.putBoolean(context.getString(R.string.shared_preferences_allow_sync_trigger_while_idle), jsonObject.optBoolean("allowWhileIdle", false));
-        String importedProtocol = jsonObject.optString("proxyProtocol", "http");
-        if (!"http".equals(importedProtocol) && !"https".equals(importedProtocol) && !"socks5".equals(importedProtocol)) {
-            importedProtocol = "http";
-        }
-        int importedPort = jsonObject.optInt("proxyPort", 8080);
-        if (importedPort < 1 || importedPort > 65535) {
-            importedPort = 8080;
-        }
-        editor.putString(context.getString(R.string.pref_key_proxy_protocol), importedProtocol);
-        editor.putString(context.getString(R.string.pref_key_proxy_host), jsonObject.optString("proxyHost", "localhost"));
-        editor.putInt(context.getString(R.string.pref_key_proxy_port), importedPort);
-        editor.putString(context.getString(R.string.pref_key_proxy_username), jsonObject.optString("proxyUser", ""));
-        editor.putString(context.getString(R.string.pref_key_transfers), jsonObject.optString("transfers", "4"));
+        editor.putString(context.getString(R.string.pref_key_proxy_protocol), "http");
+        editor.putString(context.getString(R.string.pref_key_proxy_host), "localhost");
+        editor.putInt(context.getString(R.string.pref_key_proxy_port), 8080);
+        editor.putString(context.getString(R.string.pref_key_proxy_username), "");
+        editor.putString(context.getString(R.string.pref_key_transfers), sanitizeTransfers(jsonObject.optString("transfers", "4")));
 
-        // File Access
-        editor.putBoolean(context.getString(R.string.pref_key_enable_saf), jsonObject.getBoolean("safEnabled"));
+        // File Access: never silently enable privileged storage/content exposure from imported backups
+        editor.putBoolean(context.getString(R.string.pref_key_enable_saf), false);
         editor.putBoolean(context.getString(R.string.pref_key_refresh_local_aliases), jsonObject.getBoolean("refreshLaEnabled"));
-        editor.putBoolean(context.getString(R.string.pref_key_enable_vcp), jsonObject.getBoolean("vcpEnabled"));
+        editor.putBoolean(context.getString(R.string.pref_key_enable_vcp), false);
         editor.putBoolean(context.getString(R.string.pref_key_vcp_declare_local), jsonObject.getBoolean("vcpDeclareLocal"));
         // Never silently enable grant-all URI permissions from an imported backup
         editor.putBoolean(context.getString(R.string.pref_key_vcp_grant_all), false);
 
         // Look and Feel
         // The type changed. So we try to use boolean first, and if it fails we use the proper int
-        Object darkTheme = jsonObject.get("isDarkTheme");
-        int valueForTheme;
-        if (darkTheme instanceof String) {
-            valueForTheme = Integer.parseInt((String) darkTheme);
-        } else {
-           if((boolean) darkTheme) {
-               valueForTheme = DARK;
-           } else {
-               valueForTheme = LIGHT;
-           }
-            editor.putString(context.getString(R.string.pref_key_theme), String.valueOf(valueForTheme));
-        }
-
+        int valueForTheme = sanitizeTheme(jsonObject.get("isDarkTheme"));
         editor.putString(context.getString(R.string.pref_key_theme), String.valueOf(valueForTheme));
 
         editor.putBoolean(context.getString(R.string.pref_key_wrap_filenames), jsonObject.getBoolean("isWrapFilenames"));
@@ -149,10 +132,49 @@ public class SharedPreferencesBackup {
         // Notifications
         editor.putBoolean(context.getString(R.string.pref_key_app_updates), jsonObject.getBoolean("appUpdates"));
 
-        // Logging
-        editor.putBoolean(context.getString(R.string.pref_key_logs), jsonObject.getBoolean("useLogs"));
+        // Logging: never silently enable sensitive logging from imported backups
+        editor.putBoolean(context.getString(R.string.pref_key_logs), false);
 
         editor.apply();
+    }
+
+    @VisibleForTesting
+    public static String sanitizeTransfers(@Nullable String raw) {
+        if (raw == null) {
+            return "4";
+        }
+        try {
+            int parsed = Integer.parseInt(raw.trim());
+            if (parsed < 1) {
+                parsed = 1;
+            } else if (parsed > 32) {
+                parsed = 32;
+            }
+            return String.valueOf(parsed);
+        } catch (NumberFormatException e) {
+            return "4";
+        }
+    }
+
+    @VisibleForTesting
+    public static int sanitizeTheme(@Nullable Object rawTheme) {
+        if (rawTheme instanceof Boolean) {
+            return ((Boolean) rawTheme) ? DARK : LIGHT;
+        }
+        int parsed = FOLLOW_SYSTEM;
+        if (rawTheme instanceof Number) {
+            parsed = ((Number) rawTheme).intValue();
+        } else if (rawTheme instanceof String) {
+            try {
+                parsed = Integer.parseInt(((String) rawTheme).trim());
+            } catch (NumberFormatException e) {
+                return FOLLOW_SYSTEM;
+            }
+        }
+        if (parsed == FOLLOW_SYSTEM || parsed == DARK || parsed == LIGHT || parsed == AMOLED) {
+            return parsed;
+        }
+        return FOLLOW_SYSTEM;
     }
 
 }

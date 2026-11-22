@@ -42,7 +42,9 @@
             android:enabled="true"
             android:exported="false" />
 
-        <activity android:name=".Activities.OnboardingActivity" />
+        <activity
+            android:name=".Activities.OnboardingActivity"
+            android:exported="false" />
         <activity android:name=".Activities.InternxtReauthEntryActivity"
             android:exported="false"
             android:theme="@android:style/Theme.NoDisplay" />
@@ -84,9 +86,11 @@
 
         <service
             android:name=".Services.StreamingService"
+            android:exported="false"
             android:foregroundServiceType="dataSync" />
         <service
             android:name=".Services.ThumbnailsLoadingService"
+            android:exported="false"
             android:foregroundServiceType="dataSync" />
         <service
             android:name=".Services.TriggerService"
@@ -94,16 +98,22 @@
             android:foregroundServiceType="dataSync" />
         <service
             android:name=".Services.RcdService"
+            android:exported="false"
             android:foregroundServiceType="dataSync" /> <!-- Used to expose tasks to other apps, no other functionality -->
         <service
             android:name=".Services.SyncService"
             android:exported="false" /> <!-- This is a default service required for any and all Workers. Do not remove. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <receiver android:name=".BroadcastReceivers.ServeCancelAction" />
-        <receiver android:name=".Services.RcdService$RcdServiceAction" />
+        <receiver
+            android:name=".BroadcastReceivers.ServeCancelAction"
+            android:exported="false" />
+        <receiver
+            android:name=".Services.RcdService$RcdServiceAction"
+            android:exported="false" />
         <receiver
             android:name=".BroadcastReceivers.BootReceiver"
             android:exported="true">
@@ -146,20 +156,24 @@
 
         <activity
             android:name=".Activities.AboutActivity"
+            android:exported="false"
             android:label="@string/title_activity_about"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".Activities.ChangelogActivity"
+            android:exported="false"
             android:label="@string/title_activity_changelog"
             android:parentActivityName=".Activities.AboutActivity"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".Activities.ContributorActivity"
+            android:exported="false"
             android:label="@string/title_activity_contributors"
             android:parentActivityName=".Activities.AboutActivity"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".Activities.AboutLibsActivity"
+            android:exported="false"
             android:label="@string/credits_libraries"
             android:parentActivityName=".Activities.AboutActivity"
             android:theme="@style/AppTheme.NoActionBar" />
@@ -223,21 +237,26 @@
         </activity>
         <activity
             android:name=".FilePicker"
+            android:exported="false"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".RemoteConfig.RemoteConfig"
+            android:exported="false"
             android:label="@string/title_activity_remote_config"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".Activities.TaskActivity"
+            android:exported="false"
             android:label="@string/title_activity_task"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".Activities.TriggerActivity"
+            android:exported="false"
             android:label="@string/title_activity_trigger"
             android:theme="@style/AppTheme.NoActionBar" />
         <activity
             android:name=".Activities.FilterActivity"
+            android:exported="false"
             android:label="@string/title_activity_filter"
             android:theme="@style/AppTheme.NoActionBar" />
 

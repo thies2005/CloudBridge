@@ -2,63 +2,119 @@ package io.github.x0b.safdav;
 
 import android.content.Context;
 import android.net.Uri;
-import android.util.Base64;
 import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import fi.iki.elonen.NanoHTTPD;
 import io.github.x0b.safdav.file.FileAccessError;
 import io.github.x0b.safdav.file.ItemAccess;
 import io.github.x0b.safdav.file.ItemExistsException;
 import io.github.x0b.safdav.file.ItemNotFoundException;
-import io.github.x0b.safdav.file.SafConstants;
 import io.github.x0b.safdav.file.SafException;
 import io.github.x0b.safdav.file.SafItem;
 import io.github.x0b.safdav.saf.DocumentsContractAccess;
 import io.github.x0b.safdav.saf.ProviderPaths;
 import io.github.x0b.safdav.xml.XmlResponseSerialization;
 
-import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 public class SafDAVServer extends NanoHTTPD {
 
     private static final String TAG = "SafDAVServer";
-    private static final String hostname = "localhost";
+    private static final String HOSTNAME = "127.0.0.1";
+    private static final String DEFAULT_MIME_TYPE = "application/octet-stream";
+    private static final Pattern SAFE_MIME_TYPE_PATTERN = Pattern.compile(
+            "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:\\s*;\\s*[A-Za-z0-9._-]+=(?:[A-Za-z0-9._-]+|\"[^\"\\r\\n\\\\]*\"))*$"
+    );
+
     private final ItemAccess itemAccess;
-    private ProviderPaths paths;
-    private String requiredAuthHeader;
+    private final ProviderPaths paths;
+    private final String requiredAuthHeader;
 
     /**
-     * SafDAV binds to localhost. You must provide your own port availability checking mechanism
-     * Note that authentication is currently not supported.
-     * @param port the device port to listen on
+     * SafDAV binds to 127.0.0.1 on the specified port (or 0 for an ephemeral port).
+     *
+     * @param port     the device port to listen on (0 for ephemeral)
+     * @param username non-empty username
+     * @param password non-empty password
+     * @param context  context for file access
      */
-    @Deprecated
-    public SafDAVServer(int port, Context context) {
-        super(hostname, port);
-        itemAccess = new DocumentsContractAccess(context);
-        this.paths = new ProviderPaths(context);
+    public SafDAVServer(int port, @NonNull String username, @NonNull String password, @NonNull Context context) {
+        this(port, username, password,
+                new DocumentsContractAccess(context.getApplicationContext()),
+                new ProviderPaths(context.getApplicationContext()));
     }
 
-    /**
-     * SafDAV binds to localhost. You must provide your own port availability checking mechanism
-     * Note that authentication is currently not supported.
-     * @param port the device port to listen on
-     * @param username username
-     * @param password password
-     * @param context context for file access
-     */
-    public SafDAVServer(int port, String username, String password, Context context) {
-        super(hostname, port);
-        itemAccess = new DocumentsContractAccess(context);
-        this.paths = new ProviderPaths(context);
-        this.requiredAuthHeader = "Basic " + Base64.encodeToString(
-                (username + ':' + password).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP) ;
+    @VisibleForTesting
+    SafDAVServer(int port, @NonNull String username, @NonNull String password,
+                 @NonNull ItemAccess itemAccess, @NonNull ProviderPaths paths) {
+        super(HOSTNAME, port);
+        if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
+            throw new IllegalArgumentException("SafDAVServer requires non-empty username and password");
+        }
+        this.itemAccess = itemAccess;
+        this.paths = paths;
+        this.requiredAuthHeader = SafBase64.encodeBasicAuth(username, password);
+        setAsyncRunner(new BoundedAsyncRunner());
+    }
+
+    public String getBaseUrl() {
+        return "http://" + HOSTNAME + ":" + getListeningPort() + "/";
+    }
+
+    @VisibleForTesting
+    public static String sanitizeContentType(@Nullable String mimeType) {
+        if (mimeType == null) {
+            return DEFAULT_MIME_TYPE;
+        }
+        for (int i = 0; i < mimeType.length(); i++) {
+            char c = mimeType.charAt(i);
+            if (c < 0x20 || c == 0x7F) {
+                return DEFAULT_MIME_TYPE;
+            }
+        }
+        String trimmed = mimeType.trim();
+        if (trimmed.isEmpty()) {
+            return DEFAULT_MIME_TYPE;
+        }
+        if (!SAFE_MIME_TYPE_PATTERN.matcher(trimmed).matches()) {
+            return DEFAULT_MIME_TYPE;
+        }
+        return trimmed;
+    }
+
+    private static String sanitizeHeaderToken(@Nullable String value) {
+        if (value == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c >= 0x20 && c != 0x7F) {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     @Override
     public Response serve(IHTTPSession session) {
-        if(!checkAuthorization(session)){
+        if (!checkAuthorization(session)) {
             Log.e(TAG, "serve: request not (correctly) authenticated");
             return newFixedLengthResponse(Response.Status.UNAUTHORIZED, null, null);
         }
@@ -88,16 +144,16 @@ public class SafDAVServer extends NanoHTTPD {
     }
 
     private boolean checkAuthorization(IHTTPSession session) {
-        if (null == requiredAuthHeader) {
-            return true;
+        if (null == requiredAuthHeader || requiredAuthHeader.isEmpty()) {
+            return false;
         }
         String suppliedAuthHeader = session.getHeaders().get("authorization");
         if (null == suppliedAuthHeader) {
             return false;
         }
-        return java.security.MessageDigest.isEqual(
-                requiredAuthHeader.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                suppliedAuthHeader.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return MessageDigest.isEqual(
+                requiredAuthHeader.getBytes(StandardCharsets.UTF_8),
+                suppliedAuthHeader.getBytes(StandardCharsets.UTF_8));
     }
 
     private Response badRequest(String signature) {
@@ -165,22 +221,16 @@ public class SafDAVServer extends NanoHTTPD {
 
     /**
      * Retrieve an entity
-     * @param session
-     * @return <table>
-     *     <tr>
-     *         <td>200</td>
-     *         <td>OK</td>
-     *     </tr>
-     *     <tr>
-     *         <td>400</td>
-     *         <td>Bad Request</td>
-     *     </tr>
-     * </table>
      */
     protected Response onGet(IHTTPSession session) {
         String requestUri = session.getUri();
-        Uri uri = paths.getUriByMappedPath(requestUri);
-        SafItem file = null;
+        Uri uri;
+        try {
+            uri = paths.getUriByMappedPath(requestUri);
+        } catch (ItemNotFoundException e) {
+            return notFound("onGet");
+        }
+        SafItem file;
         try {
             file = itemAccess.readMeta(uri);
         } catch (ItemNotFoundException e) {
@@ -188,16 +238,12 @@ public class SafDAVServer extends NanoHTTPD {
         }
         InputStream stream = itemAccess.readFile(file);
         if (null != stream) {
-            return newFixedLengthResponse(Response.Status.OK, file.getContentType(), stream, file.getLength());
+            return newFixedLengthResponse(Response.Status.OK, sanitizeContentType(file.getContentType()),
+                    stream, file.getLength());
         }
         return badRequest("onGet");
     }
 
-    /**
-     * Retrieve Properties.
-     * @param session
-     * @return
-     */
     private Response closeBadRequest() {
         Response response = badRequest("onPropFind");
         response.closeConnection(true);
@@ -230,7 +276,6 @@ public class SafDAVServer extends NanoHTTPD {
             depth = 1;
         }
 
-        // if root, offer permissions; else, normalize (strip permission from) path
         String path = session.getUri();
         Log.d(TAG, "onPropFind: PROPFIND " + path);
 
@@ -247,38 +292,16 @@ public class SafDAVServer extends NanoHTTPD {
                 return internalError("onPropFind");
             }
         }
-        String requestUri = SafConstants.SAF_REMOTE_URL + Uri.encode(path.substring(1), "/");
+        String subPath = path != null && path.length() > 1 ? encodePathSegments(path.substring(1)) : "";
+        String requestUri = getBaseUrl() + subPath;
         String responseXml = new XmlResponseSerialization().propFindSerialize(directory, requestUri, depth);
         return okXml(responseXml, "onPropFind");
     }
 
-    /**
-     * Change Properties of an item
-     * @param session - the incoming HTTP request
-     * @return - an appropriate HTTP response
-     */
     protected Response onPropPatch(IHTTPSession session) {
         return notImplementedResponse(session, "onPropPatch");
     }
 
-    /**
-     * Create a folder
-     * @param session the incoming HTTP request
-     * @return <table>
-     *     <tr>
-     *         <td>201</td>
-     *         <td>Folder successfully created</td>
-     *     </tr>
-     *     <tr>
-     *         <td>403</td>
-     *         <td>Folder is not accessible</td>
-     *     </tr>
-     *     <tr>
-     *         <td>405</td>
-     *         <td>Folder already exists</td>
-     *     </tr>
-     * </table>
-     */
     protected Response onMkCol(IHTTPSession session) {
         String path = session.getUri();
         Log.d(TAG, "onMkCol: MKCOL " + path);
@@ -294,34 +317,12 @@ public class SafDAVServer extends NanoHTTPD {
             return notFound("onMkCol");
         } catch (ItemExistsException e) {
             return notAllowed("onMkCol");
-        } catch(SecurityException | IllegalStateException e){
+        } catch (SecurityException | IllegalStateException e) {
             return forbidden("onMkCol");
         }
         return created("onMkCol");
     }
 
-    /**
-     * Delete an Entity
-     * @param session the incoming HTTP request
-     * @return <table>
-     *     <tr>
-     *         <td>204</td>
-     *         <td>File deleted</td>
-     *     </tr>
-     *     <tr>
-     *         <td>403</td>
-     *         <td>Folder is not accessible</td>
-     *     </tr>
-     *     <tr>
-     *         <td>404</td>
-     *         <td>File not found</td>
-     *     </t>
-     *     <tr>
-     *         <td>501</td>
-     *         <td>File Access Error</td>
-     *     </tr>
-     * </table>
-     */
     protected Response onDelete(IHTTPSession session) {
         String path = session.getUri();
         Log.d(TAG, "onDelete: DELETE " + path);
@@ -341,11 +342,6 @@ public class SafDAVServer extends NanoHTTPD {
         return noContent("onDelete");
     }
 
-    /**
-     * Replace an Entity
-     * @param session
-     * @return
-     */
     protected Response onPut(IHTTPSession session) {
         String path = session.getUri();
         String mime = session.getHeaders().get("content-type");
@@ -358,8 +354,11 @@ public class SafDAVServer extends NanoHTTPD {
         } catch (NumberFormatException e) {
             return badRequest("onPut");
         }
+        if (length < 0) {
+            return badRequest("onPut");
+        }
         if (null == mime) {
-            mime = "application/octet-stream";
+            mime = DEFAULT_MIME_TYPE;
         }
 
         Uri uri;
@@ -378,7 +377,7 @@ public class SafDAVServer extends NanoHTTPD {
                 itemAccess.writeFile(uri, is, length);
             } catch (ItemNotFoundException e) {
                 item = itemAccess.createFile(uri, name, mime, is, length);
-                etag = "\"" + item.getETag() + "\"";
+                etag = "\"" + sanitizeHeaderToken(item.getETag()) + "\"";
                 Response response = created("onPut");
                 response.addHeader("etag", etag);
                 return response;
@@ -386,35 +385,36 @@ public class SafDAVServer extends NanoHTTPD {
         } catch (SafException e) {
             return internalError("onPut");
         }
-        etag = "\"" + item.getETag() + "\"";
+        etag = "\"" + sanitizeHeaderToken(item.getETag()) + "\"";
         Response response = created("onPut");
         response.addHeader("etag", etag);
         return response;
     }
 
-    /**
-     * Copy an Entity. Only works within the server managed space.
-     * @param session
-     * @return
-     */
     protected Response onCopy(IHTTPSession session) {
         return notImplementedResponse(session, "onCopy");
     }
 
-    /**
-     * Move an Entity. Depending on the file location, this may be a rename or implemented using copy.
-     * @param session
-     * @return
-     */
     protected Response onMove(IHTTPSession session) {
         String path = session.getUri();
-        Uri src = paths.getUriByMappedPath(path);
+        Uri src;
+        try {
+            src = paths.getUriByMappedPath(path);
+        } catch (ItemNotFoundException e) {
+            return notFound("onMove");
+        }
         boolean noOverwrite = "F".equals(session.getHeaders().get("overwrite"));
         String destination = session.getHeaders().get("destination");
-        if (null == destination || !destination.startsWith(SafConstants.SAF_REMOTE_URL)) {
+        String mappedDest = extractMoveMappedPath(destination, getBaseUrl());
+        if (mappedDest == null) {
             return badRequest("onMove");
         }
-        Uri dst = paths.getUriByMappedPath(destination.substring(SafConstants.SAF_REMOTE_URL.length() - 1));
+        Uri dst;
+        try {
+            dst = paths.getUriByMappedPath(mappedDest);
+        } catch (ItemNotFoundException e) {
+            return forbidden("onMove");
+        }
 
         boolean exists = true;
         try {
@@ -435,4 +435,107 @@ public class SafDAVServer extends NanoHTTPD {
         }
     }
 
+    @VisibleForTesting
+    @Nullable
+    static String extractMoveMappedPath(@Nullable String destination, @NonNull String baseUrl) {
+        if (destination == null || !destination.startsWith(baseUrl)) {
+            return null;
+        }
+        String rawPath = destination.substring(baseUrl.length() - 1);
+        return percentDecode(rawPath);
+    }
+
+    @VisibleForTesting
+    static String encodePathSegments(String path) {
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+        byte[] bytes = path.getBytes(StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder(bytes.length);
+        for (byte b : bytes) {
+            int c = b & 0xff;
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                    || c == '/' || c == '-' || c == '_' || c == '.' || c == '~'
+                    || c == '!' || c == '\'' || c == '(' || c == ')' || c == '*') {
+                sb.append((char) c);
+            } else {
+                sb.append('%');
+                sb.append(Character.toUpperCase(Character.forDigit((c >> 4) & 0xF, 16)));
+                sb.append(Character.toUpperCase(Character.forDigit(c & 0xF, 16)));
+            }
+        }
+        return sb.toString();
+    }
+
+    @Nullable
+    private static String percentDecode(String input) {
+        if (input.indexOf('%') < 0) {
+            return input;
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (ch == '%') {
+                if (i + 2 >= input.length()) {
+                    return null;
+                }
+                int hi = Character.digit(input.charAt(i + 1), 16);
+                int lo = Character.digit(input.charAt(i + 2), 16);
+                if (hi < 0 || lo < 0) {
+                    return null;
+                }
+                out.write((hi << 4) | lo);
+                i += 2;
+            } else {
+                byte[] utf8 = String.valueOf(ch).getBytes(StandardCharsets.UTF_8);
+                out.write(utf8, 0, utf8.length);
+            }
+        }
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    private static final class BoundedAsyncRunner implements AsyncRunner {
+        private final Set<ClientHandler> running = Collections.synchronizedSet(new HashSet<>());
+        private final ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2,
+                16,
+                60L,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(64),
+                r -> {
+                    Thread t = new Thread(r, "SafDAV-worker");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.AbortPolicy()
+        );
+
+        @Override
+        public void closeAll() {
+            List<ClientHandler> snapshot;
+            synchronized (running) {
+                snapshot = new ArrayList<>(running);
+            }
+            for (ClientHandler handler : snapshot) {
+                handler.close();
+            }
+            executor.shutdownNow();
+        }
+
+        @Override
+        public void closed(ClientHandler clientHandler) {
+            running.remove(clientHandler);
+        }
+
+        @Override
+        public void exec(ClientHandler clientHandler) {
+            running.add(clientHandler);
+            try {
+                executor.execute(clientHandler);
+            } catch (RejectedExecutionException e) {
+                running.remove(clientHandler);
+                clientHandler.close();
+            }
+        }
+    }
 }

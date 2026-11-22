@@ -7,7 +7,7 @@ import android.widget.Toast;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
-import io.github.x0b.safdav.SafAccessProvider;
+import ca.pkay.rcloneexplorer.util.FLog;
 import io.github.x0b.safdav.file.SafConstants;
 
 import java.util.ArrayList;
@@ -84,8 +84,7 @@ public class RemoteConfigHelper {
         } catch (InterruptedException ignored) {}
         
         if (0 != exitCode) {
-            Log.e("RemoteConfigHelper", "rclone config command failed with exit code: " + exitCode);
-            Log.e("RemoteConfigHelper", "rclone stderr: " + errorOutput.toString());
+            FLog.e("RemoteConfigHelper", "rclone config command failed with exit code: %d", exitCode);
             Toast.makeText(context, context.getString(R.string.error_creating_remote), Toast.LENGTH_SHORT).show();
             return false;
         }
@@ -95,17 +94,11 @@ public class RemoteConfigHelper {
     }
 
     public static void enableSaf(Context context) {
-        String user = SafAccessProvider.getUser(context);
-        String pass = SafAccessProvider.getPassword(context);
         ArrayList<String> options = new ArrayList<>();
         options.add(SafConstants.SAF_REMOTE_NAME);
         options.add("webdav");
         options.add("url");
         options.add(SafConstants.SAF_REMOTE_URL);
-        options.add("user");
-        options.add(user);
-        options.add("pass");
-        options.add(pass);
         setupAndWait(context, options);
     }
 }

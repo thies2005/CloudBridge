@@ -135,9 +135,11 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
                 final String documentId = cursor.getString(0);
                 String mimeType = cursor.getString(2);
                 boolean isDirectory = false;
-                if (mimeType.equals(DocumentsContract.Document.MIME_TYPE_DIR)) {
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mimeType)) {
                     mimeType = "inode/directory";
                     isDirectory = true;
+                } else if (mimeType == null) {
+                    mimeType = "application/octet-stream";
                 }
                 SafFastItem item = new SafFastItem(
                         DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId),
@@ -226,29 +228,40 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
 
     @Override
     public void writeFile(Uri documentUri, InputStream stream, long len) {
+        if (len < 0) {
+            throw new IllegalArgumentException("Negative write length");
+        }
         // Write directly through the ContentResolver with a 64 KB buffer instead of delegating
         // to SafFileAccess, avoiding an extra indirection and a much smaller copy buffer.
         try (OutputStream os = context.getContentResolver().openOutputStream(documentUri)) {
             if (os == null) {
                 throw new FileAccessError();
             }
-            byte[] buffer = new byte[64 * 1024];
-            int blen = stream.read(buffer);
-            long remaining = len;
-            while (blen != -1) {
-                os.write(buffer, 0, blen);
-                remaining -= blen;
-                if (remaining < 1) {
-                    break;
-                }
-                blen = stream.read(buffer);
-            }
+            copyBounded(stream, os, len);
             os.flush();
         } catch (FileNotFoundException e) {
             throw new ItemNotFoundException(e);
         } catch (IOException e) {
             throw new FileAccessError(e);
         }
+    }
+
+    @androidx.annotation.VisibleForTesting
+    public static long copyBounded(InputStream stream, OutputStream os, long len) throws IOException {
+        byte[] buffer = new byte[64 * 1024];
+        long remaining = len;
+        long totalWritten = 0L;
+        while (remaining > 0) {
+            int toRead = (int) Math.min(buffer.length, remaining);
+            int blen = stream.read(buffer, 0, toRead);
+            if (blen == -1) {
+                break;
+            }
+            os.write(buffer, 0, blen);
+            remaining -= blen;
+            totalWritten += blen;
+        }
+        return totalWritten;
     }
 
     private Uri getParent(Uri uri) {
@@ -262,9 +275,14 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
     // Note: this is modelled to observed behavior, because the
     // DocumentsContract#fromXXUri APIs don't really work well
     private Uri buildHierarchicalDocumentsUri(Uri uri, boolean buildParent) {
-        if(!ProviderPaths.ANDROID_PROVIDER_AUTHORITY.equals(uri.getAuthority())) {
+        if (!ProviderPaths.ANDROID_PROVIDER_AUTHORITY.equals(uri.getAuthority())) {
             if (buildParent) {
-                return DocumentFile.fromTreeUri(context, uri).getParentFile().getUri();
+                DocumentFile doc = DocumentFile.fromTreeUri(context, uri);
+                DocumentFile parent = doc != null ? doc.getParentFile() : null;
+                if (parent == null) {
+                    throw new ItemNotFoundException();
+                }
+                return parent.getUri();
             } else {
                 // This is a thirdparty provider. No assumptions regarding URL
                 // structure are possible. Instead, follow documented semantics.
@@ -328,24 +346,66 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
         }
     }
 
-   private  Uri treeWalkCompat(Uri uri) {
+    @androidx.annotation.VisibleForTesting
+    public interface SegmentLookup<T> {
+        List<SafFastItem> listChildren(T folder);
+    }
+
+    private Uri treeWalkCompat(Uri uri) {
         Uri baseUri = DocumentsContract.buildTreeDocumentUri(uri.getAuthority(), DocumentsContract.getTreeDocumentId(uri));
-        Uri subFolder = DocumentFile.fromTreeUri(context, baseUri).getUri();
+        DocumentFile rootDoc = DocumentFile.fromTreeUri(context, baseUri);
+        if (rootDoc == null) {
+            throw new ItemNotFoundException();
+        }
+        Uri subFolder = rootDoc.getUri();
         String path = uri.getPath();
-        String mediaPath = path.substring(baseUri.getPath().length());
-        String[] directories = mediaPath.split("/");
-        for (String directory : directories) {
-            if("".equals(directory)) {
-                continue;
-            }
-            List<SafFastItem> items = list(subFolder);
-            for(SafFastItem item : items) {
-                if (directory.equals(item.getName())) {
-                    subFolder = item.getUri();
-                    continue;
-                }
+        String basePath = baseUri.getPath();
+        if (path == null || basePath == null || path.length() < basePath.length()) {
+            throw new ItemNotFoundException();
+        }
+        String mediaPath = path.substring(basePath.length());
+        return resolveTreeWalkSegments(subFolder, mediaPath, this::list, SafFastItem::getUri);
+    }
+
+    @androidx.annotation.VisibleForTesting
+    public interface NodeMapper<T> {
+        T map(SafFastItem item);
+    }
+
+    @androidx.annotation.VisibleForTesting
+    @androidx.annotation.Nullable
+    public static SafFastItem findDirectChildByName(List<SafFastItem> items, String name) {
+        if (items == null || name == null) {
+            return null;
+        }
+        for (SafFastItem item : items) {
+            if (name.equals(item.getName())) {
+                return item;
             }
         }
-        return subFolder;
+        return null;
+    }
+
+    @androidx.annotation.VisibleForTesting
+    public static <T> T resolveTreeWalkSegments(
+            T rootNode,
+            String mediaPath,
+            SegmentLookup<T> lookup,
+            NodeMapper<T> mapper) {
+        if (rootNode == null || mediaPath == null) {
+            throw new ItemNotFoundException();
+        }
+        T current = rootNode;
+        for (String directory : mediaPath.split("/")) {
+            if (directory.isEmpty()) {
+                continue;
+            }
+            SafFastItem matched = findDirectChildByName(lookup.listChildren(current), directory);
+            if (matched == null) {
+                throw new ItemNotFoundException();
+            }
+            current = mapper.map(matched);
+        }
+        return current;
     }
 }

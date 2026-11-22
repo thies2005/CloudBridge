@@ -5,7 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.text.format.Formatter
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import ca.pkay.rcloneexplorer.BuildConfig
@@ -13,7 +16,12 @@ import ca.pkay.rcloneexplorer.Items.FileItem
 import ca.pkay.rcloneexplorer.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
+import java.io.FileInputStream
+import java.io.IOException
+import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
 import java.util.Locale
+import java.util.concurrent.Executors
 
 object ApkInstallHelper {
 
@@ -23,6 +31,9 @@ object ApkInstallHelper {
     const val OPEN_AS_IMAGE = 2
 
     private val SPLIT_APK_EXTENSIONS = setOf("apks", "xapk", "apkm")
+    private val digestExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "ApkInstallHelper-sha256").apply { isDaemon = true }
+    }
 
     @JvmStatic
     fun isApkFile(fileNameOrPath: String?, mimeType: String?): Boolean {
@@ -58,11 +69,13 @@ object ApkInstallHelper {
     }
 
     @JvmStatic
+    @JvmOverloads
     fun openFile(
         context: Context,
         file: File,
         declaredMimeType: String?,
         openAs: Int,
+        remoteLabel: String? = null,
         requestInstallPermission: ((Intent, File) -> Unit)? = null
     ) {
         val name = file.name
@@ -72,8 +85,8 @@ object ApkInstallHelper {
         }
 
         val mimeType = resolveMimeType(name, declaredMimeType, openAs)
-        if (mimeType == MIME_APK && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!context.packageManager.canRequestPackageInstalls()) {
+        if (mimeType == MIME_APK) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
                 val settingsIntent = Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:${context.packageName}")
@@ -97,9 +110,79 @@ object ApkInstallHelper {
                     .show()
                 return
             }
+            confirmAndInstallApk(context, file, remoteLabel)
+            return
         }
 
         launchViewIntent(context, file, mimeType)
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun confirmAndInstallApk(context: Context, file: File, remoteLabel: String? = null) {
+        val appContext = context.applicationContext
+        val originLabel = if (remoteLabel.isNullOrBlank()) {
+            context.getString(R.string.apk_install_origin_unknown)
+        } else {
+            remoteLabel
+        }
+        val mainHandler = Handler(Looper.getMainLooper())
+        digestExecutor.execute {
+            val sizeText = Formatter.formatFileSize(appContext, file.length())
+            val digestHex = try {
+                computeSha256Hex(file)
+            } catch (e: IOException) {
+                ""
+            }
+            mainHandler.post {
+                if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) {
+                    return@post
+                }
+                if (digestHex.isEmpty()) {
+                    Toast.makeText(context, R.string.error_downloading_file, Toast.LENGTH_SHORT).show()
+                    return@post
+                }
+                val message = context.getString(
+                    R.string.apk_install_confirm_message,
+                    file.name,
+                    originLabel,
+                    sizeText,
+                    digestHex
+                )
+                MaterialAlertDialogBuilder(context, R.style.RoundedCornersDialog)
+                    .setTitle(R.string.apk_install_confirm_title)
+                    .setMessage(message)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.apk_install_confirm_action) { _, _ ->
+                        launchViewIntent(context, file, MIME_APK)
+                    }
+                    .show()
+            }
+        }
+    }
+
+    @JvmStatic
+    @Throws(IOException::class)
+    fun computeSha256Hex(file: File): String {
+        val digest = try {
+            MessageDigest.getInstance("SHA-256")
+        } catch (e: NoSuchAlgorithmException) {
+            throw IOException("SHA-256 unavailable", e)
+        }
+        val buffer = ByteArray(8192)
+        FileInputStream(file).use { input ->
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+        val hash = digest.digest()
+        val sb = StringBuilder(hash.size * 2)
+        for (b in hash) {
+            sb.append(String.format(Locale.US, "%02x", b.toInt() and 0xFF))
+        }
+        return sb.toString()
     }
 
     @JvmStatic

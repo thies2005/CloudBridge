@@ -44,7 +44,7 @@ Write-Host ""
 Write-Host "[2/6] Select build target:" -ForegroundColor Yellow
 Write-Host "  1 - Full build (all APKs)" -ForegroundColor White
 Write-Host "  2 - ARM64 only (for Pixel 9, faster)" -ForegroundColor White
-Write-Host "  3 - Use pre-built rclone (download, no compilation)" -ForegroundColor Cyan
+Write-Host "  3 - Reuse existing jniLibs or build librclone.so locally via Gradle" -ForegroundColor Cyan
 Write-Host "  4 - Clean build (delete caches)" -ForegroundColor White
 Write-Host "  5 - Exit" -ForegroundColor White
 
@@ -145,32 +145,17 @@ switch ($choice) {
     }
 
     "3" {
-        Write-Host "[3/6] Using pre-built rclone binary..." -ForegroundColor Yellow
-        Write-Host "This is the recommended method for Windows builds!" -ForegroundColor Cyan
+        Write-Host "[3/6] Building ARM64 native rclone library via Gradle..." -ForegroundColor Yellow
         Write-Host ""
 
-        # Check if already downloaded
-        if (Test-Path "app\src\main\jniLibs\arm64-v8a\librclone.so") {
-            Write-Host "Pre-built rclone already exists." -ForegroundColor Green
-            $useExisting = Read-Host "  Re-download? (y/n) [default: n]"
-            if ($useExisting -ne "y" -and $useExisting -ne "Y") {
-                Write-Host ""
-                Write-Host "[4/6] Building APK with existing binary..." -ForegroundColor Yellow
-            } else {
-                Write-Host ""
-                Write-Host "[4/6] Downloading new rclone binary..." -ForegroundColor Yellow
-                & .\download.bat
-                if ($LASTEXITCODE -ne 0) {
-                    exit 1
-                }
-            }
-        } else {
-            Write-Host ""
-            Write-Host "[4/6] Downloading rclone binary..." -ForegroundColor Yellow
-            & .\download.bat
+        if (-not (Test-Path "app\src\main\jniLibs\arm64-v8a\librclone.so")) {
+            Write-Host "[4/6] Compiling librclone.so via :rclone:buildArm64..." -ForegroundColor Yellow
+            .\gradlew.bat :rclone:buildArm64
             if ($LASTEXITCODE -ne 0) {
                 exit 1
             }
+        } else {
+            Write-Host "Using existing app\src\main\jniLibs\arm64-v8a\librclone.so." -ForegroundColor Green
         }
 
         Write-Host ""
