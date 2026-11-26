@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   string-change-verification:
     runs-on: ubuntu-latest
@@ -12,24 +15,43 @@ jobs:
       files: ${{ steps.changeDetection.outputs.files }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46
-      - name: Verify build.gradle changed
+        with:
+          fetch-depth: 0
+      - name: Detect changed translation files
         id: changeDetection
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          SEARCH='strings.xml'
-          CHANGEDFILES=''
-          for file in ${ALL_CHANGED_FILES}; do
-            if [[ "$file" == *values-*"$SEARCH" ]]; then
+          set -euo pipefail
+          if [ -n "$BASE_SHA" ]; then
+            DIFF_RANGE="${BASE_SHA}...HEAD"
+          elif [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            DIFF_RANGE="${BEFORE_SHA}..HEAD"
+          else
+            DIFF_RANGE="HEAD~1..HEAD"
+          fi
+          changed_files=()
+          while IFS= read -r -d '' file; do
+            if [[ "$file" =~ ^app/src/main/res/values-[a-zA-Z0-9_-]+/strings\.xml$ ]]; then
               echo "$file was changed"
-              CHANGEDFILES="${CHANGEDFILES} $file"
-              echo "should-run=true" >> $GITHUB_OUTPUT 
+              changed_files+=("$file")
             fi
-          done
-          echo "files=$CHANGEDFILES" >> $GITHUB_OUTPUT 
+          done < <(git diff -z --name-only "$DIFF_RANGE" || true)
+
+          delim="EOF_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          if [ "${#changed_files[@]}" -gt 0 ]; then
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-run=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "files<<$delim"
+            if [ "${#changed_files[@]}" -gt 0 ]; then
+              printf '%s\n' "${changed_files[@]}"
+            fi
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
 
   checkTranslations:
     runs-on: ubuntu-latest
@@ -45,24 +67,34 @@ jobs:
           CHANGED_FILES: ${{ needs.string-change-verification.outputs.files }}
           PR_COMMITS: ${{ github.event.pull_request.commits }}
         run: |
-          sudo apt-get install -y xmlstarlet
-          pip3 install alt-profanity-check
-          chmod +x ./scripts/checkProfanity.py
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y xmlstarlet python3-venv
+          python3 -m venv "$RUNNER_TEMP/profanity-venv"
+          "$RUNNER_TEMP/profanity-venv/bin/pip" install --no-cache-dir --require-hashes -r scripts/requirements-profanity.txt
           chmod +x ./scripts/generateFilelist.sh
-          SIZE=$(printf '%s\n' "$CHANGED_FILES" | awk '{print NF}')
+          SIZE=$(printf '%s\n' "$CHANGED_FILES" | sed '/^$/d' | wc -l | tr -d ' ')
           if [ "$SIZE" -ne 1 ]; then
-            echo "Only pass the amount of commits and one translation file! You passed: $SIZE"
+            echo "Only pass one translation file! Found: $SIZE" >&2
             exit 1
           fi
-          SINGLE_FILE=$(printf '%s\n' "$CHANGED_FILES" | awk '{print $1}')
-          TRANSLATIONS=$(./scripts/generateFilelist.sh "$PR_COMMITS" "$SINGLE_FILE")
+          SINGLE_FILE=$(printf '%s\n' "$CHANGED_FILES" | sed '/^$/d')
+          if ! printf '%s\n' "$SINGLE_FILE" | grep -Eq '^app/src/main/res/values-[a-zA-Z0-9_-]+/strings\.xml$'; then
+            echo "Invalid translation path: $SINGLE_FILE" >&2
+            exit 1
+          fi
+          COMMIT_COUNT="${PR_COMMITS:-1}"
+          if ! printf '%s\n' "$COMMIT_COUNT" | grep -Eq '^[0-9]+$' || [ "$COMMIT_COUNT" -lt 1 ]; then
+            COMMIT_COUNT=1
+          fi
+          TRANSLATIONS=$(./scripts/generateFilelist.sh "$COMMIT_COUNT" "$SINGLE_FILE")
           DELIM="EOF_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
           {
             echo "TRANSLATIONS<<$DELIM"
             printf '%s\n' "$TRANSLATIONS"
             echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
-        shell: sh
+        shell: bash
       - uses: fabasoad/translation-action@1476a9db97feaa816029bc027103eb89f3b017bf # v4.2.4
         id: google-translate
         with:
@@ -75,8 +107,8 @@ jobs:
         run: |
           printf 'Translations are: %s\n' "$TRANSLATED_TEXT"
           printf '%s\n' "$TRANSLATED_TEXT" | sed 's/ ; /\n/g' > translated_texts.txt
-          ./scripts/checkProfanity.py translated_texts.txt
-        shell: sh
+          "$RUNNER_TEMP/profanity-venv/bin/python" ./scripts/checkProfanity.py translated_texts.txt
+        shell: bash
       - name: Upload Raw Translations
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

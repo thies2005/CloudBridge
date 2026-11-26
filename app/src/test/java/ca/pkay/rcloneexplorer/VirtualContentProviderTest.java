@@ -5,6 +5,9 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import ca.pkay.rcloneexplorer.Items.RemoteItem;
+import io.github.x0b.safdav.file.SafConstants;
+
 public class VirtualContentProviderTest {
 
     VirtualContentProvider provider;
@@ -112,5 +115,52 @@ public class VirtualContentProviderTest {
         String actualName = VirtualContentProvider.getRemoteName(documentId);
 
         assertEquals(actualName, expectedName);
+    }
+
+    @Test
+    public void validatesDisplayNamesStrictly() {
+        assertFalse(VirtualContentProvider.isSafeDisplayName(null));
+        assertFalse(VirtualContentProvider.isSafeDisplayName(""));
+        assertFalse(VirtualContentProvider.isSafeDisplayName("."));
+        assertFalse(VirtualContentProvider.isSafeDisplayName(".."));
+        assertFalse(VirtualContentProvider.isSafeDisplayName("sub/file"));
+        assertFalse(VirtualContentProvider.isSafeDisplayName("sub\\file"));
+        assertFalse(VirtualContentProvider.isSafeDisplayName("bad:name"));
+        assertFalse(VirtualContentProvider.isSafeDisplayName("bad\0name"));
+        assertTrue(VirtualContentProvider.isSafeDisplayName("report 2026 (final).pdf"));
+    }
+
+    @Test
+    public void validatesDocumentPathsStrictly() {
+        assertFalse(VirtualContentProvider.isSafeDocumentPath(null));
+        assertFalse(VirtualContentProvider.isSafeDocumentPath(""));
+        assertFalse(VirtualContentProvider.isSafeDocumentPath("rclone/remotes/gdrive:../secret"));
+        assertFalse(VirtualContentProvider.isSafeDocumentPath("rclone/remotes/..:secret"));
+        assertFalse(VirtualContentProvider.isSafeDocumentPath("rclone/remotes/gdrive:/a/./b"));
+        assertFalse(VirtualContentProvider.isSafeDocumentPath("rclone/remotes/gdrive:\\evil"));
+        assertFalse(VirtualContentProvider.isSafeDocumentPath("rclone/remotes/gdrive:/evil\0name"));
+        assertTrue(VirtualContentProvider.isSafeDocumentPath(VirtualContentProvider.ROOT_DOC_ID));
+        assertTrue(VirtualContentProvider.isSafeDocumentPath("rclone/remotes/gdrive:/notes..v2/file.txt"));
+    }
+
+    @Test
+    public void filtersLocalSafAndPathAliasesOutOfVcpRoots() {
+        RemoteItem saf = new RemoteItem("local-saf", SafConstants.SAF_REMOTE_NAME);
+        assertFalse(VirtualContentProvider.isVcpAllowedRemote(saf, false));
+
+        RemoteItem local = new RemoteItem("local", "local");
+        assertFalse(VirtualContentProvider.isVcpAllowedRemote(local, false));
+
+        RemoteItem pathAlias = new RemoteItem("alias-local", "local");
+        pathAlias.setIsAlias(true);
+        pathAlias.setIsPathAlias(true);
+        assertFalse(VirtualContentProvider.isVcpAllowedRemote(pathAlias, false));
+
+        RemoteItem wrappedSaf = new RemoteItem("crypt-saf", "webdav");
+        wrappedSaf.setIsCrypt(true);
+        assertFalse(VirtualContentProvider.isVcpAllowedRemote(wrappedSaf, true));
+
+        RemoteItem drive = new RemoteItem("gdrive", "drive");
+        assertTrue(VirtualContentProvider.isVcpAllowedRemote(drive, false));
     }
 }

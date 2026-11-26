@@ -1,5 +1,7 @@
 package ca.pkay.rcloneexplorer.RecyclerViewAdapters;
 
+import android.widget.Toast;
+
 
 import android.content.Context;
 import android.icu.text.DateFormat;
@@ -25,7 +27,6 @@ import java.util.Date;
 
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.util.SyncLog;
-import es.dmoral.toasty.Toasty;
 
 public class LogRecyclerViewAdapter extends RecyclerView.Adapter<LogRecyclerViewAdapter.ViewHolder>{
 
@@ -57,7 +58,7 @@ public class LogRecyclerViewAdapter extends RecyclerView.Adapter<LogRecyclerView
             String text = selectedTrigger.getString(SyncLog.TITLE);
             holder.logtitle.setText(text);
             holder.logtitle.setOnClickListener(v -> {
-                Toasty.info(v.getContext(), text).show();
+                Toast.makeText(v.getContext(), text, Toast.LENGTH_SHORT).show();
             });
             holder.logdetails.setText(selectedTrigger.getString(SyncLog.CONTENT));
             holder.logdate.setText(timeFormattedHuman);
@@ -66,15 +67,10 @@ public class LogRecyclerViewAdapter extends RecyclerView.Adapter<LogRecyclerView
             //Can be removed when SimpleDateFormat in Line is dropped with the support for <21
             String timeFormattedFullFinal = timeFormattedFull;
             holder.log_item_frame.setOnClickListener(v -> {
-                Toasty.info(v.getContext(), timeFormattedFullFinal).show();
+                Toast.makeText(v.getContext(), timeFormattedFullFinal, Toast.LENGTH_SHORT).show();
             });
             holder.log_item_frame.setOnLongClickListener(v -> {
-                android.content.ClipboardManager clipboard = (android.content.ClipboardManager) v.getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-                android.content.ClipData clip = android.content.ClipData.newPlainText("Log Entry", timeFormattedFullFinal + "\n" + text + "\n" + selectedTrigger.optString(SyncLog.CONTENT));
-                if (clipboard != null) {
-                    clipboard.setPrimaryClip(clip);
-                    Toasty.success(v.getContext(), v.getContext().getString(R.string.log_entry_copied), android.widget.Toast.LENGTH_SHORT, true).show();
-                }
+                ca.pkay.rcloneexplorer.util.LogClipboard.copy(v.getContext(), formatEntry(selectedTrigger));
                 return true;
             });
 
@@ -91,6 +87,15 @@ public class LogRecyclerViewAdapter extends RecyclerView.Adapter<LogRecyclerView
         } catch (JSONException e) {
             e.printStackTrace();
         }
+    }
+
+    public static String formatEntry(JSONObject entry) {
+        long timestamp = entry.optLong(SyncLog.TIMESTAMP);
+        String date = new SimpleDateFormat("dd.MM.yyyy - HH:mm:ss", java.util.Locale.getDefault()).format(new Date(timestamp));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            date = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(new Date(timestamp));
+        }
+        return date + " [" + (entry.optInt(SyncLog.TYPE) == SyncLog.TYPE_ERROR ? "ERROR" : "INFO") + "]\n" + entry.optString(SyncLog.TITLE) + "\n" + entry.optString(SyncLog.CONTENT);
     }
 
     public void setList(ArrayList<JSONObject> entries) {

@@ -157,8 +157,8 @@
     <string name="pref_locale">Language</string>
     <string name="pref_locale_dlg_title">Select Language</string>
     <string name="pref_locale_restart_notice">Changing the language will take effect after restarting the app</string>
-    <string name="use_logs">Log rclone errors</string>
-    <string name="use_logs_summary">Error logs will be saved to a local file at (Android/data/de.schuelken.cloudbridge/files/logs)</string>
+    <string name="use_logs">Log rclone diagnostics</string>
+    <string name="use_logs_summary">Save rclone failure diagnostics and important warnings in the app’s private storage.</string>
     <string name="notifications_pref_title">Notifications</string>
     <string name="open_notification_settings_title">More notification settings</string>
     <string name="open_notification_settings_summary">Open the settings to further change how we notify you!</string>
@@ -192,7 +192,9 @@
     <string name="no_search_results">No search results</string>
     <string name="nothing_selected">Nothing selected</string>
     <string name="file_picker_root_title">Device storage</string>
-    <string name="remote_name_hint">Name (a–z, 0-9 only)</string>
+    <string name="remote_display_name">Display name</string>
+    <string name="remote_name_hint">Name</string>
+    <string name="remote_name_error">Start with a letter, number or underscore. You can also use spaces, hyphens and periods after the first character.</string>
     <string name="waiting_for_code">Waiting for code</string>
     <string name="open_browser">Open browser</string>
     <string name="provider_ftp">FTP</string>
@@ -202,6 +204,7 @@
     <string name="error_creating_remote">Error creating remote</string>
     <string name="cancelled">Cancelled</string>
     <string name="remote_creation_success">Remote created successfully</string>
+    <string name="remote_update_success">Remote updated successfully</string>
     <string name="next">Next</string>
     <string name="title_activity_remote_config">Select type</string>
     <string name="error_exporting_config_file">Error exporting config file</string>
@@ -264,6 +267,7 @@
     <string name="sync">Sync…</string>
     <string name="select_sync_direction">Select sync direction</string>
     <string name="nav_drawer_pinned_header">Pinned</string>
+    <string name="open_navigation_drawer">Open navigation drawer</string>
     <string name="nav_header_options_header">Options</string>
     <string name="worker_download_cancelled">Download cancelled</string>
     <string name="wifi_connections_isnt_available">Wi-Fi connection isn\'t available</string>
@@ -370,6 +374,7 @@
     <string name="operation_report_fail_short_content">%d Tasks failed</string>
     <string name="pin_to_dektop">Pin to Home</string>
     <string name="title_activity_task">Create a new Task</string>
+    <string name="title_edit_task">Edit task</string>
     <string name="title_activity_filter">Create a new Filter</string>
     <!-- Strings used for fragments for navigation -->
 
@@ -507,6 +512,7 @@
     <string name="auto_theme">Follow System Theme</string>
     <string name="light_theme">Light Mode</string>
     <string name="theme_title">Theme</string>
+    <string name="amoled_theme">AMOLED Black</string>
     <string name="remote_folder_picker_title">Folder picker</string>
     <string name="logFragment">Logs</string>
     <string name="alarm_while_idle">Allow tasks to run when the device is idle</string>
@@ -547,6 +553,7 @@
     <string name="toggle_advanced_options">Toggle Advanced Options</string>
     <string name="trigger_type_schedule">Scheduled</string>
     <string name="trigger_type_interval">Interval</string>
+    <string name="trigger_type_label">Trigger type</string>
     <string name="task_interval">Interval Settings</string>
     <string name="trigger_interval_15_min">Every 15 minutes</string>
     <string name="trigger_interval_30_min">Every 30 minutes</string>
@@ -703,4 +710,127 @@
     <string name="remote_options_content_description">Remote options</string>
     <string name="pinned_content_description">Pinned</string>
     <string name="no_log_entries">No sync log entries yet</string>
+
+    <!-- APK install & open -->
+    <string name="apk_install_permission_title">Install unknown apps</string>
+    <string name="apk_install_permission_message">CloudBridge needs permission to install Android packages (.apk). Grant access in Settings, then return to continue.</string>
+    <string name="apk_install_permission_action">Open Settings</string>
+    <string name="apk_split_not_supported">Split APK packages (.apks/.xapk/.apkm) require a dedicated split-APK installer.</string>
+    <string name="error_downloading_file">Failed to download file</string>
+    <string name="open_with">Open with…</string>
+    <string name="no_app_to_open_file">No app found to open this file</string>
+
+    <!-- Cache settings -->
+    <string name="preference_category_header_cache">Cache</string>
+    <string name="pref_cache_max_size_title">Maximum cache size</string>
+    <string name="pref_cache_max_size_summary">Limit: %1$.0f MB</string>
+    <string name="pref_clear_cache_title">Clear cache</string>
+    <string name="pref_clear_cache_summary">Using %1$s (cached files &amp; index)</string>
+    <string name="clear_cache_confirm_title">Clear cache?</string>
+    <string name="clear_cache_confirm_message">This removes all cached previews, thumbnails, directory listings, and search indexes.</string>
+    <string name="cache_cleared">Cache cleared</string>
+
+    <!-- Public link improvements -->
+    <string name="public_link_not_supported">This provider doesn\'t support public links</string>
+    <string name="public_link_forbidden">Sharing is disabled for this account or folder</string>
+    <string name="public_link_auth_error">Authentication failed. Re-authenticate the remote and try again.</string>
+    <string name="public_link_expiry_label">Expiry</string>
+    <string name="public_link_expiry_never">Default</string>
+    <string name="public_link_expiry_1h">1 hour</string>
+    <string name="public_link_expiry_1d">1 day</string>
+    <string name="public_link_expiry_7d">7 days</string>
+    <string name="public_link_copy">Copy</string>
+    <string name="public_link_share">Share</string>
+    <string name="public_link_unlink">Remove link</string>
+    <string name="public_link_unlinked">Public link removed</string>
+    <string name="public_link_multi_select_unsupported">Select a single item to create a public link</string>
+
+    <!-- Search Tiers 1, 2, 3 -->
+    <string name="search_scope_folder">This folder</string>
+    <string name="search_scope_recursive">Subfolders</string>
+    <string name="search_scope_indexed">All indexed</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_images">Images</string>
+    <string name="search_filter_video">Video</string>
+    <string name="search_filter_audio">Audio</string>
+    <string name="search_filter_docs">Documents</string>
+    <string name="search_filter_archives">Archives</string>
+    <string name="search_filter_apk">APKs</string>
+    <string name="search_filter_folders">Folders</string>
+    <string name="search_filter_size_any">Any size</string>
+    <string name="search_filter_size_gt_1mb">&gt; 1 MB</string>
+    <string name="search_filter_size_gt_10mb">&gt; 10 MB</string>
+    <string name="search_filter_size_gt_100mb">&gt; 100 MB</string>
+    <string name="search_filter_date_any">Any date</string>
+    <string name="search_filter_date_7d">7 days</string>
+    <string name="search_filter_date_30d">30 days</string>
+    <string name="search_filter_date_1y">1 year</string>
+    <string name="search_recursive_running">Searching subfolders… (%1$d found)</string>
+    <string name="search_recursive_truncated">Showing first %1$d results</string>
+    <string name="search_indexed_enable_hint">Enable offline search index in remote options to search across remotes</string>
+    <string name="remote_search_index_enable">Enable offline search index</string>
+    <string name="remote_search_index_disable">Disable offline search index</string>
+    <string name="remote_search_index_refresh">Refresh search index</string>
+    <string name="remote_search_index_started">Indexing %1$s in the background…</string>
+    <string name="remote_search_index_disabled">Search index disabled and cleared for %1$s</string>
+
+    <!-- Logs copy & clear -->
+    <string name="logs_copy_all">Copy all</string>
+    <string name="logs_clear">Clear logs</string>
+    <string name="logs_copied_full">Full log copied to clipboard</string>
+    <string name="logs_clear_confirm_title">Clear all logs?</string>
+    <string name="logs_clear_confirm_message">This will permanently delete all recorded sync and operation log entries.</string>
+    <string name="logs_cleared">Logs cleared</string>
+
+    <!-- Global search -->
+    <string name="global_search_title">Global Search</string>
+    <string name="global_search_hint">Search across indexed remotes…</string>
+    <string name="global_search_no_indexed_remotes">No remotes are indexed yet. Open a remote\'s 3-dot menu and enable \"Offline search index\" to search across remotes.</string>
+    <string name="global_search_no_results">No matching files found</string>
+    <string name="rclone_operation">Rclone operation</string>
+    <string name="rclone_exit_status">Rclone exited with status %1$d.</string>
+    <string name="rclone_daemon">rclone daemon</string>
+    <string name="current_processes">Current processes</string>
+    <string name="no_current_processes">No current processes</string>
+    <string name="process_percent">%1$d%%</string>
+    <string name="process_elapsed_eta_fallback">Elapsed: %1$s, %2$s remaining</string>
+    <string name="process_elapsed_only">Elapsed: %1$s</string>
+    <string name="process_eta_calculating">Calculating…</string>
+    <string name="process_daemon_idle">Ready</string>
+    <string name="process_daemon_idle_elapsed">Ready · Elapsed: %1$s</string>
+    <string name="search_index_process_title">Mapping %1$s for search</string>
+    <string name="search_index_progress_short">%1$d items mapped, %2$s remaining</string>
+    <string name="search_index_saving_short">Saving search index (%1$d/%2$d), %3$s remaining</string>
+    <string name="search_index_items_mapped">Mapped %1$d items</string>
+    <string name="search_index_speed">Speed:     %1$d items/s</string>
+    <string name="search_index_current_path">Folder: %1$s</string>
+    <string name="search_index_preparing">Preparing drive scan…</string>
+    <string name="global_search_map_drives">Map drives</string>
+    <string name="global_search_map_drives_title">Drives mapped for search</string>
+    <string name="global_search_map_drives_empty">No remotes available to map.</string>
+    <string name="global_search_map_drives_item">%1$s (%2$s)</string>
+    <string name="global_search_map_drives_not_mapped">Not mapped</string>
+    <string name="global_search_map_drives_mapped_count">%1$d items mapped</string>
+    <string name="global_search_map_drives_refresh_selected">Refresh selected</string>
+    <string name="global_search_map_drives_apply">Apply</string>
+    <string name="search_recursive_process_title">Searching %1$s</string>
+    <string name="search_recursive_progress_eta">%1$d items scanned, %2$s remaining</string>
+    <string name="logs_copied">Logs copied</string>
+    <string name="logs_too_large">Logs are too large to copy to the clipboard.</string>
+    <string name="logs_clear_failed">Could not clear all logs.</string>
+    <string name="logs_oauth_guidance">Google Drive quota or authorization problems? Create your own OAuth client ID, then use Edit remote to enter the client ID and secret and Re-authenticate the remote. See https://rclone.org/drive/#making-your-own-client-id</string>
+
+    <!-- Security remediation UI strings -->
+    <string name="serve_allow_write_access">Allow write access</string>
+    <string name="serve_dlna_warning">Warning: DLNA broadcasts media over your local network without encryption or authentication. Only use on trusted networks.</string>
+    <string name="streaming_service_notification_ftp_credentials">FTP credentials: user %1$s / pass %2$s</string>
+    <string name="streaming_service_notification_tls_url">Serving HTTPS on %1$s</string>
+    <string name="streaming_service_notification_tls_fingerprint">Cert SHA-256: %1$s</string>
+    <string name="apk_install_confirm_title">Confirm APK installation</string>
+    <string name="apk_install_confirm_message">Install package from remote?\n\nFile: %1$s\nOrigin: %2$s\nSize: %3$s\nSHA-256:\n%4$s</string>
+    <string name="apk_install_confirm_action">Install</string>
+    <string name="apk_install_origin_unknown">Unknown remote</string>
+    <string name="pref_proxy_password_masked">••••••</string>
+    <string name="pref_proxy_password_not_set">Not set</string>
+    <string name="pref_proxy_password_hint_saved">Leave blank to clear, or enter a new password</string>
 </resources>

@@ -42,8 +42,6 @@ import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.FileExplorerRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import de.felixnuesse.ui.BreadcrumbView;
-import es.dmoral.toasty.Toasty;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRefreshListener,
                                                         FileExplorerRecyclerViewAdapter.OnClickListener,
@@ -145,7 +143,6 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
         isDarkTheme = ActivityHelper.isDarkTheme(this.getActivity());
 
         RecyclerView recyclerView = view.findViewById(R.id.recycler_view);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
         View emptyFolderView = view.findViewById(R.id.empty_folder_view);
         View noSearchResultsView = view.findViewById(R.id.no_search_results_view);
@@ -379,35 +376,8 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
 
     private void sortSelected(int sortById, int sortOrderId) {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-        switch (sortById) {
-            case R.id.radio_sort_name:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                    sortOrder = SortDialog.ALPHA_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                    sortOrder = SortDialog.ALPHA_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_date:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                    sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                    sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_size:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                    sortOrder = SortDialog.SIZE_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                    sortOrder = SortDialog.SIZE_DESCENDING;
-                }
-                break;
-        }
+        sortOrder = FileComparators.resolveSortOrder(sortById, sortOrderId);
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
         recyclerViewAdapter.updateSortedData(directoryContent);
         if (sortOrder > 0) {
@@ -418,32 +388,7 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
 
     private void sortDirectory() {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-        switch (sortOrder) {
-            case SortDialog.MOD_TIME_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                break;
-            case SortDialog.MOD_TIME_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                break;
-            case SortDialog.SIZE_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                sortOrder = SortDialog.SIZE_ASCENDING;
-                break;
-            case SortDialog.SIZE_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                sortOrder = SortDialog.SIZE_DESCENDING;
-                break;
-            case SortDialog.ALPHA_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                sortOrder = SortDialog.ALPHA_ASCENDING;
-                break;
-            case SortDialog.ALPHA_DESCENDING:
-            default:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                sortOrder = SortDialog.ALPHA_DESCENDING;
-        }
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
     }
 
@@ -523,7 +468,7 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
         protected void onPostExecute(List<FileItem> fileItems) {
             super.onPostExecute(fileItems);
             if (fileItems == null) {
-                Toasty.error(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT).show();
                 fileItems = new ArrayList<>();
             }
             directoryObject.setContent(fileItems);
@@ -572,9 +517,9 @@ public class ShareFragment extends Fragment implements  SwipeRefreshLayout.OnRef
                 return;
             }
             if (result) {
-                Toasty.success(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT).show();
             } else {
-                Toasty.error(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT).show();
             }
             if (!pathWhenTaskStarted.equals(directoryObject.getCurrentPath())) {
                 directoryObject.removePathFromCache(pathWhenTaskStarted);

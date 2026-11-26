@@ -1,0 +1,18 @@
+<resources>
+    <!-- Keep raised surfaces distinct while the window and base surface are true black. -->
+    <style name="ThemeOverlay.CloudBridge.Amoled" parent="">
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorSurface">@android:color/black</item>
+        <item name="colorSurfaceDim">@android:color/black</item>
+        <item name="colorSurfaceVariant">#1E1E1E</item>
+        <item name="colorSurfaceContainerLowest">@android:color/black</item>
+        <item name="colorSurfaceContainerLow">#121212</item>
+        <item name="colorSurfaceContainer">#181818</item>
+        <item name="colorSurfaceContainerHigh">#222222</item>
+        <item name="colorSurfaceContainerHighest">#2C2C2C</item>
+    </style>
+</resources>

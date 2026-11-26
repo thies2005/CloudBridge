@@ -13,7 +13,10 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.PreferenceManager;
+
+import de.schuelken.cloudbridge.cache.CacheManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -24,6 +27,7 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -36,12 +40,16 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.net.InetAddress;
@@ -50,17 +58,19 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 import ca.pkay.rcloneexplorer.Database.json.Exporter;
+import ca.pkay.rcloneexplorer.Database.json.Importer;
 import ca.pkay.rcloneexplorer.Database.json.SharedPreferencesBackup;
 import ca.pkay.rcloneexplorer.Items.FileItem;
 import ca.pkay.rcloneexplorer.Items.FilterEntry;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.Items.SyncDirectionObject;
+import ca.pkay.rcloneexplorer.notifications.support.StatusObject;
 import ca.pkay.rcloneexplorer.rclone.Provider;
 import ca.pkay.rcloneexplorer.util.FLog;
+import ca.pkay.rcloneexplorer.util.ProxyPasswordStore;
+import ca.pkay.rcloneexplorer.util.SecretRedactor;
 import ca.pkay.rcloneexplorer.util.SyncLog;
-import es.dmoral.toasty.Toasty;
 import io.github.x0b.safdav.SafAccessProvider;
-import io.github.x0b.safdav.SafDAVServer;
 import io.github.x0b.safdav.file.SafConstants;
 
 public class Rclone {
@@ -75,11 +85,9 @@ public class Rclone {
 
     public static final String RCLONE_CONFIG_NAME_KEY = "rclone_remote_name";
     private static volatile Boolean isCompatible;
-    private static SafDAVServer safDAVServer;
     private Context context;
     private String rclone;
     private String rcloneConf;
-    private Log2File log2File;
     // RC-38: cache of the parsed `rclone config dump` JSON. Validated against the rclone.conf
     // file's mtime/length on every read so per-instance caches self-invalidate when another
     // Rclone instance (e.g. a config dialog) mutates the config. Volatile for cross-thread visibility.
@@ -91,7 +99,6 @@ public class Rclone {
         this.context = context;
         this.rclone = context.getApplicationInfo().nativeLibraryDir + "/librclone.so";
         this.rcloneConf = context.getFilesDir().getPath() + "/rclone.conf";
-        log2File = new Log2File(context);
     }
 
     private String[] createCommand(ArrayList<String> args) {
@@ -169,65 +176,181 @@ public class Rclone {
     }
 
     private String getTransfers(String override) {
-        if (override != null && !override.isEmpty()) {
-            return override;
-        }
-        return PreferenceManager
-                .getDefaultSharedPreferences(context)
-                .getString(context.getString(R.string.pref_key_transfers), "4");
+        String raw = (override != null && !override.isEmpty())
+                ? override
+                : PreferenceManager
+                        .getDefaultSharedPreferences(context)
+                        .getString(context.getString(R.string.pref_key_transfers), "4");
+        return SharedPreferencesBackup.sanitizeTransfers(raw);
     }
 
     public String[] getRcloneEnv(String... overwriteOptions) {
-        ArrayList<String> environmentValues = new ArrayList<>();
+        Map<String, String> envMap = new LinkedHashMap<>();
         SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(context);
 
         boolean proxyEnabled = pref.getBoolean(context.getString(R.string.pref_key_use_proxy), false);
-        if(proxyEnabled) {
+        if (proxyEnabled) {
             String noProxy = pref.getString(context.getString(R.string.pref_key_no_proxy_hosts), "localhost");
             String protocol = pref.getString(context.getString(R.string.pref_key_proxy_protocol), "http");
             String host = pref.getString(context.getString(R.string.pref_key_proxy_host), "localhost");
             String user = pref.getString(context.getString(R.string.pref_key_proxy_username), "");
-            String pass = pref.getString(context.getString(R.string.pref_key_proxy_password), "");
+            String pass = ProxyPasswordStore.getDecryptedPassword(context);
             int port = pref.getInt(context.getString(R.string.pref_key_proxy_port), 8080);
-            String auth = "";
-            if(!(user + pass).isEmpty()) {
-                auth = user+":"+pass+"@";
-            }
-            String url = protocol + "://" + auth + host + ":" + port;
+            String url = ProxyPasswordStore.buildProxyUrl(protocol, host, port, user, pass);
             // per https://golang.org/pkg/net/http/#ProxyFromEnvironment
-            environmentValues.add("http_proxy=" + url);
-            environmentValues.add("https_proxy=" + url);
-            environmentValues.add("no_proxy=" + noProxy);
+            envMap.put("http_proxy", url);
+            envMap.put("https_proxy", url);
+            envMap.put("no_proxy", noProxy);
         }
 
         // if TMPDIR is not set, golang uses /data/local/tmp which is only
-        // only accessible for the shell user
+        // accessible for the shell user
         String tmpDir = context.getCacheDir().getAbsolutePath();
-        environmentValues.add("TMPDIR=" + tmpDir);
+        envMap.put("TMPDIR", tmpDir);
 
         // ignore chtimes errors
         // ref: https://github.com/rclone/rclone/issues/2446
-        environmentValues.add("RCLONE_LOCAL_NO_SET_MODTIME=true");
+        envMap.put("RCLONE_LOCAL_NO_SET_MODTIME", "true");
 
         // The pre-built linux rclone binaries do not know how to find the Android certificate store.
         // We set SSL_CERT_DIR to Android's native certificate store path.
-        environmentValues.add("SSL_CERT_DIR=/system/etc/security/cacerts");
+        envMap.put("SSL_CERT_DIR", "/system/etc/security/cacerts");
 
-        environmentValues.add("RCLONE_DNS_SERVERS=" + getDnsServers());
+        envMap.put("RCLONE_DNS_SERVERS", getDnsServers());
 
-        // Allow the caller to overwrite any option for special cases
-        Iterator<String> envVarIter = environmentValues.iterator();
-        while(envVarIter.hasNext()){
-            String envVar = envVarIter.next();
-            String optionName = envVar.substring(0, envVar.indexOf('='));
-            for(String overwrite : overwriteOptions){
-                if(overwrite.startsWith(optionName)) {
-                    envVarIter.remove();
-                    environmentValues.add(overwrite);
+        if (overwriteOptions != null) {
+            for (String overwrite : overwriteOptions) {
+                if (overwrite == null) {
+                    continue;
+                }
+                int eq = overwrite.indexOf('=');
+                if (eq > 0) {
+                    envMap.put(overwrite.substring(0, eq), overwrite.substring(eq + 1));
                 }
             }
         }
+        ArrayList<String> environmentValues = new ArrayList<>(envMap.size());
+        for (Map.Entry<String, String> entry : envMap.entrySet()) {
+            environmentValues.add(entry.getKey() + "=" + entry.getValue());
+        }
         return environmentValues.toArray(new String[0]);
+    }
+
+    @VisibleForTesting
+    static List<String> buildSafDavEnvOverrides(
+            @NonNull Collection<String> remoteNames,
+            @NonNull String serverUrl,
+            @NonNull String authHeader) {
+        ArrayList<String> overrides = new ArrayList<>();
+        for (String name : remoteNames) {
+            if (name == null || name.isEmpty()) {
+                continue;
+            }
+            // Rclone ConfigToEnv keeps '-' in the remote section name intact.
+            String prefix = "RCLONE_CONFIG_" + name.toUpperCase(Locale.ROOT) + "_";
+            overrides.add(prefix + "URL=" + serverUrl);
+            overrides.add(prefix + "HEADERS=Authorization," + authHeader);
+            overrides.add(prefix + "USER=");
+            overrides.add(prefix + "PASS=");
+        }
+        return overrides;
+    }
+
+    private String[] ensureSafDavAndGetEnv(@Nullable RemoteItem... remotes) throws IOException {
+        return ensureSafDavAndGetEnv(remotes, Collections.emptyList());
+    }
+
+    private String[] ensureSafDavAndGetEnv(
+            @Nullable RemoteItem[] remotes,
+            @NonNull Collection<String> extraEnv) throws IOException {
+        Set<String> safRemoteNames = new LinkedHashSet<>();
+        boolean needsSafDav = false;
+        if (remotes != null) {
+            for (RemoteItem remote : remotes) {
+                if (remote != null && isSafDavRemote(remote)) {
+                    needsSafDav = true;
+                    safRemoteNames.add(SafConstants.SAF_REMOTE_NAME);
+                    if (remote.isRemoteType(RemoteItem.SAFW) && remote.getName() != null) {
+                        safRemoteNames.add(remote.getName());
+                    }
+                    String target = resolveWrappedSafTargetName(remote);
+                    if (target != null && !target.isEmpty()) {
+                        safRemoteNames.add(target);
+                    }
+                }
+            }
+        }
+        return finalizeSafDavEnv(needsSafDav, safRemoteNames, extraEnv);
+    }
+
+    private String[] ensureSafDavAndGetEnvForName(
+            @Nullable String remoteName,
+            @NonNull Collection<String> extraEnv) throws IOException {
+        Set<String> safRemoteNames = new LinkedHashSet<>();
+        boolean needsSafDav = false;
+        if (remoteName != null && !remoteName.isEmpty()) {
+            if (SafConstants.SAF_REMOTE_NAME.equals(remoteName)) {
+                needsSafDav = true;
+                safRemoteNames.add(remoteName);
+            } else {
+                RemoteItem resolved = getRemoteItemFromName(remoteName);
+                if (resolved != null && isSafDavRemote(resolved)) {
+                    return ensureSafDavAndGetEnv(new RemoteItem[]{resolved}, extraEnv);
+                }
+            }
+        }
+        return finalizeSafDavEnv(needsSafDav, safRemoteNames, extraEnv);
+    }
+
+    private String[] finalizeSafDavEnv(
+            boolean needsSafDav,
+            @NonNull Set<String> safRemoteNames,
+            @NonNull Collection<String> extraEnv) throws IOException {
+        ArrayList<String> overrides = new ArrayList<>();
+        if (needsSafDav) {
+            io.github.x0b.safdav.SafDAVServer server = SafAccessProvider.getServer(context);
+            String serverUrl = server != null ? server.getBaseUrl() : SafAccessProvider.getServerUrl();
+            String authHeader = SafAccessProvider.getSessionAuthHeader();
+            if (serverUrl == null || authHeader == null) {
+                throw new IOException("SAF WebDAV bridge unavailable");
+            }
+            overrides.addAll(buildSafDavEnvOverrides(
+                    safRemoteNames, serverUrl, authHeader));
+        }
+        overrides.addAll(extraEnv);
+        return getRcloneEnv(overrides.toArray(new String[0]));
+    }
+
+    @Nullable
+    private String resolveWrappedSafTargetName(@NonNull RemoteItem remote) {
+        if (!remote.isAlias() && !remote.isCrypt() && !remote.isCache()) {
+            return null;
+        }
+        JSONObject config = getCachedRemotesConfig();
+        if (config == null || remote.getName() == null) {
+            return null;
+        }
+        String current = remote.getName();
+        for (int depth = 0; depth < 8; depth++) {
+            JSONObject obj = config.optJSONObject(current);
+            if (obj == null) {
+                return null;
+            }
+            String type = remoteType(obj);
+            if (SafConstants.SAF_REMOTE_NAME.equals(type)) {
+                return current;
+            }
+            if (!"crypt".equals(type) && !"alias".equals(type) && !"cache".equals(type)) {
+                return null;
+            }
+            String target = obj.optString("remote");
+            int colon = target.indexOf(':');
+            if (colon <= 0) {
+                return null;
+            }
+            current = target.substring(0, colon);
+        }
+        return null;
     }
 
     private String getDnsServers() {
@@ -251,36 +374,90 @@ public class Rclone {
         }
     }
 
+    // Only commands whose stderr has no other consumer use this collector.
+    private static final java.util.Map<Process, DiagnosticCollector> diagnostics =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    private static class DiagnosticCollector extends Thread {
+        private final Process process;
+        private final InputStream stream;
+        @Nullable private final StatusObject statusObject;
+        private final StringBuilder warnings = new StringBuilder();
+        private final StringBuilder output = new StringBuilder();
+        DiagnosticCollector(@Nullable Context context, Process process) {
+            this.process = process;
+            this.stream = process.getErrorStream();
+            this.statusObject = context != null ? new StatusObject(context.getApplicationContext()) : null;
+            setDaemon(true);
+        }
+        @Override public void run() {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (statusObject != null && trimmed.startsWith("{") && trimmed.contains("\"stats\"")) {
+                        try {
+                            JSONObject logline = new JSONObject(trimmed);
+                            if (logline.has("stats")) {
+                                statusObject.parseLoglineToStatusObject(logline);
+                                ProcessRegistry.updateFromStatusObject(process, null, statusObject);
+                            }
+                        } catch (JSONException ignored) { }
+                    }
+                    String lower = line.toLowerCase(Locale.ROOT);
+                    if (warnings.length() < 8192 && RcloneDiagnostics.isSharedClientRetirement(lower))
+                        warnings.append(line, 0, Math.min(line.length(), 8192 - warnings.length())).append('\n');
+                    if (line.length() > 262144) line = line.substring(line.length() - 262144);
+                    output.append(line).append('\n');
+                    if (output.length() > 262144) output.delete(0, output.length() - 262144);
+                }
+            } catch (IOException ignored) { }
+        }
+    }
+
+    public void collectDiagnostics(Process process) {
+        if (process == null) return;
+        DiagnosticCollector collector = new DiagnosticCollector(context, process);
+        diagnostics.put(process, collector);
+        collector.start();
+    }
+
+    public void discardDiagnostics(Process process) { if (process != null) diagnostics.remove(process); }
+
     public void logErrorOutput(Process process) {
-        if (process == null) {
-            return;
+        if (process == null) return;
+        final int exit;
+        try { exit = process.exitValue(); } catch (IllegalThreadStateException stillRunning) { return; }
+        DiagnosticCollector collector = diagnostics.remove(process);
+        String output;
+        if (collector != null) {
+            try { collector.join(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+            output = collector.isAlive() ? "" : collector.warnings.toString() + collector.output.toString();
+        } else {
+            if (exit == 0) return;
+            StringBuilder buffer = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null && buffer.length() < 262144) buffer.append(line).append('\n');
+            } catch (IOException ignored) { /* Report the exit status if stderr is unavailable. */ }
+            output = buffer.toString();
         }
-
-        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
-        boolean isLoggingEnable = sharedPreferences.getBoolean(context.getString(R.string.pref_key_logs), false);
-        if (!isLoggingEnable) {
-            return;
-        }
-
-        StringBuilder stringBuilder = new StringBuilder(100);
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                stringBuilder.append(line).append("\n");
+        if (!PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(context.getString(R.string.pref_key_logs), false)) return;
+        // Standard shell signal statuses represent cancellation, not a completed failure.
+        if (RcloneDiagnostics.isCancellation(exit)) return;
+        if (exit != 0) {
+            String message = context.getString(R.string.rclone_exit_status, exit);
+            if (!output.trim().isEmpty()) message += "\n" + output;
+            SyncLog.error(context, context.getString(R.string.rclone_operation), message);
+        } else {
+            java.util.LinkedHashSet<String> warnings = new java.util.LinkedHashSet<>();
+            for (String line : output.split("\\r?\\n")) {
+                String lower = line.toLowerCase(Locale.ROOT);
+                if (RcloneDiagnostics.isSharedClientRetirement(lower)) warnings.add(line);
             }
-        } catch (InterruptedIOException iioe) {
-            FLog.i(TAG, "logErrorOutput: process died while reading. Log may be incomplete.");
-        } catch (IOException e) {
-            if("Stream closed".equals(e.getMessage())) {
-                FLog.d(TAG, "logErrorOutput: could not read stderr, process stream is already closed");
-            } else {
-                FLog.e(TAG, "logErrorOutput: ", e);
-            }
-            return;
+            if (!warnings.isEmpty()) SyncLog.info(context, context.getString(R.string.rclone_operation), android.text.TextUtils.join("\n", warnings));
         }
-        String logOutput = stringBuilder.toString();
-        log2File.log(logOutput);
-        SyncLog.error(context, "Rclone operation", logOutput);
     }
 
     @Nullable
@@ -298,31 +475,27 @@ public class Rclone {
         if (path.compareTo("//" + remote.getName()) != 0) {
             remoteAndPath += path;
         }
-        // if SAFW, start emulation server
-        if(remote.isRemoteType(RemoteItem.SAFW) && path.equals("//" + remote.getName()) && safDAVServer == null){
-            try {
-                safDAVServer = SafAccessProvider.getServer(context);
-            } catch (IOException e) {
-                // TODO: Provide port checking / alt port functionality
-                FLog.e(TAG, "Cannot connect to SAF DAV emulation server");
-                return null;
-            }
+        String[] env;
+        try {
+            env = ensureSafDavAndGetEnv(remote);
+        } catch (IOException e) {
+            FLog.e(TAG, "Cannot start SAF WebDAV bridge", e);
+            return null;
         }
 
         String[] command;
         if (remote.isRemoteType(RemoteItem.LOCAL) || remote.isPathAlias()) {
             // ignore .android_secure errors
             // ref: https://github.com/rclone/rclone/issues/3179
-            command = createCommandWithOptions("--ignore-errors", "lsjson", remoteAndPath);
+            command = createCommandWithOptions("--ignore-errors", "lsjson", "--", remoteAndPath);
         } else {
-            command = createCommandWithOptions("lsjson", remoteAndPath);
+            command = createCommandWithOptions("lsjson", "--", remoteAndPath);
         }
-        String[] env = getRcloneEnv();
         JSONArray results;
         Process process = null;
         try {
-            FLog.d(TAG, "getDirectoryContent[ENV]: %s", Arrays.toString(env));
             process = getRuntimeProcess(command, env);
+            collectDiagnostics(process);
 
             StringBuilder output = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -339,6 +512,8 @@ public class Rclone {
                 return null;
             }
 
+            if (process.exitValue() == 0) logErrorOutput(process);
+            else diagnostics.remove(process); // Accepted local exit status.
             String outputStr = output.toString();
             results = new JSONArray(outputStr);
             if (remote.isRemoteType(RemoteItem.INTERNXT)) {
@@ -347,7 +522,8 @@ public class Rclone {
             }
 
         } catch (InterruptedException e) {
-            logErrorOutput(process);
+            if (process != null) process.destroy();
+            Thread.currentThread().interrupt();
             FLog.d(TAG, "getDirectoryContent: Aborted refreshing folder");
             return null;
         } catch (IOException | JSONException e) {
@@ -356,12 +532,163 @@ public class Rclone {
             return null;
         }
 
+        return parseLsJsonArray(remote, path, results, startAtRoot, Integer.MAX_VALUE, process);
+    }
+
+    public interface RecursiveListProgressListener {
+        void onProgress(int itemsFound, long bytesFound, @Nullable String currentPath);
+    }
+
+    @Nullable
+    public List<FileItem> getDirectoryContentRecursive(
+            RemoteItem remote,
+            String path,
+            boolean startAtRoot,
+            int maxDepth,
+            int maxItems,
+            @Nullable java.util.concurrent.atomic.AtomicReference<Process> processOut) {
+        return getDirectoryContentRecursive(remote, path, startAtRoot, maxDepth, maxItems, processOut, null);
+    }
+
+    @Nullable
+    public List<FileItem> getDirectoryContentRecursive(
+            RemoteItem remote,
+            String path,
+            boolean startAtRoot,
+            int maxDepth,
+            int maxItems,
+            @Nullable java.util.concurrent.atomic.AtomicReference<Process> processOut,
+            @Nullable RecursiveListProgressListener progressListener) {
+        if (remote == null) {
+            return null;
+        }
+        String remoteAndPath = buildRemoteAndPath(remote, path, startAtRoot);
+        String[] env;
+        try {
+            env = ensureSafDavAndGetEnv(remote);
+        } catch (IOException e) {
+            FLog.e(TAG, "Cannot start SAF WebDAV bridge", e);
+            return null;
+        }
+
+        ArrayList<String> args = new ArrayList<>();
+        if (remote.isRemoteType(RemoteItem.LOCAL) || remote.isPathAlias()) {
+            args.add("--ignore-errors");
+        }
+        args.add("lsjson");
+        args.add("-R");
+        args.add("--fast-list");
+        if (maxDepth > 0) {
+            args.add("--max-depth");
+            args.add(String.valueOf(maxDepth));
+        }
+        args.add("--");
+        args.add(remoteAndPath);
+
+        String[] command = createCommandWithOptions(args);
+        Process process = null;
+        try {
+            process = getRuntimeProcess(command, env);
+            collectDiagnostics(process);
+            if (processOut != null) {
+                processOut.set(process);
+            }
+            if (progressListener != null) {
+                progressListener.onProgress(0, 0L, null);
+            }
+            StringBuilder output = new StringBuilder();
+            int itemsFound = 0;
+            long bytesFound = 0L;
+            long lastProgressMs = 0L;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("{")) {
+                        itemsFound++;
+                        String entryPath = null;
+                        long entrySize = 0L;
+                        try {
+                            String jsonText = trimmed.endsWith(",")
+                                    ? trimmed.substring(0, trimmed.length() - 1)
+                                    : trimmed;
+                            JSONObject entryJson = new JSONObject(jsonText);
+                            entrySize = Math.max(0L, entryJson.optLong("Size", 0L));
+                            entryPath = entryJson.optString("Path", null);
+                        } catch (JSONException ignored) {
+                        }
+                        bytesFound += entrySize;
+                        long now = System.currentTimeMillis();
+                        if (progressListener != null && (itemsFound == 1 || now - lastProgressMs >= 200L)) {
+                            lastProgressMs = now;
+                            progressListener.onProgress(itemsFound, bytesFound, entryPath);
+                        }
+                    }
+                }
+            }
+            if (progressListener != null && itemsFound > 0) {
+                progressListener.onProgress(itemsFound, bytesFound, null);
+            }
+            process.waitFor();
+            if (process.exitValue() != 0 && (process.exitValue() != 6 || !remote.isRemoteType(RemoteItem.LOCAL, RemoteItem.ALIAS))) {
+                logErrorOutput(process);
+                return null;
+            }
+            if (process.exitValue() == 0) {
+                logErrorOutput(process);
+            } else {
+                discardDiagnostics(process);
+            }
+            JSONArray results = new JSONArray(output.toString());
+            return parseLsJsonArray(remote, path, results, startAtRoot, maxItems, process);
+        } catch (InterruptedException e) {
+            if (process != null) process.destroy();
+            Thread.currentThread().interrupt();
+            logErrorOutput(process);
+            return null;
+        } catch (IOException | JSONException e) {
+            logErrorOutput(process);
+            FLog.e(TAG, "getDirectoryContentRecursive: failed", e);
+            return null;
+        } finally {
+            if (processOut != null) {
+                processOut.set(null);
+            }
+        }
+    }
+
+    private String buildRemoteAndPath(RemoteItem remote, String path, boolean startAtRoot) {
+        String remoteAndPath = remote.getName() + ":";
+        if (startAtRoot) {
+            remoteAndPath += "/";
+        }
+        if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isCrypt() && !remote.isAlias() && !remote.isCache())) {
+            remoteAndPath += getLocalRemotePathPrefix(remote, context) + "/";
+        }
+        if (path != null && !path.isEmpty() && path.compareTo("//" + remote.getName()) != 0) {
+            remoteAndPath += path;
+        }
+        return remoteAndPath;
+    }
+
+    @Nullable
+    private List<FileItem> parseLsJsonArray(
+            RemoteItem remote,
+            String basePath,
+            JSONArray results,
+            boolean startAtRoot,
+            int maxItems,
+            Process process) {
         List<FileItem> fileItemList = new ArrayList<>();
-        for (int i = 0; i < results.length(); i++) {
+        int count = Math.min(results.length(), maxItems > 0 ? maxItems : results.length());
+        String prefix = (basePath == null || basePath.compareTo("//" + remote.getName()) == 0 || basePath.isEmpty())
+                ? ""
+                : basePath + "/";
+        for (int i = 0; i < count; i++) {
             try {
                 JSONObject jsonObject = results.getJSONObject(i);
-                String filePath = (path.compareTo("//" + remote.getName()) == 0) ? "" : path + "/";
-                filePath += jsonObject.getString("Path");
+                String filePath = prefix + jsonObject.getString("Path");
                 String fileName = jsonObject.getString("Name");
                 long fileSize = jsonObject.getLong("Size");
                 String fileModTime = jsonObject.getString("ModTime");
@@ -369,10 +696,12 @@ public class Rclone {
                 String mimeType = jsonObject.getString("MimeType");
 
                 if (remote.isCrypt()) {
-                    String extension = fileName.substring(fileName.lastIndexOf(".") + 1);
-                    String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
-                    if (type != null) {
-                        mimeType = type;
+                    String extension = FileItem.extractExtension(fileName);
+                    if (!extension.isEmpty()) {
+                        String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+                        if (type != null) {
+                            mimeType = type;
+                        }
                     }
                 }
 
@@ -380,7 +709,7 @@ public class Rclone {
                 fileItemList.add(fileItem);
             } catch (JSONException e) {
                 logErrorOutput(process);
-                FLog.e(TAG, "getDirectoryContent: Could not decode JSON", e);
+                FLog.e(TAG, "parseLsJsonArray: Could not decode JSON", e);
                 return null;
             }
         }
@@ -407,23 +736,16 @@ public class Rclone {
             String key = iterator.next();
             try {
                 JSONObject remoteJSON = new JSONObject(remotesJSON.get(key).toString());
-                String type = remoteJSON.optString("type");
+                String type = remoteType(remoteJSON);
                 if (type.trim().isEmpty()) {
-                    Toasty.error(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT, true).show();
+                    Toast.makeText(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT).show();
                     continue;
                 }
-                if(type.equals("webdav")){
-                    String url = remoteJSON.optString("url");
-                    if(url.startsWith(SafConstants.SAF_REMOTE_URL)){
-                        type = SafConstants.SAF_REMOTE_NAME;
-                    }
-                }
-
                 RemoteItem newRemote = new RemoteItem(key, type);
                 if (type.equals("crypt") || type.equals("alias") || type.equals("cache")) {
-                    newRemote = getRemoteType(remotesJSON, newRemote, key, 8);
+                    newRemote = getRemoteType(remotesJSON, newRemote, key, 8, false);
                     if (newRemote == null) {
-                        Toasty.error(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT, true).show();
+                        Toast.makeText(context, context.getResources().getString(R.string.error_retrieving_remote, key), Toast.LENGTH_SHORT).show();
                         continue;
                     }
                 }
@@ -469,7 +791,7 @@ public class Rclone {
             }
             process.waitFor();
             if (process.exitValue() != 0) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                 logErrorOutput(process);
                 return null;
             }
@@ -508,11 +830,42 @@ public class Rclone {
     }
 
     private Process getRuntimeProcess(String[] command, String[] env) throws IOException {
-        return Runtime.getRuntime().exec(command, env);
+        Process process = Runtime.getRuntime().exec(command, env);
+        ProcessRegistry.register(process, command);
+        return process;
+    }
+
+    private static String remoteType(JSONObject config) {
+        return remoteType(config.optString("type"), config.optString("url"));
+    }
+
+    static String remoteType(String type, String url) {
+        if ("webdav".equals(type) && url.startsWith(SafConstants.SAF_REMOTE_URL)) {
+            return SafConstants.SAF_REMOTE_NAME;
+        }
+        return type;
+    }
+
+    boolean isSafDavRemote(@Nullable RemoteItem remote) {
+        if (remote == null) {
+            return false;
+        }
+        if (remote.isRemoteType(RemoteItem.SAFW)) {
+            return true;
+        }
+        // Resolve the transport while retaining the wrapper's existing display and provider type.
+        if (remote.isRemoteType(RemoteItem.WEBDAV) && (remote.isAlias() || remote.isCrypt() || remote.isCache())) {
+            JSONObject config = getCachedRemotesConfig();
+            RemoteItem resolved = config == null ? null
+                    : getRemoteType(config, new RemoteItem(remote.getName(), "webdav"), remote.getName(), 8, true);
+            return resolved != null && resolved.isRemoteType(RemoteItem.SAFW);
+        }
+        return false;
     }
 
     @Nullable
-    private RemoteItem getRemoteType(JSONObject remotesJSON, RemoteItem remoteItem, String remoteName, int maxDepth) {
+    private RemoteItem getRemoteType(JSONObject remotesJSON, RemoteItem remoteItem, String remoteName,
+                                     int maxDepth, boolean detectSafDav) {
         Iterator<String> iterator = remotesJSON.keys();
 
         while (iterator.hasNext()) {
@@ -524,7 +877,7 @@ public class Rclone {
 
             try {
                 JSONObject remoteJSON = new JSONObject(remotesJSON.get(key).toString());
-                String type = remoteJSON.optString("type");
+                String type = detectSafDav ? remoteType(remoteJSON) : remoteJSON.optString("type");
                 if (type.trim().isEmpty()) {
                     return null;
                 }
@@ -557,7 +910,7 @@ public class Rclone {
                     } else {
                         int index = remote.indexOf(":");
                         remote = remote.substring(0, index);
-                        return getRemoteType(remotesJSON, remoteItem, remote, --maxDepth);
+                        return getRemoteType(remotesJSON, remoteItem, remote, maxDepth - 1, detectSafDav);
                     }
                 }
                 remoteItem.setType(type);
@@ -573,10 +926,13 @@ public class Rclone {
     @Nullable
     public Process configCreate(List<String> options) {
         // https://rclone.org/commands/rclone_config_create/
-        // See the NB-comment why we need to pass --obscure.
-        // Otherwise long passwords fail.
-        options.add("--obscure");
-        return config("create" , options);
+        // Place --obscure BEFORE "--" so values starting with "-" are never parsed as flags.
+        // Keep configCreate interactive (without --non-interactive) for OauthHelper.createOptionsWithOauth.
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--obscure");
+        args.add("--");
+        args.addAll(options);
+        return config("create", args);
     }
 
     /**
@@ -586,15 +942,23 @@ public class Rclone {
      * step will handle the interactive auth.
      */
     public Process configCreateNoInteract(List<String> options) {
-        options.add("--obscure");
-        options.add("--non-interactive");
-        options.add("--no-output");
-        return config("create", options);
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--obscure");
+        args.add("--non-interactive");
+        args.add("--no-output");
+        args.add("--");
+        args.addAll(options);
+        return config("create", args);
     }
 
     @Nullable
     public Process configUpdate(List<String> options) {
-        return configCreate(options);
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--obscure");
+        args.add("--non-interactive");
+        args.add("--");
+        args.addAll(options);
+        return config("update", args);
     }
     
     public Process config(String task, List<String> options) {
@@ -636,7 +1000,7 @@ public class Rclone {
 
             process.waitFor();
             if (process.exitValue() != 0) {
-                Toasty.error(context, context.getString(R.string.error_getting_config), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_config), Toast.LENGTH_SHORT).show();
                 logErrorOutput(process);
             }
 
@@ -676,6 +1040,7 @@ public class Rclone {
             return;
         }
         invalidateRemotesCache();
+        CacheManager.getInstance(context).clearRemoteCache(remoteName);
         String[] command = createCommandWithOptions("config", "delete", "--", remoteName);
         Process process;
 
@@ -711,12 +1076,61 @@ public class Rclone {
     public Process serve(int protocol, int port, boolean allowRemoteAccess, @Nullable String user,
                          @Nullable String password, @NonNull RemoteItem remote, @Nullable String servePath,
                          @Nullable String baseUrl) {
-        String remoteName = remote.getName();
-        String localRemotePath = (remote.isRemoteType(RemoteItem.LOCAL)) ? getLocalRemotePathPrefix(remote, context)  + "/" : "";
-        String path = (servePath.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath : remoteName + ":" + localRemotePath + servePath;
-        String address;
-        String commandProtocol;
+        return serve(protocol, port, allowRemoteAccess, user, password, remote, servePath, baseUrl, true, null, null);
+    }
 
+    public Process serve(int protocol, int port, boolean allowRemoteAccess, @Nullable String user,
+                         @Nullable String password, @NonNull RemoteItem remote, @Nullable String servePath,
+                         @Nullable String baseUrl, boolean readOnly,
+                         @Nullable File certFile, @Nullable File keyFile) {
+        String remoteName = remote.getName();
+        String localRemotePath = (remote.isRemoteType(RemoteItem.LOCAL)) ? getLocalRemotePathPrefix(remote, context) + "/" : "";
+        String safeServePath = servePath != null ? servePath : "";
+        String path = (safeServePath.compareTo("//" + remoteName) == 0)
+                ? remoteName + ":" + localRemotePath
+                : remoteName + ":" + localRemotePath + safeServePath;
+
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
+        boolean isLoggingEnabled = sharedPreferences.getBoolean(context.getString(R.string.pref_key_logs), false);
+        String serveLogPath = null;
+        if (isLoggingEnabled) {
+            File logsDir = new File(context.getFilesDir(), "logs");
+            if (!logsDir.exists()) {
+                logsDir.mkdirs();
+            }
+            serveLogPath = new File(logsDir, "serve.log").getAbsolutePath();
+        }
+
+        List<String> serveArgs = buildServeArgs(
+                protocol, port, allowRemoteAccess, user, password, path, baseUrl,
+                getTransfers(), readOnly, certFile, keyFile, serveLogPath);
+        List<String> credEnv = buildServeCredentialEnv(protocol, user, password);
+
+        String[] command = createCommandWithOptions(new ArrayList<>(serveArgs));
+        try {
+            String[] env = ensureSafDavAndGetEnv(new RemoteItem[]{remote}, credEnv);
+            return getRuntimeProcess(command, env);
+        } catch (IOException e) {
+            FLog.e(TAG, "serve: error starting rclone", e);
+            return null;
+        }
+    }
+
+    @VisibleForTesting
+    static List<String> buildServeArgs(
+            int protocol,
+            int port,
+            boolean allowRemoteAccess,
+            @Nullable String user,
+            @Nullable String password,
+            @NonNull String path,
+            @Nullable String baseUrl,
+            @NonNull String transfers,
+            boolean readOnly,
+            @Nullable File certFile,
+            @Nullable File keyFile,
+            @Nullable String logFilePath) {
+        String commandProtocol;
         switch (protocol) {
             case SERVE_PROTOCOL_HTTP:
                 commandProtocol = "http";
@@ -729,25 +1143,31 @@ public class Rclone {
                 break;
             default:
                 commandProtocol = "webdav";
+                break;
         }
 
-        if (allowRemoteAccess && (user == null || user.length() == 0 || password == null || password.length() == 0)) {
-            FLog.w(TAG, "serve: remote access requested without credentials, binding to localhost");
-            address = "127.0.0.1:" + String.valueOf(port);
-        } else if (allowRemoteAccess) {
-            address = ":" + String.valueOf(port);
+        boolean hasCreds = user != null && !user.isEmpty() && password != null && !password.isEmpty();
+        boolean hasTls = certFile != null && keyFile != null;
+        String address;
+        if (allowRemoteAccess) {
+            if (protocol == SERVE_PROTOCOL_DLNA) {
+                address = ":" + port;
+            } else if (hasCreds && hasTls) {
+                address = ":" + port;
+            } else {
+                address = "127.0.0.1:" + port;
+            }
         } else {
-            address = "127.0.0.1:" + String.valueOf(port);
+            address = "127.0.0.1:" + port;
         }
 
-        ArrayList<String> params = new ArrayList<>(Arrays.asList(
-                createCommandWithOptions("serve", commandProtocol, "--addr", address, path)));
-
-        // Transfer throughput tuning. These are rclone global / VFS flags; the existing
-        // serve command already appends subcommand flags (e.g. --user) after the path and
-        // rclone's parser accepts them in this position (cf. --log-file below).
+        ArrayList<String> params = new ArrayList<>();
+        params.add("serve");
+        params.add(commandProtocol);
+        params.add("--addr");
+        params.add(address);
         params.add("--transfers");
-        params.add(getTransfers());
+        params.add(SharedPreferencesBackup.sanitizeTransfers(transfers));
         params.add("--buffer-size");
         params.add("16M");
         params.add("--multi-thread-streams");
@@ -759,42 +1179,41 @@ public class Rclone {
         params.add("--dir-cache-time");
         params.add("5m");
 
-        if(null != user && user.length() > 0) {
-            params.add("--user");
-            params.add(user);
+        if (readOnly) {
+            params.add("--read-only");
         }
-
-        if(null != password && password.length() > 0) {
-            params.add("--pass");
-            params.add(password);
+        if (protocol != SERVE_PROTOCOL_DLNA && allowRemoteAccess && hasTls) {
+            params.add("--cert");
+            params.add(certFile.getAbsolutePath());
+            params.add("--key");
+            params.add(keyFile.getAbsolutePath());
         }
-
-        if(null != baseUrl && baseUrl.length() > 0) {
+        if (baseUrl != null && !baseUrl.isEmpty()) {
             params.add("--baseurl");
             params.add(baseUrl);
         }
-
-        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
-        boolean isLoggingEnabled = sharedPreferences.getBoolean(context.getString(R.string.pref_key_logs), false);
-        if (isLoggingEnabled) {
-            File logsDir = new File(context.getFilesDir(), "logs");
-            if (!logsDir.exists()) {
-                logsDir.mkdirs();
-            }
-            File serveLog = new File(logsDir, "serve.log");
+        if (logFilePath != null && !logFilePath.isEmpty()) {
             params.add("--log-file");
-            params.add(serveLog.getAbsolutePath());
+            params.add(logFilePath);
         }
+        params.add("--");
+        params.add(path);
+        return params;
+    }
 
-        String[] env = getRcloneEnv();
-        String[] command = params.toArray(new String[0]);
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "serve: error starting rclone", e);
-            // todo: guard callers against null result
-            return null;
+    @VisibleForTesting
+    static List<String> buildServeCredentialEnv(int protocol, @Nullable String user, @Nullable String password) {
+        if (protocol == SERVE_PROTOCOL_DLNA) {
+            return Collections.emptyList();
         }
+        ArrayList<String> env = new ArrayList<>();
+        if (user != null && !user.isEmpty()) {
+            env.add("RCLONE_USER=" + user);
+        }
+        if (password != null && !password.isEmpty()) {
+            env.add("RCLONE_PASS=" + password);
+        }
+        return env;
     }
 
     public Process serve(int protocol, int port, boolean allowRemoteAccess, String user, String password, RemoteItem remote, String servePath) {
@@ -838,7 +1257,6 @@ public class Rclone {
                 && syncDirection != SyncDirectionObject.COPY_REMOTE_TO_REMOTE) {
             return null;
         }
-        String[] command;
         String srcSection = buildRemoteSection(remoteItem, remotePath, context);
         String dstSection = buildRemoteSection(remoteItem2, remotePath2, context);
         String op = (syncDirection == SyncDirectionObject.SYNC_REMOTE_TO_REMOTE) ? "sync" : "copy";
@@ -855,19 +1273,28 @@ public class Rclone {
             defaultParameter.add((filter.filterType == FilterEntry.FILTER_INCLUDE ? "+ " : "- ") + filter.filter);
         }
 
-        command = createCommandWithOptions(savedTransferArguments(op, defaultParameter, srcSection, dstSection));
+        return startFileTransfer(op, defaultParameter, srcSection, dstSection, remoteItem, remoteItem2);
+    }
 
-        String[] env = getRcloneEnv();
+    @Nullable
+    private String getCanonicalInternalDataDir() {
+        if (context == null || context.getApplicationInfo() == null || context.getApplicationInfo().dataDir == null) {
+            return null;
+        }
         try {
-            return getRuntimeProcess(command, env);
+            return new File(context.getApplicationInfo().dataDir).getCanonicalPath();
         } catch (IOException e) {
-            FLog.e(TAG, "sync: error starting rclone", e);
             return null;
         }
     }
 
     private Process syncLocalRemote(RemoteItem remoteItem, String localPath, String remotePath, int syncDirection, boolean useMD5Sum, ArrayList<FilterEntry> filters, boolean deleteExcluded, String transfersOverride) {
-        String[] command;
+        if (remoteItem == null
+                || !Importer.isSafeRemoteName(remoteItem.getName())
+                || !Importer.isSafeLocalPath(localPath, getCanonicalInternalDataDir())) {
+            FLog.e(TAG, "syncLocalRemote: rejected unsafe task remote or local path");
+            return null;
+        }
         String remoteSection = buildRemoteSection(remoteItem, remotePath, context);
 
         ArrayList<String> defaultParameter = new ArrayList<>(Arrays.asList("--transfers", getTransfers(transfersOverride), "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log"));
@@ -886,70 +1313,106 @@ public class Rclone {
 
         localPath = encodePath(localPath);
 
-        if (syncDirection == SyncDirectionObject.SYNC_LOCAL_TO_REMOTE) {
-            command = createCommandWithOptions(savedTransferArguments("sync", defaultParameter, localPath, remoteSection));
-        } else if (syncDirection == SyncDirectionObject.SYNC_REMOTE_TO_LOCAL) {
-            command = createCommandWithOptions(savedTransferArguments("sync", defaultParameter, remoteSection, localPath));
-        } else if (syncDirection == SyncDirectionObject.COPY_LOCAL_TO_REMOTE) {
-            command = createCommandWithOptions(savedTransferArguments("copy", defaultParameter, localPath, remoteSection));
-        }else if (syncDirection == SyncDirectionObject.COPY_REMOTE_TO_LOCAL) {
-            command = createCommandWithOptions(savedTransferArguments("copy", defaultParameter, remoteSection, localPath));
-        }else {
-            return null;
-        }
-
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "sync: error starting rclone", e);
-            return null;
-        }
+        return switch (syncDirection) {
+            case SyncDirectionObject.SYNC_LOCAL_TO_REMOTE ->
+                    startFileTransfer("sync", defaultParameter, localPath, remoteSection, null, remoteItem);
+            case SyncDirectionObject.SYNC_REMOTE_TO_LOCAL ->
+                    startFileTransfer("sync", defaultParameter, remoteSection, localPath, remoteItem, null);
+            case SyncDirectionObject.COPY_LOCAL_TO_REMOTE ->
+                    startFileTransfer("copy", defaultParameter, localPath, remoteSection, null, remoteItem);
+            case SyncDirectionObject.COPY_REMOTE_TO_LOCAL ->
+                    startFileTransfer("copy", defaultParameter, remoteSection, localPath, remoteItem, null);
+            default -> null;
+        };
     }
 
     static ArrayList<String> savedTransferArguments(String operation, List<String> options, String source, String destination) {
-        ArrayList<String> arguments = new ArrayList<>(options.size() + 4);
+        return savedTransferArguments(operation, options, source, destination, false);
+    }
+
+    static ArrayList<String> savedTransferArguments(String operation, List<String> options, String source,
+                                                    String destination, boolean safDavSource) {
+        ArrayList<String> arguments = new ArrayList<>(options.size() + 6);
         arguments.add(operation);
         arguments.addAll(options);
+        if (safDavSource) {
+            Collections.addAll(arguments, "--multi-thread-streams", "0");
+        }
         // Keep path operands after the separator so leading dashes cannot become flags.
         Collections.addAll(arguments, "--", source, destination);
         return arguments;
     }
 
-    public Process downloadFile(RemoteItem remote, FileItem downloadItem, String downloadPath) {
-        String[] command;
-        String remoteFilePath;
-        String localFilePath;
+    @Nullable
+    private Process startFileTransfer(String operation, List<String> options, String source, String destination,
+                                      @Nullable RemoteItem sourceRemote, @Nullable RemoteItem destinationRemote) {
+        boolean safDavSource = isSafDavRemote(sourceRemote);
+        try {
+            String[] env = ensureSafDavAndGetEnv(sourceRemote, destinationRemote);
+            return getRuntimeProcess(createCommandWithOptions(
+                    savedTransferArguments(operation, options, source, destination, safDavSource)), env);
+        } catch (IOException e) {
+            FLog.e(TAG, operation + ": error starting transfer", e);
+            return null;
+        }
+    }
 
+    @VisibleForTesting
+    @Nullable
+    static String resolveSafeDownloadTarget(
+            @Nullable String downloadPath,
+            @Nullable String itemName,
+            boolean isDir) {
+        if (downloadPath == null || downloadPath.trim().isEmpty()) {
+            return null;
+        }
+        if (itemName == null || itemName.isEmpty() || ".".equals(itemName) || "..".equals(itemName)) {
+            return null;
+        }
+        if (itemName.indexOf('/') >= 0 || itemName.indexOf('\\') >= 0 || itemName.indexOf('\0') >= 0) {
+            return null;
+        }
+        try {
+            File baseDir = new File(downloadPath);
+            String canonicalBase = baseDir.getCanonicalPath();
+            File targetFile = new File(baseDir, itemName);
+            String canonicalTarget = targetFile.getCanonicalPath();
+            String prefix = "/".equals(canonicalBase) ? "/" : canonicalBase + File.separator;
+            if (!canonicalTarget.startsWith(prefix)) {
+                return null;
+            }
+            return isDir ? canonicalTarget : canonicalBase;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    public Process downloadFile(RemoteItem remote, FileItem downloadItem, String downloadPath) {
+        if (remote == null || downloadItem == null) {
+            return null;
+        }
+        String resolvedTarget = resolveSafeDownloadTarget(downloadPath, downloadItem.getName(), downloadItem.isDir());
+        if (resolvedTarget == null) {
+            FLog.e(TAG, "downloadFile: rejected unsafe download destination or item name");
+            return null;
+        }
+
+        String remoteFilePath;
         remoteFilePath = remote.getName() + ":";
         if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isAlias() && !remote.isCrypt() && !remote.isCache())) {
             remoteFilePath += getLocalRemotePathPrefix(remote, context)  + "/";
         }
         remoteFilePath += downloadItem.getPath();
 
-        if (downloadItem.isDir()) {
-            localFilePath = downloadPath + "/" + downloadItem.getName();
-        } else {
-            localFilePath = downloadPath;
-        }
+        String localFilePath = encodePath(resolvedTarget);
 
-        localFilePath = encodePath(localFilePath);
-
-        command = createCommandWithOptions("copy", remoteFilePath, localFilePath, "--transfers", getTransfers(), "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log");
-
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "downloadFile: error starting rclone", e);
-            return null;
-        }
+        return startFileTransfer("copy", Arrays.asList("--transfers", getTransfers(), "--stats=1s",
+                "--stats-log-level", "NOTICE", "--use-json-log"), remoteFilePath, localFilePath, remote, null);
     }
 
     public Process uploadFile(RemoteItem remote, String uploadPath, String uploadFile) {
         String remoteName = remote.getName();
         String path;
-        String[] command;
         String localRemotePath;
 
         if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isAlias() && !remote.isCrypt() && !remote.isCache())) {
@@ -967,16 +1430,27 @@ public class Rclone {
             path = (uploadPath.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath : remoteName + ":" + localRemotePath + uploadPath;
         }
 
-        command = createCommandWithOptions("copy", uploadFile, path, "--transfers", getTransfers(), "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log");
+        return startFileTransfer("copy", Arrays.asList("--transfers", getTransfers(), "--stats=1s",
+                "--stats-log-level", "NOTICE", "--use-json-log"), uploadFile, path, null, remote);
 
-        String[] env = getRcloneEnv();
-        try {
-            return getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "uploadFile: error starting rclone", e);
-            return null;
-        }
+    }
 
+    public Process downloadFilesFrom(RemoteItem remote, String sourceParent, String destination,
+                                     File filesFrom, File report) {
+        return startFileTransfer("copy", batchCopyOptions(filesFrom, report, getTransfers()),
+                buildFullRemotePath(remote, sourceParent), encodePath(destination), remote, null);
+    }
+
+    public Process uploadFilesFrom(RemoteItem remote, String sourceParent, String destination,
+                                   File filesFrom, File report) {
+        return startFileTransfer("copy", batchCopyOptions(filesFrom, report, getTransfers()),
+                encodePath(sourceParent), buildRemoteSection(remote, destination, context), null, remote);
+    }
+
+    static List<String> batchCopyOptions(File filesFrom, File report, String transfers) {
+        return Arrays.asList("--files-from-raw", filesFrom.getAbsolutePath(), "--no-traverse",
+                "--combined", report.getAbsolutePath(), "--transfers", transfers, "--stats=1s",
+                "--stats-log-level", "NOTICE", "--use-json-log");
     }
 
     // Can't pass \u0000 as cmd arg - encode like rclone with U+2400
@@ -1008,14 +1482,15 @@ public class Rclone {
         // must NOT get that prefix — buildFullRemotePath applies the same exclusion as the
         // per-file delete paths, and an empty path yields exactly the remote root.
         String root = buildFullRemotePath(remote, "");
-        String[] command = createCommandWithOptions("delete", root,
+        String[] command = createCommandWithOptions("delete",
                 "--files-from", filesFrom.getAbsolutePath(),
                 "--transfers", getTransfers(),
                 "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log",
-                "--contimeout", "30s", "--timeout", "2m");
+                "--contimeout", "30s", "--timeout", "2m",
+                "--", root);
 
-        String[] env = getRcloneEnv();
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             return getRuntimeProcess(command, env);
         } catch (IOException e) {
             FLog.e(TAG, "deleteFilesFrom: error starting rclone", e);
@@ -1025,12 +1500,13 @@ public class Rclone {
 
     /** Recursively deletes a single directory on the remote. */
     public Process purgeItem(RemoteItem remote, String path) {
-        String[] command = createCommandWithOptions("purge", buildFullRemotePath(remote, path),
+        String[] command = createCommandWithOptions("purge",
                 "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log",
-                "--contimeout", "30s", "--timeout", "2m");
+                "--contimeout", "30s", "--timeout", "2m",
+                "--", buildFullRemotePath(remote, path));
 
-        String[] env = getRcloneEnv();
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             return getRuntimeProcess(command, env);
         } catch (IOException e) {
             FLog.e(TAG, "purgeItem: error starting rclone", e);
@@ -1040,12 +1516,13 @@ public class Rclone {
 
     /** Deletes a single plain file on the remote (fallback for names unusable in --files-from). */
     public Process deleteItems(RemoteItem remote, String path) {
-        String[] command = createCommandWithOptions("deletefile", buildFullRemotePath(remote, path),
+        String[] command = createCommandWithOptions("deletefile",
                 "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log",
-                "--contimeout", "30s", "--timeout", "2m");
+                "--contimeout", "30s", "--timeout", "2m",
+                "--", buildFullRemotePath(remote, path));
 
-        String[] env = getRcloneEnv();
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             return getRuntimeProcess(command, env);
         } catch (IOException e) {
             FLog.e(TAG, "deleteItems: error starting rclone", e);
@@ -1073,9 +1550,9 @@ public class Rclone {
         }
 
         String newDir = remote.getName() + ":" + localRemotePath + path;
-        String[] command = createCommandWithOptions("mkdir", newDir);
-        String[] env = getRcloneEnv();
+        String[] command = createCommandWithOptions("mkdir", "--", newDir);
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             Process process = getRuntimeProcess(command, env);
             process.waitFor();
             if (process.exitValue() != 0) {
@@ -1091,10 +1568,8 @@ public class Rclone {
 
     public Process moveTo(RemoteItem remote, FileItem moveItem, String newLocation) {
         String remoteName = remote.getName();
-        String[] command;
         String oldFilePath;
         String newFilePath;
-        Process process = null;
         String localRemotePath;
 
         if (remote.isRemoteType(RemoteItem.LOCAL) && (!remote.isAlias() && !remote.isCrypt() && !remote.isCache())) {
@@ -1105,15 +1580,9 @@ public class Rclone {
 
         oldFilePath = remoteName + ":" + localRemotePath + moveItem.getPath();
         newFilePath = (newLocation.compareTo("//" + remoteName) == 0) ? remoteName + ":" + localRemotePath + moveItem.getName() : remoteName + ":" + localRemotePath + newLocation + "/" + moveItem.getName();
-        command = createCommandWithOptions("moveto", oldFilePath, newFilePath);
-        String[] env = getRcloneEnv();
-        try {
-            process = getRuntimeProcess(command, env);
-        } catch (IOException e) {
-            FLog.e(TAG, "moveTo: error starting rclone", e);
-        }
-
-        return process;
+        return startFileTransfer("moveto",
+                Arrays.asList("--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log"),
+                oldFilePath, newFilePath, remote, remote);
     }
 
     public Boolean moveTo(RemoteItem remote, String oldFile, String newFile) {
@@ -1128,26 +1597,42 @@ public class Rclone {
 
         String oldFilePath = remoteName + ":" + localRemotePath + oldFile;
         String newFilePath = remoteName + ":" + localRemotePath + newFile;
-        String[] command = createCommandWithOptions("moveto", oldFilePath, newFilePath);
-        String[] env = getRcloneEnv();
+        Process process = startFileTransfer("moveto",
+                Arrays.asList("--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log"),
+                oldFilePath, newFilePath, remote, remote);
+        if (process == null) {
+            return false;
+        }
+        collectDiagnostics(process);
         try {
-            Process process = getRuntimeProcess(command, env);
             process.waitFor();
             if (process.exitValue() != 0) {
                 logErrorOutput(process);
                 return false;
             }
-        } catch (IOException | InterruptedException e) {
+            logErrorOutput(process);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             FLog.e(TAG, "moveTo: error running rclone", e);
             return false;
         }
         return true;
     }
 
+    @Nullable
+    private static String extractRemoteName(@Nullable String rclonePath) {
+        if (rclonePath == null) {
+            return null;
+        }
+        int colon = rclonePath.indexOf(':');
+        return colon > 0 ? rclonePath.substring(0, colon) : null;
+    }
+
     public InputStream downloadToPipe(String rclonePath) throws IOException {
         String[] command = createCommandWithOptions("cat", "--", rclonePath);
-        String[] env = getRcloneEnv();
+        String[] env = ensureSafDavAndGetEnvForName(extractRemoteName(rclonePath), Collections.emptyList());
         final Process process = getRuntimeProcess(command, env);
+        collectDiagnostics(process);
         new Thread() {
             @Override
             public void run() {
@@ -1164,8 +1649,9 @@ public class Rclone {
 
     public OutputStream uploadFromPipe(String rclonePath) throws IOException {
         String[] command = createCommandWithOptions("rcat", "--streaming-upload-cutoff", "500K", "--", rclonePath);
-        String[] env = getRcloneEnv();
+        String[] env = ensureSafDavAndGetEnvForName(extractRemoteName(rclonePath), Collections.emptyList());
         final Process process = getRuntimeProcess(command, env);
+        collectDiagnostics(process);
         new Thread() {
             @Override
             public void run() {
@@ -1186,8 +1672,8 @@ public class Rclone {
         }
         String[] command = createCommandWithOptions("cleanup", "--", remote + ":");
         Process process = null;
-        String[] env = getRcloneEnv();
         try {
+            String[] env = ensureSafDavAndGetEnvForName(remote, Collections.emptyList());
             process = getRuntimeProcess(command, env);
             process.waitFor();
         } catch (IOException | InterruptedException e) {
@@ -1197,35 +1683,130 @@ public class Rclone {
         return process != null && process.exitValue() == 0;
     }
 
+    public static class LinkResult {
+        @Nullable public final String url;
+        @Nullable public final String errorMessage;
+        public final boolean unlinked;
+
+        public LinkResult(@Nullable String url, @Nullable String errorMessage, boolean unlinked) {
+            this.url = url;
+            this.errorMessage = errorMessage;
+            this.unlinked = unlinked;
+        }
+
+        public boolean isSuccess() {
+            return errorMessage == null && (unlinked || (url != null && !url.isEmpty()));
+        }
+    }
+
     public String link(RemoteItem remote, String filePath) {
+        return linkWithOptions(remote, filePath, null, false).url;
+    }
+
+    public LinkResult linkWithOptions(RemoteItem remote, String filePath, @Nullable String expire, boolean unlink) {
+        if (remote == null || !remote.hasLinkSupport()) {
+            return new LinkResult(null, context.getString(R.string.public_link_not_supported), false);
+        }
         String linkPath = remote.getName() + ":";
-        linkPath += (remote.isRemoteType(RemoteItem.LOCAL)) ? getLocalRemotePathPrefix(remote, context) + "/" : "";
-        if (!filePath.equals("//" + remote.getName())) {
+        if (remote.isRemoteType(RemoteItem.LOCAL)) {
+            linkPath += getLocalRemotePathPrefix(remote, context) + "/";
+        }
+        if (filePath != null && !filePath.isEmpty() && !filePath.equals("//" + remote.getName())) {
             linkPath += filePath;
         }
-        String[] command = createCommandWithOptions("link", linkPath);
+
+        ArrayList<String> args = new ArrayList<>();
+        args.add("link");
+        if (unlink) {
+            args.add("--unlink");
+        } else if (expire != null && !expire.isEmpty()) {
+            args.add("--expire");
+            args.add(expire);
+        }
+        args.add("--");
+        args.add(linkPath);
+
+        String[] command = createCommandWithOptions(args);
         Process process = null;
-        String[] env = getRcloneEnv();
 
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             process = getRuntimeProcess(command, env);
-            process.waitFor();
-            if (process.exitValue() != 0) {
-                logErrorOutput(process);
-                return null;
-            }
+            final Process procRef = process;
+            final StringBuilder stderrBuilder = new StringBuilder();
+            Thread stderrThread = new Thread(() -> {
+                try (BufferedReader errReader = new BufferedReader(new InputStreamReader(procRef.getErrorStream()))) {
+                    String line;
+                    while ((line = errReader.readLine()) != null) {
+                        stderrBuilder.append(line).append("\n");
+                    }
+                } catch (IOException ignored) {
+                }
+            }, "rclone-link-stderr");
+            stderrThread.start();
 
+            String stdoutLine = null;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                return reader.readLine();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isEmpty() && stdoutLine == null) {
+                        stdoutLine = trimmed;
+                    }
+                }
             }
 
+            process.waitFor();
+            stderrThread.join(1000);
+
+            if (process.exitValue() != 0) {
+                String errText = stderrBuilder.toString().trim();
+                String redactedErr = SecretRedactor.redact(errText);
+                if (BuildConfig.DEBUG) {
+                    FLog.d(TAG, "linkWithOptions failed (%d): %s", process.exitValue(), redactedErr);
+                } else {
+                    FLog.w(TAG, "linkWithOptions failed (%d)", process.exitValue());
+                }
+                return new LinkResult(null, mapLinkError(remote, errText), false);
+            }
+
+            CacheManager.getInstance(context).setPublicLinkSupport(remote.getName(), true);
+            if (unlink) {
+                return new LinkResult(null, null, true);
+            }
+            if (stdoutLine == null || stdoutLine.isEmpty()) {
+                return new LinkResult(null, context.getString(R.string.error_generating_link), false);
+            }
+            return new LinkResult(stdoutLine, null, false);
         } catch (IOException | InterruptedException e) {
             FLog.e(TAG, "link: error running rclone", e);
-            if (process != null) {
-                logErrorOutput(process);
+            return new LinkResult(null, context.getString(R.string.error_generating_link), false);
+        }
+    }
+
+    private String mapLinkError(RemoteItem remote, String stderr) {
+        if (stderr == null || stderr.isEmpty()) {
+            return context.getString(R.string.error_generating_link);
+        }
+        String lower = stderr.toLowerCase(Locale.ROOT);
+        if (lower.contains("not implemented") || lower.contains("doesn't support") || lower.contains("not supported")) {
+            CacheManager.getInstance(context).setPublicLinkSupport(remote.getName(), false);
+            return context.getString(R.string.public_link_not_supported);
+        }
+        if (lower.contains("403") || lower.contains("forbidden") || lower.contains("permission") || lower.contains("not allowed")) {
+            return context.getString(R.string.public_link_forbidden);
+        }
+        if (lower.contains("401") || lower.contains("unauthorized") || lower.contains("token") || lower.contains("expired") || lower.contains("auth")) {
+            return context.getString(R.string.public_link_auth_error);
+        }
+        String[] lines = stderr.split("\n");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String line = lines[i].trim();
+            if (!line.isEmpty()) {
+                return SecretRedactor.redact(line);
             }
         }
-        return null;
+        return context.getString(R.string.error_generating_link);
     }
 
     public String calculateMD5(RemoteItem remote, FileItem fileItem) {
@@ -1238,10 +1819,10 @@ public class Rclone {
         }
 
         String remoteAndPath = remote.getName() + ":" + localRemotePath + fileItem.getName();
-        String[] command = createCommandWithOptions("md5sum", remoteAndPath);
-        String[] env = getRcloneEnv();
+        String[] command = createCommandWithOptions("md5sum", "--", remoteAndPath);
         Process process;
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             process = getRuntimeProcess(command, env);
             process.waitFor();
             if (process.exitValue() != 0) {
@@ -1279,10 +1860,10 @@ public class Rclone {
         }
 
         String remoteAndPath = remote.getName() + ":" + localRemotePath + fileItem.getName();
-        String[] command = createCommandWithOptions("sha1sum", remoteAndPath);
-        String[] env = getRcloneEnv();
+        String[] command = createCommandWithOptions("sha1sum", "--", remoteAndPath);
         Process process;
         try {
+            String[] env = ensureSafDavAndGetEnv(remote);
             process = getRuntimeProcess(command, env);
             process.waitFor();
             if (process.exitValue() != 0) {
@@ -1353,15 +1934,19 @@ public class Rclone {
     }
 
     public AboutResult aboutRemote(RemoteItem remoteItem) {
+        if (remoteItem == null) {
+            return new AboutResult();
+        }
         String remoteName = remoteItem.getName() + ':';
-        String[] command = createCommand("about", "--json", remoteName);
+        String[] command = createCommand("about", "--json", "--", remoteName);
         StringBuilder output = new StringBuilder();
         AboutResult stats;
-        Process process;
+        Process process = null;
         JSONObject aboutJSON;
 
         try {
-            process = getRuntimeProcess(command, getRcloneEnv());
+            process = getRuntimeProcess(command, ensureSafDavAndGetEnv(remoteItem));
+            collectDiagnostics(process);
             try(BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))){
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -1376,8 +1961,14 @@ public class Rclone {
                 return new AboutResult();
             }
 
+            logErrorOutput(process);
             aboutJSON = new JSONObject(output.toString());
-        } catch (IOException | InterruptedException | JSONException e) {
+        } catch (InterruptedException e) {
+            if (process != null) { discardDiagnostics(process); process.destroy(); }
+            Thread.currentThread().interrupt();
+            return new AboutResult();
+        } catch (IOException | JSONException e) {
+            if (process != null) discardDiagnostics(process);
             FLog.e(TAG, "aboutRemote: unexpected error", e);
             return new AboutResult();
         }
@@ -1433,7 +2024,8 @@ public class Rclone {
                 "lsd", "--max-depth", String.valueOf(maxDepth), "--", remoteName + ":");
         Process process = null;
         try {
-            process = getRuntimeProcess(command, getRcloneEnv());
+            String[] env = ensureSafDavAndGetEnvForName(remoteName, Collections.emptyList());
+            process = getRuntimeProcess(command, env);
             // lsd may list more entries than the stdout pipe can buffer.
             final Process probe = process;
             new Thread(() -> {
@@ -1651,39 +2243,104 @@ public class Rclone {
         return null;
     }
 
-    public File getFileFromZip(Uri uri, String target, File targetfile) throws IOException {
+    private static final long MAX_BACKUP_ENTRY_BYTES = 10L * 1024L * 1024L;
 
-        // The exact cause of the NPE is unknown, but the effect is the same
-        // - the copy process has failed, therefore bubble an IOException
-        // for handling at the appropriate layers.
+    @VisibleForTesting
+    @Nullable
+    static File extractZipEntryBounded(
+            @Nullable InputStream rawInput,
+            @NonNull String target,
+            @NonNull File targetFile,
+            long maxBytes) throws IOException {
+        if (rawInput == null) {
+            throw new IOException("Null backup input stream");
+        }
+        try (ZipInputStream zipInputStream = new ZipInputStream(new BufferedInputStream(rawInput))) {
+            ZipEntry zipEntry;
+            while ((zipEntry = zipInputStream.getNextEntry()) != null) {
+                try {
+                    if (target.equals(zipEntry.getName())) {
+                        long declaredSize = zipEntry.getSize();
+                        if (declaredSize > maxBytes) {
+                            throw new IOException("Backup entry exceeds maximum allowed size");
+                        }
+                        copyStreamBounded(zipInputStream, targetFile, maxBytes);
+                        return targetFile;
+                    }
+                } finally {
+                    zipInputStream.closeEntry();
+                }
+            }
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    static void copyStreamBounded(
+            @NonNull InputStream inputStream,
+            @NonNull File targetFile,
+            long maxBytes) throws IOException {
+        setOwnerOnlyPermissions(targetFile);
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        boolean completed = false;
+        try (FileOutputStream fileOutputStream = new FileOutputStream(targetFile)) {
+            setOwnerOnlyPermissions(targetFile);
+            int count;
+            while ((count = inputStream.read(buffer)) != -1) {
+                if (count > 0) {
+                    total += count;
+                    if (total > maxBytes) {
+                        throw new IOException("Backup file exceeds maximum allowed size");
+                    }
+                    fileOutputStream.write(buffer, 0, count);
+                }
+            }
+            fileOutputStream.flush();
+            completed = true;
+        } finally {
+            if (!completed) {
+                deleteQuietly(targetFile);
+            }
+        }
+    }
+
+    private static void setOwnerOnlyPermissions(@NonNull File file) {
+        if (!file.exists()) {
+            try {
+                //noinspection ResultOfMethodCallIgnored
+                file.createNewFile();
+            } catch (IOException ignored) {
+            }
+        }
+        file.setReadable(false, false);
+        file.setWritable(false, false);
+        file.setExecutable(false, false);
+        file.setReadable(true, true);
+        file.setWritable(true, true);
+    }
+
+    private static void deleteQuietly(@Nullable File file) {
+        if (file != null && file.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+        }
+    }
+
+    public File getFileFromZip(Uri uri, String target, File targetfile) throws IOException {
+        if (uri == null || target == null || targetfile == null) {
+            throw new IOException("Invalid zip extraction parameters");
+        }
         InputStream inputStream;
         try {
             inputStream = context.getContentResolver().openInputStream(uri);
-        } catch(NullPointerException e) {
+        } catch (NullPointerException e) {
             throw new IOException(e);
         }
-        ZipInputStream zipInputStream = new ZipInputStream(new BufferedInputStream(inputStream));
-
-        ZipEntry zipEntry;
-        int count = 0;
-        byte[] buffer = new byte[1024];
-
-        while ((zipEntry = zipInputStream.getNextEntry()) != null) {
-            if(zipEntry.getName().equals(target)){
-                FileOutputStream fileOutputStream = new FileOutputStream(targetfile);
-                while ((count = zipInputStream.read(buffer)) != -1) {
-                    fileOutputStream.write(buffer, 0, count);
-                }
-                fileOutputStream.flush();
-                fileOutputStream.close();
-                zipInputStream.closeEntry();
-                zipInputStream.close();
-                return targetfile;
-            }
-            zipInputStream.closeEntry();
+        if (inputStream == null) {
+            throw new IOException("Unable to open backup stream");
         }
-        zipInputStream.close();
-        return null;
+        return extractZipEntryBounded(inputStream, target, targetfile, MAX_BACKUP_ENTRY_BYTES);
     }
 
     public String readDatabaseJson(Uri uri) throws Exception {
@@ -1696,32 +2353,54 @@ public class Rclone {
 
     public String readTextfileFromZip(Uri uri, String tempfile, String targetfile) throws Exception {
         File temp = new File(context.getFilesDir().getPath(), tempfile);
-        temp = getFileFromZip(uri, targetfile, temp);
-
-        char[] buffer = new char[4096];
-        StringBuilder json = new StringBuilder();
-        InputStream inputStream = new FileInputStream(temp);
-        Reader in = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
-        for (int numRead; (numRead = in.read(buffer, 0, buffer.length)) > 0; ) {
-            json.append(buffer, 0, numRead);
+        File extracted = null;
+        try {
+            extracted = getFileFromZip(uri, targetfile, temp);
+            if (extracted == null) {
+                throw new FileNotFoundException("Backup entry not found: " + targetfile);
+            }
+            char[] buffer = new char[4096];
+            StringBuilder json = new StringBuilder();
+            try (InputStream inputStream = new FileInputStream(extracted);
+                 Reader in = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
+                int numRead;
+                while ((numRead = in.read(buffer, 0, buffer.length)) > 0) {
+                    if (json.length() + numRead > MAX_BACKUP_ENTRY_BYTES) {
+                        throw new IOException("Backup text entry exceeds maximum size");
+                    }
+                    json.append(buffer, 0, numRead);
+                }
+            }
+            return json.toString();
+        } finally {
+            deleteQuietly(temp);
+            if (extracted != null && !extracted.equals(temp)) {
+                deleteQuietly(extracted);
+            }
         }
-        return json.toString();
     }
 
     public boolean copyConfigFileFromZip(Uri uri) throws Exception {
         String appsFileDir = context.getFilesDir().getPath();
-
         File tempFile = new File(appsFileDir, "rclone.conf-tmp");
         File configFile = new File(appsFileDir, "rclone.conf");
-        tempFile = getFileFromZip(uri, "rclone.conf", tempFile);
-
-        if (isValidConfig(tempFile.getAbsolutePath())) {
-            if (!(tempFile.renameTo(configFile) && !tempFile.delete())) {
-                throw new IOException();
+        try {
+            File extracted = getFileFromZip(uri, "rclone.conf", tempFile);
+            if (extracted == null) {
+                return false;
             }
-            return true;
+            if (isValidConfig(extracted.getAbsolutePath())) {
+                if (!extracted.renameTo(configFile)) {
+                    throw new IOException("Failed to install restored rclone configuration");
+                }
+                setOwnerOnlyPermissions(configFile);
+                invalidateRemotesCache();
+                return true;
+            }
+            return false;
+        } finally {
+            deleteQuietly(tempFile);
         }
-        return false;
     }
 
 
@@ -1734,42 +2413,35 @@ public class Rclone {
      * @throws IOException
      */
     public boolean copyConfigFile(Uri uri) throws IOException {
+        if (uri == null) {
+            throw new IOException("Null configuration URI");
+        }
         String appsFileDir = context.getFilesDir().getPath();
         InputStream inputStream;
-        // The exact cause of the NPE is unknown, but the effect is the same
-        // - the copy process has failed, therefore bubble an IOException
-        // for handling at the appropriate layers.
         try {
             inputStream = context.getContentResolver().openInputStream(uri);
-        } catch(NullPointerException e) {
+        } catch (NullPointerException e) {
             throw new IOException(e);
+        }
+        if (inputStream == null) {
+            throw new IOException("Unable to open configuration stream");
         }
         File tempFile = new File(appsFileDir, "rclone.conf-tmp");
         File configFile = new File(appsFileDir, "rclone.conf");
-        FileOutputStream fileOutputStream = new FileOutputStream(tempFile);
-
-        byte[] buffer = new byte[4096];
-        int offset;
-        while ((offset = inputStream.read(buffer)) > 0) {
-            fileOutputStream.write(buffer, 0, offset);
-        }
-        inputStream.close();
-        fileOutputStream.flush();
-        fileOutputStream.close();
-
-        tempFile.setReadable(false, false);
-        tempFile.setReadable(true, true);
-        tempFile.setWritable(false, false);
-        tempFile.setWritable(true, true);
-        if (isValidConfig(tempFile.getAbsolutePath())) {
-            if (!(tempFile.renameTo(configFile) && !tempFile.delete())) {
-                tempFile.delete();
-                throw new IOException();
+        try (InputStream managedInput = inputStream) {
+            copyStreamBounded(managedInput, tempFile, MAX_BACKUP_ENTRY_BYTES);
+            if (isValidConfig(tempFile.getAbsolutePath())) {
+                if (!tempFile.renameTo(configFile)) {
+                    throw new IOException("Failed to install imported rclone configuration");
+                }
+                setOwnerOnlyPermissions(configFile);
+                invalidateRemotesCache();
+                return true;
             }
-            return true;
+            return false;
+        } finally {
+            deleteQuietly(tempFile);
         }
-        tempFile.delete();
-        return false;
     }
 
     public boolean isValidConfig(String path) {
@@ -1941,7 +2613,7 @@ public class Rclone {
                 process.waitFor();
                 if (process.exitValue() != 0) {
                     if(!silent){
-                        Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                        Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                     }
                     logErrorOutput(process);
                     return new ArrayList<>();
@@ -1959,7 +2631,7 @@ public class Rclone {
                 bw.write(remotesJSON.toString(4));
                 bw.close();
             } catch (IOException e) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                 FLog.e(TAG, "Could not save providers to cache!", e);
                 return new ArrayList<>();
             }
@@ -1973,7 +2645,7 @@ public class Rclone {
                     fileContent.append(new String(buffer, 0, size));
                 }
             } catch (IOException e) {
-                Toasty.error(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.error_getting_remotes), Toast.LENGTH_SHORT).show();
                 FLog.e(TAG, "Could not read cached providers, but the file exists! Please clear your app cache.", e);
                 return new ArrayList<>();
             }

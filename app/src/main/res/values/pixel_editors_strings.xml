@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pixel_edit_filter_title">Edit filter</string>
+    <string name="pixel_edit_trigger_title">Edit trigger</string>
+</resources>

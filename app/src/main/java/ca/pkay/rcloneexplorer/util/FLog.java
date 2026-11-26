@@ -12,11 +12,6 @@ import ca.pkay.rcloneexplorer.BuildConfig;
  */
 public abstract class FLog {
 
-    private static final String PATTERN_PATH = "/";
-    private static final String REPLACE_PATH = "***anonymized_path***";
-    private static final String PATTERN_URI = "content://";
-    private static final String REPLACE_URI = "***anonymized_uri***";
-    
     /**
      * Use this log tag to set a lower than default (<=INFO) log tag for all
      * app log messages.
@@ -114,27 +109,6 @@ public abstract class FLog {
         }
     }
 
-    private static String applyAnonimizedFormatting(String message, Object[] args) {
-        for (int i = 0; i < args.length; i++) {
-            if (args[i] instanceof String) {
-                args[i] = anonymizeArgument((String) args[i]);
-            }
-        }
-        return applyFormatting(message, args);
-    }
-
-    // Ensure regulatory compliance by removing any potentially tainted data.
-    private static String anonymizeArgument (String arg) {
-        // Anonymize file paths (may contain private data in file names)
-        if (arg.startsWith(PATTERN_PATH)) {
-            return REPLACE_PATH;
-        // Anonymize content uris (may contain private data in uri)
-        } else if (arg.startsWith(PATTERN_URI)) {
-            return REPLACE_URI;
-        }
-        return arg;
-    }
-    
     private static final boolean isLoggable(String tag, int level){
         if(BuildConfig.DEBUG) {
             return Log.isLoggable(tag, level) || level != Log.INFO && Log.isLoggable(LOGGING_MIN_LEVEL_TAG, level);

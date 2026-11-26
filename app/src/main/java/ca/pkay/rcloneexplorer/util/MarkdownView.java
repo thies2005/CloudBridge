@@ -4,8 +4,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
+
+import com.google.android.material.color.MaterialColors;
+import java.util.Locale;
 import android.os.Build;
 import android.util.AttributeSet;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.Toast;
 
@@ -19,7 +23,6 @@ import java.io.InputStreamReader;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import es.dmoral.toasty.Toasty;
 
 public class MarkdownView extends WebView {
 
@@ -32,16 +35,25 @@ public class MarkdownView extends WebView {
 
     public MarkdownView(Context context) {
         super(patchContext(context));
+        initSettings();
     }
 
     public MarkdownView(Context context, AttributeSet attrs) {
         super(patchContext(context), attrs);
+        initSettings();
+    }
+
+    private void initSettings() {
+        WebSettings settings = getSettings();
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setJavaScriptEnabled(false);
     }
 
     public static void closeOnMissingWebView(Activity host, Exception exception) {
         if (exception.getMessage() != null && exception.getMessage().contains("Failed to load WebView provider: No WebView installed")) {
             FLog.e(TAG, "onCreate: Failed to load WebView (Appcenter PUB #49494606u)", exception);
-            Toasty.error(host.getApplicationContext(), host.getString(R.string.install_webview_retry), Toast.LENGTH_LONG, true).show();
+            Toast.makeText(host.getApplicationContext(), host.getString(R.string.install_webview_retry), Toast.LENGTH_LONG).show();
             host.finish();
         } else {
             throw new RuntimeException(exception);
@@ -61,6 +73,10 @@ public class MarkdownView extends WebView {
         // RC-39: migrated off AsyncTask to a background executor; the WebView is updated on the
         // UI thread via View.post(). LoadMarkdownAsset used to be a static nested AsyncTask.
         final String assetName = path;
+        final int background = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface);
+        final int foreground = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface);
+        final int link = MaterialColors.getColor(this, R.attr.colorPrimary);
+        setBackgroundColor(background);
         final WebView webView = this;
         ioExecutor.execute(() -> {
             Context context = webView.getContext();
@@ -82,7 +98,13 @@ public class MarkdownView extends WebView {
                 if (null == result) {
                     webView.loadUrl("about:blank");
                 } else {
-                    webView.loadDataWithBaseURL("local://", result, "text/html", "UTF-8", null);
+                    String document = String.format(Locale.ROOT,
+                            "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                            + "<style>body{background:#%06X;color:#%06X;font:16px/1.55 sans-serif;margin:20px;overflow-wrap:anywhere}"
+                            + "a{color:#%06X}pre{white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%%}</style>"
+                            + "</head><body>%s</body></html>",
+                            background & 0xffffff, foreground & 0xffffff, link & 0xffffff, result);
+                    webView.loadDataWithBaseURL("local://", document, "text/html", "UTF-8", null);
                 }
             });
         });

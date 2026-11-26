@@ -17,6 +17,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -49,7 +50,9 @@ import ca.pkay.rcloneexplorer.RecyclerViewAdapters.RemotesRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.RemoteConfig.InternxtReauth;
 import ca.pkay.rcloneexplorer.RemoteConfig.RemoteConfig;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
+import de.schuelken.cloudbridge.cache.CacheManager;
+import de.schuelken.cloudbridge.cache.SearchIndexWorker;
+import de.schuelken.cloudbridge.search.GlobalSearchFragment;
 
 public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdapter.OnRemoteOptionsClick {
 
@@ -113,7 +116,6 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
 
         final Context context = view.getContext();
         RecyclerView recyclerView =  view.findViewById(R.id.remotes_list);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
         recyclerViewAdapter = new RemotesRecyclerViewAdapter(remotes, remoteClickListener, this);
         recyclerView.setAdapter(recyclerViewAdapter);
@@ -134,6 +136,39 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
         });
 
         return view;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() != null) {
+            View searchBtn = getActivity().findViewById(R.id.searchButton);
+            if (searchBtn != null) {
+                searchBtn.setVisibility(View.VISIBLE);
+                searchBtn.setOnClickListener(v -> openGlobalSearch());
+            }
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (getActivity() != null) {
+            View searchBtn = getActivity().findViewById(R.id.searchButton);
+            if (searchBtn != null) {
+                searchBtn.setOnClickListener(null);
+                searchBtn.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private void openGlobalSearch() {
+        if (getActivity() == null || !isAdded()) return;
+        getActivity().getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.flFragment, new GlobalSearchFragment())
+                .addToBackStack("global_search")
+                .commit();
     }
 
     // Prepares special views if rclone does not work or does not have a config file
@@ -274,6 +309,7 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
     private void showRemoteMenu(View view, final RemoteItem remoteItem) {
         PopupMenu popupMenu = new PopupMenu(context, view);
         popupMenu.getMenuInflater().inflate(R.menu.remote_options, popupMenu.getMenu());
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(popupMenu.getMenu(), true);
         popupMenu.setOnMenuItemClickListener(item -> {
             int itemID = item.getItemId();
 
@@ -303,12 +339,39 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
                 }
             } else if (itemID == R.id.action_add_to_home_screen) {
                 AppShortcutsHelper.addRemoteToHomeScreen(context, remoteItem);
+            } else if (itemID == R.id.action_toggle_search_index) {
+                CacheManager cm = CacheManager.getInstance(context);
+                boolean currentlyEnabled = cm.isTier3SearchEnabled(remoteItem.getName());
+                if (currentlyEnabled) {
+                    cm.setTier3SearchEnabled(remoteItem.getName(), false);
+                    Toast.makeText(context, getString(R.string.remote_search_index_disabled, remoteItem.getDisplayName()), Toast.LENGTH_SHORT).show();
+                } else {
+                    cm.setTier3SearchEnabled(remoteItem.getName(), true);
+                    SearchIndexWorker.enqueueIndexRemote(context, remoteItem.getName());
+                    Toast.makeText(context, getString(R.string.remote_search_index_started, remoteItem.getDisplayName()), Toast.LENGTH_SHORT).show();
+                }
+            } else if (itemID == R.id.action_refresh_search_index) {
+                SearchIndexWorker.enqueueIndexRemote(context, remoteItem.getName());
+                Toast.makeText(context, getString(R.string.remote_search_index_started, remoteItem.getDisplayName()), Toast.LENGTH_SHORT).show();
             } else {
                 return false;
             }
 
             return true;
         });
+
+        CacheManager cm = CacheManager.getInstance(context);
+        boolean indexEnabled = cm.isTier3SearchEnabled(remoteItem.getName());
+        MenuItem toggleIndex = popupMenu.getMenu().findItem(R.id.action_toggle_search_index);
+        MenuItem refreshIndex = popupMenu.getMenu().findItem(R.id.action_refresh_search_index);
+        if (remoteItem.isCrypt()) {
+            toggleIndex.setVisible(false);
+            refreshIndex.setVisible(false);
+        } else {
+            toggleIndex.setTitle(indexEnabled ? R.string.remote_search_index_disable : R.string.remote_search_index_enable);
+            refreshIndex.setVisible(indexEnabled);
+        }
+
         popupMenu.show();
 
         MenuItem pinAction = popupMenu.getMenu().findItem(R.id.action_pin);
@@ -490,23 +553,37 @@ public class RemotesFragment extends Fragment implements RemotesRecyclerViewAdap
     }
 
     private void renameRemote(final RemoteItem remoteItem) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        com.google.android.material.dialog.MaterialAlertDialogBuilder builder =
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(context);
 
         final SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(context);
-        final EditText remoteNameEdit = new EditText(context);
+        com.google.android.material.textfield.TextInputLayout inputLayout =
+                new com.google.android.material.textfield.TextInputLayout(context);
+        inputLayout.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        inputLayout.setHint(getString(R.string.remote_display_name));
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        inputLayout.setPadding(padding, 0, padding, 0);
+        final EditText remoteNameEdit = new com.google.android.material.textfield.TextInputEditText(inputLayout.getContext());
         String initialText = remoteItem.getDisplayName();
+        remoteNameEdit.setSingleLine(true);
         remoteNameEdit.setText(initialText);
-        builder.setView(remoteNameEdit);
+        remoteNameEdit.setSelectAllOnFocus(true);
+        inputLayout.addView(remoteNameEdit);
+        builder.setView(inputLayout);
         builder.setNegativeButton(R.string.cancel, null);
-        builder.setPositiveButton(R.string.select, (dialog, which) -> {
+        builder.setPositiveButton(R.string.save, (dialog, which) -> {
             String displayName = remoteNameEdit.getText().toString();
-            Set<String> renamedRemotes = pref.getStringSet(getString(R.string.pref_key_renamed_remotes), new HashSet<>());
+            Set<String> renamedRemotes = new HashSet<>(pref.getStringSet(
+                    getString(R.string.pref_key_renamed_remotes), Collections.emptySet()));
             renamedRemotes.add(remoteItem.getName());
             pref.edit()
                     .putString(getString(R.string.pref_key_renamed_remote_prefix, remoteItem.getName()), displayName)
                     .putStringSet(getString(R.string.pref_key_renamed_remotes), renamedRemotes)
                 .apply();
             remoteItem.setDisplayName(displayName);
+            if (remoteItem.isDrawerPinned()) {
+                pinToDrawerListener.addRemoteToNavDrawer();
+            }
             refreshRemotes();
         });
         builder.setTitle(R.string.rename_remote);

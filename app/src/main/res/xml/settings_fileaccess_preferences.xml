@@ -20,9 +20,4 @@
         android:key="@string/pref_key_vcp_declare_local"
         android:title="@string/pref_saf_vcp_local_pretend_enable"
         app:summary="@string/pref_saf_vcp_local_pretend_summary" />
-    <SwitchPreferenceCompat
-        android:defaultValue="false"
-        android:key="@string/pref_key_vcp_grant_all"
-        android:title="@string/pref_saf_vcp_grant_all_enable"
-        app:summary="@string/pref_saf_vcp_grant_all_summary" />
 </PreferenceScreen>

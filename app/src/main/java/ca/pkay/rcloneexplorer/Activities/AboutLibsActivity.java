@@ -8,7 +8,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,9 +29,8 @@ public class AboutLibsActivity extends AppCompatActivity implements AboutLibrari
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_about_libs);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -98,18 +96,6 @@ public class AboutLibsActivity extends AppCompatActivity implements AboutLibrari
         libraryUrls.put(rclone, "https://github.com/ncw/rclone");
         libraryLicences.put(rclone, "Licensed under MIT");
         libraryLicenceUrls.put(rclone, "https://github.com/ncw/rclone/blob/master/COPYING");
-
-        String recyclerViewAnimators = "Recyclerview Animators";
-        libraryNames.add(recyclerViewAnimators);
-        libraryUrls.put(recyclerViewAnimators, "https://github.com/wasabeef/recyclerview-animators");
-        libraryLicences.put(recyclerViewAnimators, "Licensed under Apache 2.0");
-        libraryLicenceUrls.put(recyclerViewAnimators, "https://github.com/wasabeef/recyclerview-animators/blob/master/LICENSE");
-
-        String toasty = "Toasty";
-        libraryNames.add(toasty);
-        libraryUrls.put(toasty, "https://github.com/GrenderG/Toasty");
-        libraryLicences.put(toasty, "Licensed under LGPL-3.0");
-        libraryLicenceUrls.put(toasty, "https://github.com/GrenderG/Toasty/blob/master/LICENSE");
 
         String rcloneExplorer = "rcloneExplorer";
         libraryNames.add(rcloneExplorer);

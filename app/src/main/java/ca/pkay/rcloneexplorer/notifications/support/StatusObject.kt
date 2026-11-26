@@ -65,8 +65,19 @@ class StatusObject(var mContext: Context){
         return Formatter.formatFileSize(mContext, mStats.optLong("totalBytes", 0))
     }
 
-    fun getPercentage(): Double {
-        return mStats.optLong("bytes", 0).toDouble() / mStats.optLong("totalBytes", 0) * 100
+    fun getPercentage(): Double = computePercentage(mStats)
+
+    fun getEtaSeconds(): Int = extractEtaSeconds(mStats)
+
+    fun getFormattedEta(): String {
+        val eta = getEtaSeconds()
+        return if (eta >= 0) prettyPrintDuration(eta) else ""
+    }
+
+    fun getElapsedSeconds(): Int = extractElapsedSeconds(mStats)
+
+    fun getFormattedElapsed(): String {
+        return prettyPrintDuration(getElapsedSeconds())
     }
 
     fun getTransfers(): Int {
@@ -109,16 +120,16 @@ class StatusObject(var mContext: Context){
     }
 
     fun parseLoglineToStatusObject(logLine: JSONObject) {
-        if(logLine.getString("level") == "error") {
+        if (logLine.optString("level") == "error") {
             clearObject()
             mLogline = logLine
 
-            var error = ErrorObject(getErrorObject(), getErrorMessage())
+            val error = ErrorObject(getErrorObject(), getErrorMessage())
             Log.e(TAG, error.mErrorObject + " - " + error.mErrorMessage)
             mErrorList.add(error)
         }
 
-        if(logLine.has("stats")) {
+        if (logLine.has("stats")) {
             clearObject()
             mLogline = logLine
             mStats = mLogline.getJSONObject("stats")
@@ -127,20 +138,14 @@ class StatusObject(var mContext: Context){
             //bytes,checks,deletedDirs,deletes,elapsedTime,errors,eta,fatalError,renames,retryError
             //speed,totalBytes,totalChecks,totalTransfers,transferTime,transfers
 
-            //available stats:
-            //bytes,checks,deletedDirs,deletes,elapsedTime,errors,eta,fatalError,renames,retryError
-            //speed,totalBytes,totalChecks,totalTransfers,transferTime,transfers
-
-
-            // when we check stuff, dont show the other messages.
             val checks = mStats.optJSONArray("checking")
-            if(checks != null) {
-                var filename = checks.getString(0)
-                if(!filename.equals("")) {
+            if (checks != null && checks.length() > 0) {
+                val filename = checks.optString(0, "")
+                if (filename.isNotEmpty()) {
                     notificationBigText.add(
                         String.format(
                             mContext.getString(R.string.sync_notification_elapsed),
-                            prettyPrintDuration(mStats.getInt("elapsedTime"))
+                            getFormattedElapsed()
                         )
                     )
 
@@ -150,16 +155,22 @@ class StatusObject(var mContext: Context){
                             filename
                         )
                     )
+                    notificationContent = String.format(
+                        mContext.getString(R.string.sync_notification_file_checking),
+                        filename
+                    )
                 }
+                notificationPercent = getPercentage().toInt()
                 return
             }
 
-            if(mStats.has("transferring")) {
-                val transferring = mStats.getJSONArray("transferring").getJSONObject(0)
+            val transferringArr = mStats.optJSONArray("transferring")
+            if (transferringArr != null && transferringArr.length() > 0) {
+                val transferring = transferringArr.getJSONObject(0)
                 lastItemAverageSpeed = transferring.optLong("speedAvg", 0)
 
-                val divisor = mStats.getInt("elapsedTime")
-                estimatedAverageSpeed = if(divisor != 0) {
+                val divisor = getElapsedSeconds()
+                estimatedAverageSpeed = if (divisor != 0) {
                     mStats.optLong("bytes", 0) / divisor
                 } else {
                     0
@@ -170,12 +181,14 @@ class StatusObject(var mContext: Context){
             val size = getSize()
             val allsize = getTotalSize()
             val percent: Double = getPercentage()
+            val etaSec = getEtaSeconds()
+            val etaFormatted = if (etaSec >= 0) prettyPrintDuration(etaSec) else prettyPrintDuration(0)
 
             notificationContent = String.format(
                 mContext.getString(R.string.sync_notification_short),
                 size,
                 allsize,
-                prettyPrintDuration(mStats.optInt("eta", 0))
+                etaFormatted
             )
             notificationBigText.clear()
             notificationBigText.add(
@@ -188,10 +201,10 @@ class StatusObject(var mContext: Context){
 
             if (getDeletions() > 0) {
                 notificationBigText.add(
-                        String.format(
-                                mContext.getString(R.string.sync_notification_deletions),
-                                getDeletions()
-                        )
+                    String.format(
+                        mContext.getString(R.string.sync_notification_deletions),
+                        getDeletions()
+                    )
                 )
             }
 
@@ -223,22 +236,18 @@ class StatusObject(var mContext: Context){
                 )
             }
 
-            var eta = mStats.get("eta")
-            if(eta == null) {
-                eta = "0";
-            }
-
             notificationBigText.add(
                 String.format(
                     mContext.getString(R.string.sync_notification_remaining),
-                    prettyPrintDuration(mStats.optInt("eta", 0))
+                    etaFormatted
                 )
             )
-            if (mStats.getInt("errors") > 0) {
+            val errorsCount = mStats.optInt("errors", 0)
+            if (errorsCount > 0) {
                 notificationBigText.add(
                     String.format(
                         mContext.getString(R.string.sync_notification_errors),
-                        mStats.getInt("errors")
+                        errorsCount
                     )
                 )
             }
@@ -246,19 +255,21 @@ class StatusObject(var mContext: Context){
             notificationBigText.add(
                 String.format(
                     mContext.getString(R.string.sync_notification_elapsed),
-                    prettyPrintDuration(mStats.getInt("elapsedTime"))
+                    getFormattedElapsed()
                 )
             )
 
             val transfers = mStats.optJSONArray("transferring")
-            if(transfers != null) {
+            if (transfers != null && transfers.length() > 0) {
                 val transferObject = transfers.getJSONObject(0)
-                var filename = transferObject.optString("name", "")
-                if(!filename.equals("")) {
-                    notificationBigText.add(String.format(
-                        mContext.getString(R.string.sync_notification_file_syncing),
-                        filename
-                    ))
+                val filename = transferObject.optString("name", "")
+                if (filename.isNotEmpty()) {
+                    notificationBigText.add(
+                        String.format(
+                            mContext.getString(R.string.sync_notification_file_syncing),
+                            filename
+                        )
+                    )
                 }
             }
 
@@ -293,9 +304,9 @@ class StatusObject(var mContext: Context){
     }
 
 
-    private fun prettyPrintDuration(secondDuration: Int) : String {
-
-        var duration = secondDuration.toLong()
+    fun prettyPrintDuration(secondDuration: Int): String {
+        val clampedDuration = secondDuration.coerceAtLeast(0)
+        var duration = clampedDuration.toLong()
         val days = TimeUnit.SECONDS.toDays(duration).toInt()
         duration -= (days * 60 * 60 * 24)
         val hours = TimeUnit.SECONDS.toHours(duration).toInt()
@@ -351,10 +362,47 @@ class StatusObject(var mContext: Context){
         }
 
         //if the time is longer than an hour, dont show seconds
-        return if (60*60 < secondDuration) {
-            "$daysText$hoursText$minutesText"
+        return if (60 * 60 < clampedDuration) {
+            "$daysText$hoursText$minutesText".trimEnd(' ', ',')
         } else {
             "$daysText$hoursText$minutesText$secondsText"
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        fun computePercentage(stats: JSONObject): Double {
+            val totalBytes = stats.optLong("totalBytes", 0)
+            if (totalBytes > 0) {
+                return (stats.optLong("bytes", 0).toDouble() / totalBytes * 100.0).coerceIn(0.0, 100.0)
+            }
+            val totalTransfers = stats.optInt("totalTransfers", 0)
+            if (totalTransfers > 0) {
+                return (stats.optInt("transfers", 0).toDouble() / totalTransfers * 100.0).coerceIn(0.0, 100.0)
+            }
+            val totalChecks = stats.optInt("totalChecks", 0)
+            if (totalChecks > 0) {
+                return (stats.optInt("checks", 0).toDouble() / totalChecks * 100.0).coerceIn(0.0, 100.0)
+            }
+            return 0.0
+        }
+
+        @JvmStatic
+        fun extractEtaSeconds(stats: JSONObject): Int {
+            if (!stats.has("eta") || stats.isNull("eta")) {
+                return -1
+            }
+            val raw = stats.optDouble("eta", -1.0)
+            return if (raw.isNaN() || raw < 0.0) -1 else raw.toInt()
+        }
+
+        @JvmStatic
+        fun extractElapsedSeconds(stats: JSONObject): Int {
+            if (!stats.has("elapsedTime") || stats.isNull("elapsedTime")) {
+                return 0
+            }
+            val raw = stats.optDouble("elapsedTime", 0.0)
+            return if (raw.isNaN() || raw < 0.0) 0 else raw.toInt()
         }
     }
 }

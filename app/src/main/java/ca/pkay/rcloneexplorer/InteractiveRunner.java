@@ -3,6 +3,7 @@ package ca.pkay.rcloneexplorer;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import ca.pkay.rcloneexplorer.util.FLog;
+import ca.pkay.rcloneexplorer.util.SecretRedactor;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -287,7 +288,9 @@ public class InteractiveRunner {
                         if (index < 0) {
                             index = 0;
                         }
-                        FLog.d(TAG, "rclone: %s", bufferContent.substring(index));
+                        if (BuildConfig.DEBUG) {
+                            FLog.d(TAG, "rclone: %s", SecretRedactor.redact(bufferContent.substring(index)));
+                        }
                     }
 
                     // Test if any of the current steps have matching triggers
@@ -297,15 +300,12 @@ public class InteractiveRunner {
                         FLog.d(TAG, "run: Match for Step on '%s'", matchedStep.trigger);
                         Action action = matchedStep.getAction();
                         action.onTrigger(bufferContent);
-                        FLog.d(TAG, "run: entering '%s'", action.getInput());
+                        FLog.d(TAG, "run: executing matched step action");
                         stdin.println(action.getInput());
                         stdin.flush();
 
-                        // copy to buffer (full transcript for debugging)
-                        char[] input = action.getInput().toCharArray();
-                        char[] inputTranscript = new char[input.length + 1];
-                        inputTranscript[inputTranscript.length - 1] = '\n';
-                        System.arraycopy(input, 0, inputTranscript, 0, input.length);
+                        // Record redaction marker in transcript instead of plaintext user input/secrets.
+                        char[] inputTranscript = "<redacted>\n".toCharArray();
                         for (char c : inputTranscript) {
                             if (bufPos >= buffer.length) {
                                 bufPos = 0;
@@ -351,19 +351,19 @@ public class InteractiveRunner {
         }
 
         private void makeDebugReport(String bufferContent, List<? extends Step> currentSteps, Exception e) {
-            if (null != bufferContent) {
-                StringBuilder sb = new StringBuilder();
-                if (null != currentSteps) {
-                    for (Step step : currentSteps) {
-                        sb.append(" - '").append(step.trigger).append('\'');
-                    }
-                } else {
-                    sb.append("(none)");
+            StringBuilder sb = new StringBuilder();
+            if (null != currentSteps) {
+                for (Step step : currentSteps) {
+                    sb.append(" - '").append(step.trigger).append('\'');
                 }
-                FLog.e(TAG, "run: transcript: \n%s\n active triggers:\n%s", e, bufferContent, sb);
             } else {
-                FLog.e(TAG, "run: (no transcript)", e);
+                sb.append("(none)");
             }
+            if (BuildConfig.DEBUG && null != bufferContent) {
+                FLog.d(TAG, "run: transcript: \n%s\n active triggers:\n%s",
+                        SecretRedactor.redact(bufferContent), sb);
+            }
+            FLog.e(TAG, "run: interactive step failed, active triggers:\n%s", e, sb);
         }
 
         private void readChar(char[] buffer, int pos, @Step.StreamType int streamType, long timeout,

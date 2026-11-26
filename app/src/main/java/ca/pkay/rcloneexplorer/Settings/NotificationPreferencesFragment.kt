@@ -11,7 +11,6 @@ import androidx.preference.PreferenceManager
 import ca.pkay.rcloneexplorer.R
 import de.schuelken.cloudbridge.settings.preferences.ButtonPreference
 import de.schuelken.cloudbridge.updates.UpdateChecker
-import es.dmoral.toasty.Toasty
 
 
 class NotificationPreferencesFragment : PreferenceFragmentCompat(),
@@ -44,7 +43,7 @@ class NotificationPreferencesFragment : PreferenceFragmentCompat(),
             if (intent.resolveActivity(requireContext().packageManager) != null) {
                 startActivity(intent)
             } else {
-                Toasty.error(requireContext(), getString(R.string.couldnt_find_activity), Toast.LENGTH_SHORT, true).show()
+                Toast.makeText(requireContext(), getString(R.string.couldnt_find_activity), Toast.LENGTH_SHORT).show()
             }
         }
     }

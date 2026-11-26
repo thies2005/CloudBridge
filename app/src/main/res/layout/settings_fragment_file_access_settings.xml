@@ -23,6 +23,10 @@
             android:layout_height="wrap_content"
             android:clickable="true"
             android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:layout_marginTop="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom">
 
@@ -39,17 +43,17 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/pref_saf_enable"
+                    android:text="@string/pixel_folder_access_title"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/pref_saf_summary" />
+                    android:text="@string/pixel_folder_access_summary" />
 
             </LinearLayout>
 
-            <Switch
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/enable_saf_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -70,17 +74,16 @@
             android:id="@+id/permission_add_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
-            android:paddingTop="@dimen/settings_padding_topbottom"
-            android:paddingBottom="@dimen/settings_padding_topbottom">
+            android:layout_marginTop="4dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
             <Button
                 android:id="@+id/permission_add_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerHorizontal="true"
-                android:text="@string/pref_saf_add_permission" />
+                android:text="@string/pixel_add_folder_access" />
 
         </RelativeLayout>
 
@@ -91,6 +94,10 @@
             android:layout_height="wrap_content"
             android:clickable="true"
             android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:layout_marginTop="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom">
 
@@ -117,7 +124,7 @@
 
             </LinearLayout>
 
-            <Switch
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/enable_refresh_la_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -136,6 +143,10 @@
             android:layout_height="wrap_content"
             android:clickable="true"
             android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:layout_marginTop="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom">
 
@@ -151,13 +162,13 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/pref_open_all_files_setting_label"
+                    android:text="@string/pixel_all_files_access_title"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/pref_open_all_files_setting_summary" />
+                    android:text="@string/pixel_all_files_access_summary" />
 
             </LinearLayout>
         </RelativeLayout>
@@ -168,6 +179,10 @@
             android:layout_height="wrap_content"
             android:clickable="true"
             android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:layout_marginTop="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom"
             android:visibility="visible">
@@ -195,7 +210,7 @@
 
             </LinearLayout>
 
-            <Switch
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/enable_saf_vcp_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -208,6 +223,10 @@
             android:layout_height="wrap_content"
             android:clickable="true"
             android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:layout_marginTop="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom"
             android:visibility="visible">
@@ -235,7 +254,7 @@
 
             </LinearLayout>
 
-            <Switch
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/vcp_declare_local_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -248,9 +267,13 @@
             android:layout_height="wrap_content"
             android:clickable="true"
             android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:layout_marginTop="4dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="@dimen/settings_padding_topbottom"
             android:paddingBottom="@dimen/settings_padding_topbottom"
-            android:visibility="visible">
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -275,7 +298,7 @@
 
             </LinearLayout>
 
-            <Switch
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/vcp_grant_all_switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

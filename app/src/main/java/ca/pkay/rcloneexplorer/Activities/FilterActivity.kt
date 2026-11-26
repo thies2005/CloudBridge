@@ -8,7 +8,6 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.core.view.WindowCompat
 import androidx.core.view.size
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -19,9 +18,7 @@ import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.FilterEntryRecyclerViewAdapter
 import ca.pkay.rcloneexplorer.util.ActivityHelper
-import com.google.android.material.floatingactionbutton.FloatingActionButton
-import es.dmoral.toasty.Toasty
-import jp.wasabeef.recyclerview.animators.LandingAnimator
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 
 class FilterActivity : AppCompatActivity() {
 
@@ -41,9 +38,8 @@ class FilterActivity : AppCompatActivity() {
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
         ActivityHelper.applyTheme(this)
+        super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_filter)
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -67,15 +63,15 @@ class FilterActivity : AppCompatActivity() {
             if (filterId != 0L) {
                 existingFilter = dbHandler.getFilter(filterId)
                 if (existingFilter == null) {
-                    Toasty.error(
+                    Toast.makeText(
                             this,
-                            this.resources.getString(R.string.filteractivity_filter_not_found)
-                    ).show()
+                            this.resources.getString(R.string.filteractivity_filter_not_found),
+                        Toast.LENGTH_SHORT).show()
                     finish()
                 }
             }
         }
-        val fab = findViewById<FloatingActionButton>(R.id.saveButton)
+        val fab = findViewById<ExtendedFloatingActionButton>(R.id.saveButton)
         fab.setOnClickListener {
             if (existingFilter == null) {
                 saveFilter()
@@ -85,6 +81,7 @@ class FilterActivity : AppCompatActivity() {
         }
 
         if(existingFilter != null) {
+            setTitle(R.string.pixel_edit_filter_title)
             filters = existingFilter!!.getFilters()
         }
         filterTitle.setText(existingFilter?.title)
@@ -123,12 +120,10 @@ class FilterActivity : AppCompatActivity() {
         filterToPopulate.title = filterTitle.text.toString()
         filterToPopulate.setFilters(filters)
         if (filterTitle.text.toString() == "") {
-            Toasty.error(
+            Toast.makeText(
                     this.applicationContext,
                     getString(R.string.filter_data_validation_error_no_title),
-                    Toast.LENGTH_SHORT,
-                    true
-            ).show()
+                    Toast.LENGTH_SHORT).show()
             return null
         }
         return filterToPopulate
@@ -137,7 +132,6 @@ class FilterActivity : AppCompatActivity() {
     private fun prepareFilterList() {
         val adapter = FilterEntryRecyclerViewAdapter(filters, this)
         filterList.layoutManager = LinearLayoutManager(this)
-        filterList.itemAnimator = LandingAnimator()
         filterList.adapter = adapter
     }
 }

@@ -35,6 +35,7 @@ import ca.pkay.rcloneexplorer.Items.FileItem;
 import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.util.FLog;
+import de.schuelken.cloudbridge.search.SearchEngine;
 import io.github.x0b.safdav.SafAccessProvider;
 import io.github.x0b.safdav.file.FileAccessError;
 
@@ -55,6 +56,13 @@ public class FileExplorerRecyclerViewAdapter extends RecyclerView.Adapter<FileEx
     private boolean wrapFileNames;
     private Context context;
     private long sizeLimit;
+    private String searchQuery = "";
+    private boolean showSearchPath = false;
+
+    public void setSearchDisplay(String query, boolean showPath) {
+        this.searchQuery = query != null ? query : "";
+        this.showSearchPath = showPath;
+    }
 
     public interface OnClickListener {
         void onFileClicked(FileItem fileItem);
@@ -112,7 +120,6 @@ public class FileExplorerRecyclerViewAdapter extends RecyclerView.Adapter<FileEx
         }
 
         if (showThumbnails && !item.isDir()) {
-            String server = "http://127.0.0.1:29179/";
             boolean localLoad = item.getRemote().getType() == RemoteItem.SAFW;
             String mimeType = item.getMimeType();
             if ((mimeType.startsWith("image/") || mimeType.startsWith("video/")) && item.getSize() <= sizeLimit) {
@@ -125,8 +132,21 @@ public class FileExplorerRecyclerViewAdapter extends RecyclerView.Adapter<FileEx
                     bindSafFile(holder, item, glideOption);
                 } else {
                     String[] serverParams = listener.getThumbnailServerParams();
+                    if (serverParams == null || serverParams.length < 2
+                            || serverParams[0] == null || serverParams[0].isEmpty()
+                            || serverParams[1] == null || serverParams[1].isEmpty()) {
+                        return;
+                    }
+                    int serverPort;
+                    try {
+                        serverPort = Integer.parseInt(serverParams[1]);
+                    } catch (NumberFormatException e) {
+                        return;
+                    }
+                    if (serverPort <= 0) {
+                        return;
+                    }
                     String hiddenPath = serverParams[0];
-                    int serverPort = Integer.parseInt(serverParams[1]);
                     String url = "http://127.0.0.1:" + serverPort + "/" + hiddenPath + '/' + item.getPath();
                     Glide
                             .with(context)
@@ -143,14 +163,30 @@ public class FileExplorerRecyclerViewAdapter extends RecyclerView.Adapter<FileEx
         }
 
         RemoteItem itemRemote = item.getRemote();
-        if (!itemRemote.isDirectoryModifiedTimeSupported() && item.isDir()) {
+        if (showSearchPath) {
+            holder.fileModTime.setVisibility(View.VISIBLE);
+            String path = item.getPath() != null ? item.getPath() : "";
+            int lastSlash = path.lastIndexOf('/');
+            String parentPath = lastSlash > 0 ? path.substring(0, lastSlash) : "/";
+            String remotePrefix = itemRemote != null ? itemRemote.getDisplayName() + ": " : "";
+            holder.fileModTime.setText(remotePrefix + parentPath);
+        } else if (!itemRemote.isDirectoryModifiedTimeSupported() && item.isDir()) {
             holder.fileModTime.setVisibility(View.GONE);
         } else {
             holder.fileModTime.setVisibility(View.VISIBLE);
             holder.fileModTime.setText(item.getHumanReadableModTime());
         }
-        
-        holder.fileName.setText(item.getName());
+
+        if (searchQuery != null && !searchQuery.isEmpty()) {
+            int highlightColor = com.google.android.material.color.MaterialColors.getColor(
+                    holder.fileName,
+                    com.google.android.material.R.attr.colorPrimaryContainer,
+                    0x40FFD54F
+            );
+            holder.fileName.setText(SearchEngine.highlightMatch(item.getName(), searchQuery, highlightColor));
+        } else {
+            holder.fileName.setText(item.getName());
+        }
 
         if (isInSelectMode) {
             if (selectedItems.contains(item)) {

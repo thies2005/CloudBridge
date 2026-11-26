@@ -13,7 +13,15 @@ import ca.pkay.rcloneexplorer.R
 class FilterSpinnerAdapter(context: Context, resource: Int, objects: List<String?>) :
         ArrayAdapter<String?>(context, resource, objects) {
 
+    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+        return bindFilterRow(position, convertView, parent)
+    }
+
     override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+        return bindFilterRow(position, convertView, parent)
+    }
+
+    private fun bindFilterRow(position: Int, convertView: View?, parent: ViewGroup): View {
         val view = convertView ?: LayoutInflater.from(context).inflate(android.R.layout.simple_spinner_dropdown_item, parent, false)
         val textView = view.findViewById<TextView>(android.R.id.text1)
 

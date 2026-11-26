@@ -11,7 +11,6 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 
 import ca.pkay.rcloneexplorer.Settings.FileAccessPreferencesFragment;
 import ca.pkay.rcloneexplorer.Settings.FileAccessSettingsFragment;
@@ -26,6 +25,7 @@ import ca.pkay.rcloneexplorer.RuntimeConfiguration;
 
 public class SettingsActivity extends AppCompatActivity implements SettingsFragment.OnSettingCategorySelectedListener {
 
+    public static final String EXTRA_OPEN_LOGS = "open_logs";
     public final static String THEME_CHANGED = "ca.pkay.rcexplorer.SettingsActivity.THEME_CHANGED";
     private final String SAVED_THEME_CHANGE = "ca.pkay.rcexplorer.SettingsActivity.OUTSTATE_THEME_CHANGED";
     private final String SAVED_FRAGMENT = "ca.pkay.rcexplorer.SettingsActivity.RESTORE_FRAGMENT";
@@ -38,9 +38,8 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -50,17 +49,11 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
             actionBar.setDisplayShowHomeEnabled(true);
         }
 
-        FragmentManager fragmentManager = getSupportFragmentManager();
-        for (int i = 0; i < fragmentManager.getBackStackEntryCount(); i++) {
-            fragmentManager.popBackStack();
-        }
-
-        startSettingsFragment();
-
-        if (savedInstanceState != null) {
-            Fragment fragment = getSupportFragmentManager().findFragmentByTag(SAVED_FRAGMENT);
-            if (fragment != null) {
-                restoreFragment(fragment);
+        if (savedInstanceState == null) {
+            startSettingsFragment();
+            if (getIntent().getBooleanExtra(EXTRA_OPEN_LOGS, false)) {
+                startLoggingSettingsActivity();
+                showLogs();
             }
         }
 
@@ -68,6 +61,14 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
         Intent returnData = new Intent();
         returnData.putExtra(THEME_CHANGED, themeHasChanged);
         setResult(RESULT_OK, returnData);
+    }
+
+    public void onThemeChanged() {
+        themeHasChanged = true;
+        Intent returnData = new Intent();
+        returnData.putExtra(THEME_CHANGED, true);
+        setResult(RESULT_OK, returnData);
+        recreate();
     }
 
     @Override
@@ -85,20 +86,6 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
-    }
-
-    private void restoreFragment(Fragment fragment) {
-        if (fragment instanceof GeneralPreferencesFragment) {
-            startGeneralSettingsFragment();
-        } else if (fragment instanceof FileAccessSettingsFragment) {
-            startFileAccessSettingsFragment();
-        } else if (fragment instanceof ThemingPreferencesFragment) {
-            startLookAndFeelSettingsFragment();
-        } else if (fragment instanceof NotificationPreferencesFragment) {
-            startNotificationSettingsFragment();
-        } else if (fragment instanceof LogPreferencesFragment) {
-            startLoggingSettingsActivity();
-        }
     }
 
     private void startSettingsFragment() {
@@ -142,6 +129,12 @@ public class SettingsActivity extends AppCompatActivity implements SettingsFragm
         transaction.replace(R.id.flFragment, new LogPreferencesFragment(), SAVED_FRAGMENT);
         transaction.addToBackStack(null);
         transaction.commit();
+    }
+
+    public void showLogs() {
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.flFragment, ca.pkay.rcloneexplorer.Fragments.LogFragment.newInstance())
+                .addToBackStack(null).commit();
     }
 
     @Override

@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
@@ -17,18 +18,24 @@ import ca.pkay.rcloneexplorer.Items.RemoteItem
 import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.util.FLog
+import ca.pkay.rcloneexplorer.util.ProxyPasswordStore
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager
 import ca.pkay.rcloneexplorer.workmanager.SyncManager
+import android.text.format.Formatter
+import de.schuelken.cloudbridge.cache.CacheManager
 import de.schuelken.cloudbridge.extensions.TAG
 import de.schuelken.cloudbridge.settings.language.LanguagePicker
 import de.schuelken.cloudbridge.settings.preferences.FilesizePreference
-import es.dmoral.toasty.Toasty
 
 class GeneralPreferencesFragment : PreferenceFragmentCompat() {
 
 
     private lateinit var sharedPreferences: SharedPreferences
 
+
+    override fun onDisplayPreferenceDialog(preference: Preference) {
+        if (!showMaterialListPreference(preference)) super.onDisplayPreferenceDialog(preference)
+    }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.settings_general_preferences, rootKey)
@@ -65,6 +72,83 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             true
         }
 
+        val cacheMaxPreference = findPreference(getString(R.string.pref_key_cache_max_size)) as FilesizePreference?
+        cacheMaxPreference?.summaryProvider =
+            Preference.SummaryProvider<FilesizePreference> { preference ->
+                val sizeMb = preference.getValue() / (1024.0 * 1024.0)
+                resources.getString(R.string.pref_cache_max_size_summary, sizeMb.toFloat())
+            }
+        cacheMaxPreference?.setOnPreferenceChangeListener { _, _ ->
+            CacheManager.getInstance(requireContext()).evictDataCacheIfNeeded()
+            true
+        }
+
+        val clearCachePreference = findPreference(getString(R.string.pref_key_clear_cache)) as Preference?
+        updateClearCacheSummary(clearCachePreference)
+        clearCachePreference?.setOnPreferenceClickListener { pref ->
+            showClearCacheConfirmation(pref)
+            true
+        }
+
+        configureProxyPasswordPreference()
+
+    }
+
+    private fun configureProxyPasswordPreference() {
+        val proxyPasswordPref = findPreference<EditTextPreference>(getString(R.string.pref_key_proxy_password))
+            ?: return
+        val appContext = requireContext().applicationContext
+        // Migrate any legacy plaintext preference into AndroidKeyStore-backed storage immediately.
+        ProxyPasswordStore.getDecryptedPassword(appContext)
+        proxyPasswordPref.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+            if (ProxyPasswordStore.hasPassword(appContext)) {
+                getString(R.string.pref_proxy_password_masked)
+            } else {
+                getString(R.string.pref_proxy_password_not_set)
+            }
+        }
+        proxyPasswordPref.setOnBindEditTextListener { editText ->
+            editText.setText("")
+            editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            if (ProxyPasswordStore.hasPassword(appContext)) {
+                editText.setHint(R.string.pref_proxy_password_hint_saved)
+            } else {
+                editText.hint = null
+            }
+        }
+        proxyPasswordPref.setOnPreferenceChangeListener { pref, newValue ->
+            val password = newValue as? String ?: ""
+            ProxyPasswordStore.setPassword(appContext, password)
+            if (pref is EditTextPreference) {
+                pref.text = ""
+                pref.summary = if (ProxyPasswordStore.hasPassword(appContext)) {
+                    getString(R.string.pref_proxy_password_masked)
+                } else {
+                    getString(R.string.pref_proxy_password_not_set)
+                }
+            }
+            false
+        }
+    }
+
+    private fun updateClearCacheSummary(preference: Preference?) {
+        preference ?: return
+        val usedBytes = CacheManager.getInstance(requireContext()).getTotalCacheSizeBytes()
+        val formatted = Formatter.formatShortFileSize(requireContext(), usedBytes)
+        preference.summary = getString(R.string.pref_clear_cache_summary, formatted)
+    }
+
+    private fun showClearCacheConfirmation(preference: Preference) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.clear_cache_confirm_title)
+            .setMessage(R.string.clear_cache_confirm_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.pref_clear_cache_title) { _, _ ->
+                CacheManager.getInstance(requireContext()).clearAllCache()
+                updateClearCacheSummary(preference)
+                Toast.makeText(requireContext(), R.string.cache_cleared, Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 
     private fun showCancelTransfersConfirmation() {
@@ -75,12 +159,10 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             .setPositiveButton(R.string.cancel_all_transfers_action) { _, _ ->
                 EphemeralTaskManager(requireContext()).cancel()
                 SyncManager(requireContext()).cancel()
-                Toasty.info(
+                Toast.makeText(
                     requireContext(),
                     getString(R.string.cancel_all_transfers_done),
-                    Toast.LENGTH_SHORT,
-                    true
-                ).show()
+                    Toast.LENGTH_SHORT).show()
             }
             .show()
     }
@@ -166,12 +248,10 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
             checkedItems
         ) { _: DialogInterface?, which: Int, isChecked: Boolean ->
             if (userSelected.size >= 4 && isChecked) {
-                Toasty.info(
+                Toast.makeText(
                     requireContext(),
                     getString(R.string.app_shortcuts_max_toast),
-                    Toast.LENGTH_SHORT,
-                    true
-                ).show()
+                    Toast.LENGTH_SHORT).show()
                 //((AlertDialog)dialog).getListView().setItemChecked(which, false); This doesn't work
             }
             if (isChecked) {

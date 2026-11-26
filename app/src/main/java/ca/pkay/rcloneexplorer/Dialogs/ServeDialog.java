@@ -2,7 +2,6 @@ package ca.pkay.rcloneexplorer.Dialogs;
 
 import android.app.Dialog;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -11,13 +10,13 @@ import android.view.View;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.RadioGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.FragmentActivity;
-import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
@@ -32,12 +31,17 @@ public class ServeDialog extends DialogFragment {
     private Callback callback;
     private RadioGroup protocol;
     private CheckBox allowRemoteAccess;
+    private CheckBox allowWriteAccess;
+    private TextView dlnaWarning;
+    private TextView authenticationHeader;
+    private TextInputLayout userInputLayout;
+    private TextInputLayout passwordInputLayout;
     private EditText user;
     private EditText password;
     private AlertDialog dialog;
 
     public interface Callback {
-        void onServeOptionsSelected(int protocol, boolean allowRemoteAccess, String user, String password);
+        void onServeOptionsSelected(int protocol, boolean allowRemoteAccess, boolean allowWriteAccess, String user, String password);
     }
 
     @NonNull
@@ -47,31 +51,33 @@ public class ServeDialog extends DialogFragment {
             callback = (Callback) getParentFragment();
         }
 
-
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context, R.style.RoundedCornersDialog);
-        LayoutInflater layoutInflater = ((FragmentActivity)context).getLayoutInflater();
+        LayoutInflater layoutInflater = ((FragmentActivity) context).getLayoutInflater();
         View view = layoutInflater.inflate(R.layout.dialog_serve, null);
 
         protocol = view.findViewById(R.id.radio_group_protocol);
         allowRemoteAccess = view.findViewById(R.id.checkbox_allow_remote_access);
+        allowWriteAccess = view.findViewById(R.id.checkbox_allow_write_access);
+        dlnaWarning = view.findViewById(R.id.text_dlna_warning);
+        authenticationHeader = view.findViewById(R.id.text_authentication_header);
+        userInputLayout = view.findViewById(R.id.text_input_layout_user);
+        passwordInputLayout = view.findViewById(R.id.text_input_layout_password);
         user = view.findViewById(R.id.edit_text_user);
         password = view.findViewById(R.id.edit_text_password);
 
-        SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(context);
-        if (pref.contains(getString(R.string.pref_choice_serve_dialog_allow_ext))) {
-            boolean checked = pref.getBoolean(getString(R.string.pref_choice_serve_dialog_allow_ext), false);
-            allowRemoteAccess.setChecked(checked);
-        }
+        // Always default to local-only, read-only exposure on each open.
+        allowRemoteAccess.setChecked(false);
+        allowWriteAccess.setChecked(false);
 
-        ((TextInputLayout) view.findViewById(R.id.text_input_layout_user)).setHint("Username");
-        ((TextInputLayout) view.findViewById(R.id.text_input_layout_password)).setHint("Password");
+        userInputLayout.setHint("Username");
+        passwordInputLayout.setHint("Password");
 
         builder.setTitle(R.string.serve_dialog_title);
         builder.setPositiveButton(R.string.ok, (dialog, which) -> sendCallback());
         builder.setNegativeButton(R.string.cancel, null);
         builder.setView(view);
 
-        ((CheckBox) view.findViewById(R.id.checkbox_allow_remote_access)).setOnCheckedChangeListener((btn, isChecked) -> {
+        allowRemoteAccess.setOnCheckedChangeListener((btn, isChecked) -> {
             if (isChecked) {
                 Snackbar.make(btn, R.string.serve_dialog_remote_notice_enabled, Snackbar.LENGTH_LONG)
                         .show();
@@ -79,6 +85,11 @@ public class ServeDialog extends DialogFragment {
                 Snackbar.make(btn, R.string.serve_dialog_remote_notice_disabled, Snackbar.LENGTH_LONG)
                         .show();
             }
+            updateOkButtonState();
+        });
+
+        protocol.setOnCheckedChangeListener((group, checkedId) -> {
+            updateProtocolDependentUi(checkedId);
             updateOkButtonState();
         });
 
@@ -100,15 +111,43 @@ public class ServeDialog extends DialogFragment {
         password.addTextChangedListener(credentialsWatcher);
 
         dialog = builder.show();
+        updateProtocolDependentUi(protocol.getCheckedRadioButtonId());
         updateOkButtonState();
         return dialog;
+    }
+
+    private void updateProtocolDependentUi(int checkedProtocolId) {
+        boolean supportsWrite = checkedProtocolId == R.id.radio_webdav || checkedProtocolId == R.id.radio_ftp;
+        if (allowWriteAccess != null) {
+            allowWriteAccess.setVisibility(supportsWrite ? View.VISIBLE : View.GONE);
+            if (!supportsWrite) {
+                allowWriteAccess.setChecked(false);
+            }
+        }
+        boolean isDlna = checkedProtocolId == R.id.radio_dlna;
+        if (dlnaWarning != null) {
+            dlnaWarning.setVisibility(isDlna ? View.VISIBLE : View.GONE);
+        }
+        int authVisibility = isDlna ? View.GONE : View.VISIBLE;
+        if (authenticationHeader != null) {
+            authenticationHeader.setVisibility(authVisibility);
+        }
+        if (userInputLayout != null) {
+            userInputLayout.setVisibility(authVisibility);
+        }
+        if (passwordInputLayout != null) {
+            passwordInputLayout.setVisibility(authVisibility);
+        }
     }
 
     private void updateOkButtonState() {
         if (dialog == null) {
             return;
         }
+        int checkedProtocolId = protocol.getCheckedRadioButtonId();
+        boolean isDlna = checkedProtocolId == R.id.radio_dlna;
         boolean canProceed = !allowRemoteAccess.isChecked()
+                || isDlna
                 || (!user.getText().toString().trim().isEmpty()
                 && !password.getText().toString().trim().isEmpty());
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(canProceed);
@@ -119,6 +158,7 @@ public class ServeDialog extends DialogFragment {
         super.onSaveInstanceState(outState);
         outState.putInt("protocol", protocol.getCheckedRadioButtonId());
         outState.putBoolean("allowRemoteAccess", allowRemoteAccess.isChecked());
+        outState.putBoolean("allowWriteAccess", allowWriteAccess.isChecked());
         if (!user.getText().toString().trim().isEmpty()) {
             outState.putString("user", user.getText().toString());
         }
@@ -135,6 +175,7 @@ public class ServeDialog extends DialogFragment {
         }
 
         allowRemoteAccess.setChecked(savedInstanceState.getBoolean("allowRemoteAccess", false));
+        allowWriteAccess.setChecked(savedInstanceState.getBoolean("allowWriteAccess", false));
         String savedUser = savedInstanceState.getString("user");
         if (savedUser != null) {
             user.setText(savedUser);
@@ -149,6 +190,7 @@ public class ServeDialog extends DialogFragment {
         if (savedProtocol == R.id.radio_http || savedProtocol == R.id.radio_dlna
                 || savedProtocol == R.id.radio_webdav || savedProtocol == R.id.radio_ftp) {
             protocol.check(savedProtocol);
+            updateProtocolDependentUi(savedProtocol);
         }
     }
 
@@ -165,27 +207,22 @@ public class ServeDialog extends DialogFragment {
     private void sendCallback() {
         int selectedProtocolId = protocol.getCheckedRadioButtonId();
         int selectedProtocol;
-        switch (selectedProtocolId) {
-            case R.id.radio_ftp:
-                selectedProtocol = Rclone.SERVE_PROTOCOL_FTP;
-                break;
-            case R.id.radio_dlna:
-                selectedProtocol = Rclone.SERVE_PROTOCOL_DLNA;
-                break;
-            case R.id.radio_webdav:
-                selectedProtocol = Rclone.SERVE_PROTOCOL_WEBDAV;
-                break;
-            case R.id.radio_http:
-            default:
-                selectedProtocol = Rclone.SERVE_PROTOCOL_HTTP;
-                break;
+        boolean supportsWrite = false;
+        if (selectedProtocolId == R.id.radio_ftp) {
+            selectedProtocol = Rclone.SERVE_PROTOCOL_FTP;
+            supportsWrite = true;
+        } else if (selectedProtocolId == R.id.radio_dlna) {
+            selectedProtocol = Rclone.SERVE_PROTOCOL_DLNA;
+        } else if (selectedProtocolId == R.id.radio_webdav) {
+            selectedProtocol = Rclone.SERVE_PROTOCOL_WEBDAV;
+            supportsWrite = true;
+        } else {
+            selectedProtocol = Rclone.SERVE_PROTOCOL_HTTP;
         }
 
-        PreferenceManager.getDefaultSharedPreferences(context)
-                .edit()
-                .putBoolean(getString(R.string.pref_choice_serve_dialog_allow_ext), allowRemoteAccess.isChecked())
-                .apply();
-
-        callback.onServeOptionsSelected(selectedProtocol, allowRemoteAccess.isChecked(), user.getText().toString(), password.getText().toString());
+        boolean allowWrite = supportsWrite && allowWriteAccess != null && allowWriteAccess.isChecked();
+        String username = selectedProtocol == Rclone.SERVE_PROTOCOL_DLNA ? "" : user.getText().toString();
+        String pass = selectedProtocol == Rclone.SERVE_PROTOCOL_DLNA ? "" : password.getText().toString();
+        callback.onServeOptionsSelected(selectedProtocol, allowRemoteAccess.isChecked(), allowWrite, username, pass);
     }
 }

@@ -73,7 +73,10 @@ class BreadcrumbView : HorizontalScrollView {
     }
 
     fun addCrumb(crumbTitle: String, path: String) {
-        val crumb = CrumbView(context.applicationContext)
+        // Inflate with this view's (activity-themed) context: the crumb layout resolves
+        // theme attributes such as ?attr/colorOnPrimaryContainer, which the application
+        // context's default theme cannot provide.
+        val crumb = CrumbView(context)
         crumb.setTitle(crumbTitle)
         crumb.setPath(path)
         crumb.setActive(true)

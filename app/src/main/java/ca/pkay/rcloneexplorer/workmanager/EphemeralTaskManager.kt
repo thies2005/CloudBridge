@@ -2,23 +2,32 @@ package ca.pkay.rcloneexplorer.workmanager
 
 import android.content.Context
 import android.os.Parcel
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import ca.pkay.rcloneexplorer.Items.FileItem
 import ca.pkay.rcloneexplorer.Items.RemoteItem
+import ca.pkay.rcloneexplorer.util.FLog
 import de.schuelken.cloudbridge.notifications.implementations.DeleteWorkerNotification
 import de.schuelken.cloudbridge.notifications.implementations.DownloadWorkerNotification
 import de.schuelken.cloudbridge.notifications.implementations.MoveWorkerNotification
 import de.schuelken.cloudbridge.notifications.implementations.UploadWorkerNotification
 import java.io.File
+import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class EphemeralTaskManager(private var mContext: Context) {
 
     companion object {
 
         private const val EPHEMERAL_WORK_TAG = "ephemeral_work"
+        private const val TRANSFER_BATCH_TAG = "transfer_batch"
+        private val batchSweepScheduled = AtomicBoolean()
 
         fun queueDownload(
             context: Context,
@@ -57,6 +66,129 @@ class EphemeralTaskManager(private var mContext: Context) {
             data.putBoolean(EphemeralWorker.DELETE_STAGED_UPLOAD, deleteStagedUpload)
 
             EphemeralTaskManager(context).work(data.build(), EPHEMERAL_WORK_TAG)
+        }
+
+        fun queueDownloads(context: Context, remote: RemoteItem, files: List<FileItem>, target: String) {
+            val selection = files.map { TransferBatch.Selection(it.path, !it.isDir) }
+            queueTransfers(context, remote, target, Type.DOWNLOAD, selection) { index ->
+                queueDownload(context, remote, files[index], target)
+            }
+        }
+
+        fun queueUploads(context: Context, remote: RemoteItem, files: List<File>, target: String) {
+            val selection = files.map { TransferBatch.Selection(it.path, it.isFile) }
+            queueTransfers(context, remote, target, Type.UPLOAD, selection) { index ->
+                queueUpload(context, remote, files[index].path, target)
+            }
+        }
+
+        private fun queueTransfers(
+            context: Context,
+            remote: RemoteItem,
+            target: String,
+            type: Type,
+            selection: List<TransferBatch.Selection>,
+            queueSingle: (Int) -> Unit
+        ) {
+            for (group in TransferBatch.groups(selection)) {
+                val entries = group.map(selection::get)
+                if (entries.size == 1 || !queueBatch(context, remote, target, type, entries)) {
+                    group.forEach(queueSingle)
+                }
+            }
+        }
+
+        private fun queueBatch(
+            context: Context,
+            remote: RemoteItem,
+            target: String,
+            type: Type,
+            entries: List<TransferBatch.Selection>
+        ): Boolean {
+            val directory = File(context.noBackupFilesDir, "transfer-batches")
+            val manager = WorkManager.getInstance(context)
+            sweepAbandonedBatches(context, manager, directory)
+            val workId = UUID.randomUUID()
+            val filesFrom = File(directory, "$workId.files")
+            try {
+                directory.mkdirs()
+                filesFrom.writeText(entries.joinToString("\n", postfix = "\n") { it.name })
+            } catch (e: IOException) {
+                filesFrom.delete()
+                FLog.w("EphemeralTaskManager", "Could not stage transfer batch", e)
+                return false
+            }
+
+            val targetKey = if (type == Type.DOWNLOAD) {
+                DownloadWorkerNotification(context).generateChannels()
+                EphemeralWorker.DOWNLOAD_TARGETPATH
+            } else {
+                UploadWorkerNotification(context).generateChannels()
+                EphemeralWorker.UPLOAD_TARGETPATH
+            }
+            val data = Data.Builder()
+                .putString(EphemeralWorker.EPHEMERAL_TYPE, type.name)
+                .putString(targetKey, target)
+                .putString(EphemeralWorker.BATCH_MANIFEST, filesFrom.name)
+                .putString(EphemeralWorker.BATCH_SOURCE_PARENT, entries.first().parent)
+            addRemoteItemToData(EphemeralWorker.REMOTE, remote, data)
+            val request = OneTimeWorkRequestBuilder<EphemeralWorker>()
+                .setId(workId)
+                .setInputData(data.build())
+                .addTag(EPHEMERAL_WORK_TAG)
+                .addTag(TRANSFER_BATCH_TAG)
+                .build()
+            val result = manager.enqueue(request).result
+            result.addListener({
+                try {
+                    result.get()
+                    cleanBatchOnCompletion(context, request.id, filesFrom)
+                } catch (e: Exception) {
+                    filesFrom.delete()
+                    FLog.e("EphemeralTaskManager", "Could not enqueue transfer batch", e)
+                }
+            }, ContextCompat.getMainExecutor(context))
+            return true
+        }
+
+        private fun sweepAbandonedBatches(context: Context, manager: WorkManager, directory: File) {
+            if (!batchSweepScheduled.compareAndSet(false, true)) return
+            val snapshot = manager.getWorkInfosByTag(TRANSFER_BATCH_TAG)
+            val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
+            snapshot.addListener({
+                try {
+                    val active = snapshot.get().filterNot { it.state.isFinished }.map { it.id.toString() }.toSet()
+                    // Files this old were staged before the snapshot. Ignore current staging and
+                    // any work that WorkManager can still start or restart.
+                    directory.listFiles()?.filter {
+                        it.lastModified() < cutoff && it.nameWithoutExtension !in active
+                    }?.forEach { it.delete() }
+                } catch (e: Exception) {
+                    FLog.w("EphemeralTaskManager", "Could not clean abandoned transfer batches", e)
+                }
+            }, ContextCompat.getMainExecutor(context))
+        }
+
+        // The scheduler can restart a stopped worker with the same input, so remove the
+        // manifest only after WorkManager records a terminal state. A restarted worker
+        // registers again when its previous process cannot observe the transition.
+        private val observedBatches = mutableSetOf<UUID>()
+
+        internal fun cleanBatchOnCompletion(context: Context, workId: UUID, manifest: File) {
+            val appContext = context.applicationContext
+            ContextCompat.getMainExecutor(appContext).execute {
+                if (!observedBatches.add(workId)) return@execute
+                val work = WorkManager.getInstance(appContext).getWorkInfoByIdLiveData(workId)
+                work.observeForever(object : Observer<WorkInfo?> {
+                    override fun onChanged(info: WorkInfo?) {
+                        if (info?.state?.isFinished == true) {
+                            work.removeObserver(this)
+                            observedBatches.remove(workId)
+                            manifest.delete()
+                        }
+                    }
+                })
+            }
         }
 
         fun queueMove(

@@ -8,12 +8,18 @@ import android.net.Network;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.StrictMode;
-import android.util.Base64;
 import android.util.SparseArray;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.preference.PreferenceManager;
+import ca.pkay.rcloneexplorer.Database.json.SharedPreferencesBackup;
 import ca.pkay.rcloneexplorer.util.FLog;
+import ca.pkay.rcloneexplorer.util.ProxyPasswordStore;
+import ca.pkay.rcloneexplorer.util.Rfc3339Deserializer;
+import ca.pkay.rcloneexplorer.util.UnixDomainSocketFactory;
+import io.github.x0b.safdav.SafBase64;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -23,7 +29,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import ca.pkay.rcloneexplorer.util.Rfc3339Deserializer;
+import okhttp3.Authenticator;
 import okhttp3.Credentials;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -34,13 +40,16 @@ import okhttp3.Response;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.InetAddress;
-import java.net.ServerSocket;
+import java.net.Proxy;
+import java.net.URLEncoder;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,8 +81,8 @@ public class RcloneRcd {
     private static final int EXITED = -1;
     private static final int ERROR = 1;
 
-    private static String rcUser = "admin";
-    private static String rcPass = initPass();
+    private final String rcUser = "admin";
+    private volatile String rcPass = initPass();
 
     private final Context context;
     //private final Log2File log2File;
@@ -81,6 +90,7 @@ public class RcloneRcd {
 
     private final String configPath;
     private final String rclone;
+    private final File rcdSocketFile;
     private Process rcd;
     private boolean stopped = false;
     private Object mainThreadLock = new Object();
@@ -93,14 +103,22 @@ public class RcloneRcd {
     final JobsUpdateHandler jobsUpdateHandler;
 
     private ScheduledFuture<?> jobsUpdateFuture;
-    private int port;
     private Handler mainHandler;
 
-    private static String initPass() {
+    @VisibleForTesting
+    static String initPass() {
         SecureRandom random = new SecureRandom();
-        byte[] values = new byte[16];
+        byte[] values = new byte[24];
         random.nextBytes(values);
-        return Base64.encodeToString(values, Base64.NO_WRAP | Base64.URL_SAFE);
+        return SafBase64.encodeUrlSafeNoPadding(values);
+    }
+
+    @VisibleForTesting
+    static ObjectMapper createObjectMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.NON_PRIVATE);
+        return objectMapper;
     }
 
     public RcloneRcd(Context context, JobsUpdateHandler handler) {
@@ -108,9 +126,8 @@ public class RcloneRcd {
         this.jobsUpdateHandler = handler;
         configPath = context.getFilesDir().getPath() + "/rclone.conf";
         rclone = context.getApplicationInfo().nativeLibraryDir + "/librclone.so";
-        mapper = new ObjectMapper();
-        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.NON_PRIVATE);
+        rcdSocketFile = new File(context.getFilesDir(), "rcd.sock");
+        mapper = createObjectMapper();
         pendingJobs = new LinkedBlockingQueue<>();
         jobsHandlers = new SparseArray<>();
         lastStatus = new SparseArray<>();
@@ -131,40 +148,65 @@ public class RcloneRcd {
     public void startRcd() {
         try {
             FLog.d(TAG, "startRcd: starting rclone process");
-            port = nextAvailablePort();
-            String addr = "localhost:" + port;
-            String tmpDir = context.getCacheDir().getAbsolutePath();
+            rcPass = initPass();
+            okHttpClient = null;
+            if (rcdSocketFile.exists() && !rcdSocketFile.delete()) {
+                FLog.w(TAG, "startRcd: failed to remove stale rcd socket");
+            }
             File logsDir = new File(context.getFilesDir(), "logs");
             if (!logsDir.exists()) {
                 logsDir.mkdirs();
             }
-            String logFile = new File(logsDir, "rcd.log").getAbsolutePath();
             SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(context);
             String transfers = pref.getString(context.getString(R.string.pref_key_transfers), "4");
-            ArrayList<String> parameters = new ArrayList<>(Arrays.asList(
-                    rclone,
-                    "--config", configPath,
-                    "--rc-addr", addr,
-                    "--rc-user", rcUser,
-                    "--rc-pass", rcPass,
-                    "--rc-serve",
-                    // Transfer throughput tuning for VCP/rcd-driven operations.
-                    "--transfers", transfers,
-                    "--buffer-size", "16M",
-                    "--multi-thread-streams", "4"));
-            if (pref.getBoolean(context.getString(R.string.pref_key_logs), false)) {
-                parameters.addAll(Arrays.asList(
-                        "--log-file", logFile,
-                        "-vv"));
-            }
-            parameters.add("rcd");
+            String logFile = pref.getBoolean(context.getString(R.string.pref_key_logs), false)
+                    ? new File(logsDir, "rcd.log").getAbsolutePath()
+                    : null;
+            List<String> parameters = buildRcdCommandArgs(rclone, configPath, rcdSocketFile, transfers, logFile);
             rcd = Runtime.getRuntime().exec(parameters.toArray(new String[0]), getEnv());
+            ProcessRegistry.registerRcd(rcd);
+            ProcessRegistry.updateProgress(
+                    rcd,
+                    context.getString(R.string.rclone_daemon),
+                    0,
+                    false,
+                    context.getString(R.string.rcd_service_notification_no_active_jobs),
+                    "",
+                    "",
+                    Collections.emptyList()
+            );
         } catch (IOException e) {
             FLog.e(TAG, "startRcd: error", e);
             throw new RuntimeException(e);
         }
         // PendingRcloneJobs blocks thread until first job arrives
         jobsUpdateFuture = jobMonitorService.scheduleWithFixedDelay(new PendingRcloneJobs(), 0, 1, TimeUnit.SECONDS);
+    }
+
+    @VisibleForTesting
+    static List<String> buildRcdCommandArgs(
+            String rcloneBin,
+            String configPath,
+            File socketFile,
+            @Nullable String transfers,
+            @Nullable String logFile) {
+        String safeTransfers = SharedPreferencesBackup.sanitizeTransfers(transfers);
+        ArrayList<String> parameters = new ArrayList<>(Arrays.asList(
+                rcloneBin,
+                "--config", configPath,
+                "--rc-addr", "unix://" + socketFile.getAbsolutePath(),
+                "--rc-serve",
+                // Transfer throughput tuning for VCP/rcd-driven operations.
+                "--transfers", safeTransfers,
+                "--buffer-size", "16M",
+                "--multi-thread-streams", "4"));
+        if (logFile != null && !logFile.isEmpty()) {
+            parameters.addAll(Arrays.asList(
+                    "--log-file", logFile,
+                    "-vv"));
+        }
+        parameters.add("rcd");
+        return parameters;
     }
 
     public String[] getEnv() {
@@ -176,19 +218,19 @@ public class RcloneRcd {
             String noProxy = pref.getString(context.getString(R.string.pref_key_no_proxy_hosts), "localhost");
             String protocol = pref.getString(context.getString(R.string.pref_key_proxy_protocol), "http");
             String host = pref.getString(context.getString(R.string.pref_key_proxy_host), "localhost");
-            String user = pref.getString(context.getString(R.string.pref_key_proxy_username), "user");
-            String pass = pref.getString(context.getString(R.string.pref_key_proxy_password), "pass");
+            String user = pref.getString(context.getString(R.string.pref_key_proxy_username), "");
+            String pass = ProxyPasswordStore.getDecryptedPassword(context);
             int port = pref.getInt(context.getString(R.string.pref_key_proxy_port), 8080);
-            String auth = "";
-            if(!(user + pass).isEmpty()) {
-                auth = user+":"+pass+"@";
-            }
-            String url = protocol + "://" + auth + host + ":" + port;
+            String url = ProxyPasswordStore.buildProxyUrl(protocol, host, port, user, pass);
             // per https://golang.org/pkg/net/http/#ProxyFromEnvironment
             environmentValues.add("http_proxy=" + url);
             environmentValues.add("https_proxy=" + url);
             environmentValues.add("no_proxy=" + noProxy);
         }
+
+        // Pass RC credentials over environment instead of argv process listing.
+        environmentValues.add("RCLONE_RC_USER=" + rcUser);
+        environmentValues.add("RCLONE_RC_PASS=" + rcPass);
 
         // if TMPDIR is not set, golang uses /data/local/tmp which is only
         // only accessible for the shell user
@@ -230,31 +272,6 @@ public class RcloneRcd {
     }
 
     /**
-     * Warning: do not hand out to clients, this contains rc auth data!
-     * @return
-     */
-    public String getServeBase() {
-        return new StringBuilder()
-                .append("http://")
-                .append(rcUser)
-                .append(':')
-                .append(rcPass)
-                .append("@127.0.0.1:")
-                .append(port)
-                .toString();
-    }
-
-    private static int nextAvailablePort() {
-        try (ServerSocket serverSocket = new ServerSocket(0)) {
-            serverSocket.setReuseAddress(true);
-            return serverSocket.getLocalPort();
-        } catch (IOException e) {
-            FLog.e(TAG, "nextAvailablePort: could not get port", e);
-        }
-        throw new IllegalStateException("No port available");
-    }
-
-    /**
      * Stop the rcd server
      */
     public void stopRcd() {
@@ -267,6 +284,9 @@ public class RcloneRcd {
         }
         jobStatusExecutor.shutdownNow();
         stopped = true;
+        if (rcdSocketFile.exists() && !rcdSocketFile.delete()) {
+            FLog.w(TAG, "stopRcd: failed to remove rcd socket");
+        }
     }
 
     /**
@@ -374,20 +394,25 @@ public class RcloneRcd {
 
     private OkHttpClient okHttpClient;
 
+    @VisibleForTesting
+    static Authenticator buildRcdAuthenticator(String user, String pass) {
+        return (route, response) -> {
+            if (response.request().header("Authorization") != null) {
+                return null;
+            }
+            String credential = Credentials.basic(user, pass);
+            return response.request().newBuilder()
+                    .header("Authorization", credential).build();
+        };
+    }
+
     private OkHttpClient prepareClient() {
         if (null == okHttpClient) {
             OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                    .authenticator((route, response) -> {
-                        String credential = Credentials.basic(rcUser, rcPass);
-                        return response.request().newBuilder()
-                                .header("Authorization", credential).build();
-                    });
-
-            /*if (DEBUG) {
-                okhttp3.logging.HttpLoggingInterceptor logging = new okhttp3.logging.HttpLoggingInterceptor();
-                logging.level(okhttp3.logging.HttpLoggingInterceptor.Level.HEADERS);
-                builder.addInterceptor(logging);
-            }*/
+                    .proxy(Proxy.NO_PROXY)
+                    .dns(hostname -> Collections.singletonList(InetAddress.getLoopbackAddress()))
+                    .socketFactory(new UnixDomainSocketFactory(rcdSocketFile))
+                    .authenticator(buildRcdAuthenticator(rcUser, rcPass));
 
             okHttpClient = builder.build();
         }
@@ -401,7 +426,6 @@ public class RcloneRcd {
         HttpUrl url = new HttpUrl.Builder()
                 .scheme("http")
                 .host("localhost")
-                .port(port)
                 .addPathSegments(method)
                 .build();
         byte[] callParams;
@@ -528,11 +552,44 @@ public class RcloneRcd {
                 }
             }
             pendingJobs.addAll(pending);
-            if (null != jobsUpdateHandler) {
-                SparseArray<JobStatusResponse> snapshot;
-                synchronized (lastStatus) {
-                    snapshot = lastStatus.clone();
+            SparseArray<JobStatusResponse> snapshot;
+            synchronized (lastStatus) {
+                snapshot = lastStatus.clone();
+            }
+            if (rcd != null) {
+                long running = 0;
+                long finished = 0;
+                long failed = 0;
+                for (int i = 0; i < snapshot.size(); i++) {
+                    JobStatusResponse resp = snapshot.valueAt(i);
+                    if (resp == null) continue;
+                    if (resp.finished) {
+                        if (resp.success) finished++;
+                        else failed++;
+                    } else {
+                        running++;
+                    }
                 }
+                long total = running + finished + failed;
+                if (total > 0) {
+                    int pct = running == 0 ? 100 : (int) (((finished + failed) * 100L) / total);
+                    String statusLine = context.getString(
+                            R.string.rcd_service_notification_stats_template,
+                            running, finished, failed
+                    );
+                    ProcessRegistry.updateProgress(
+                            rcd,
+                            context.getString(R.string.rclone_daemon),
+                            pct,
+                            running > 0,
+                            statusLine,
+                            "",
+                            "",
+                            Collections.emptyList()
+                    );
+                }
+            }
+            if (null != jobsUpdateHandler) {
                 mainThread(() -> jobsUpdateHandler.onRcdJobsUpdate(snapshot));
             }
         }

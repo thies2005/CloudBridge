@@ -2,11 +2,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <ListPreference
         android:defaultValue="0"
-        app:useSimpleSummaryProvider="true"
         android:entries="@array/theme_userfacing"
         android:entryValues="@array/theme_ids"
         android:key="@string/pref_key_theme"
-        android:title="@string/theme_title" />
+        android:title="@string/theme_title"
+        app:useSimpleSummaryProvider="true" />
 
     <SwitchPreferenceCompat
         android:defaultValue="true"

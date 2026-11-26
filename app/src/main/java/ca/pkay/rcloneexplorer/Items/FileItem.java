@@ -28,21 +28,32 @@ public class FileItem implements Parcelable {
     private static final Rfc3339Parser rfc3339Parser = new Rfc3339Strict();
 
     public FileItem(RemoteItem remote, String path, String name, long size, String modTime, String mimeType, boolean isDir, boolean startAtRoot) {
+        this(remote, path, name, size, parseModTimeMillis(modTime), mimeType, isDir, startAtRoot);
+    }
+
+    public FileItem(RemoteItem remote, String path, String name, long size, long modTimeMillis, String mimeType, boolean isDir, boolean startAtRoot) {
         this.remote = remote;
         this.path = path;
         this.name = name;
         this.size = size;
         this.humanReadableSize = sizeToHumanReadable(size);
-        try {
-            this.modTime = rfc3339Parser.parseCalendar(modTime).getTimeInMillis();
-        } catch (ParseException e) {
-            this.modTime = -1;
-        }
+        this.modTime = modTimeMillis;
         this.humanReadableModTime = modTimeToHumanReadable(this.modTime);
         this.formattedModTime = modTimeToFormattedTime(this.modTime);
         this.mimeType = getMimeType(mimeType, path);
         this.isDir = isDir;
         this.startAtRoot = startAtRoot;
+    }
+
+    private static long parseModTimeMillis(String modTime) {
+        if (modTime == null || modTime.isEmpty()) {
+            return -1;
+        }
+        try {
+            return rfc3339Parser.parseCalendar(modTime).getTimeInMillis();
+        } catch (ParseException e) {
+            return -1;
+        }
     }
 
     protected FileItem(Parcel in) {
@@ -112,19 +123,38 @@ public class FileItem implements Parcelable {
     }
 
     public static String getMimeType(String mimeType, String path) {
-        if ("application/octet-stream".equals(mimeType)) {
-            String extension = MimeTypeMap.getFileExtensionFromUrl(path);
-            if ((extension == null || "".equals(extension)) && path.lastIndexOf('.') < path.length() + 1) {
-                extension = path.substring(path.lastIndexOf('.') + 1);
+        if (mimeType == null || mimeType.isEmpty() || "application/octet-stream".equals(mimeType)) {
+            String extension = extractExtension(path);
+            if ("apk".equals(extension)) {
+                return "application/vnd.android.package-archive";
             }
-            if (extension != null) {
-                String mimeQueryResult = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
-                if (null != mimeQueryResult) {
-                    mimeType = mimeQueryResult;
+            if (!extension.isEmpty()) {
+                try {
+                    MimeTypeMap map = MimeTypeMap.getSingleton();
+                    if (map != null) {
+                        String mimeQueryResult = map.getMimeTypeFromExtension(extension);
+                        if (mimeQueryResult != null && !mimeQueryResult.isEmpty()) {
+                            return mimeQueryResult;
+                        }
+                    }
+                } catch (RuntimeException ignored) {
                 }
             }
+            return mimeType != null && !mimeType.isEmpty() ? mimeType : "application/octet-stream";
         }
         return mimeType;
+    }
+
+    public static String extractExtension(String path) {
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        int dot = path.lastIndexOf('.');
+        if (dot > slash && dot < path.length() - 1) {
+            return path.substring(dot + 1).toLowerCase(Locale.ROOT);
+        }
+        return "";
     }
 
     private String sizeToHumanReadable(long size) {
@@ -142,11 +172,18 @@ public class FileItem implements Parcelable {
             return "";
         }
 
-        CharSequence humanReadable = DateUtils.getRelativeTimeSpanString(modTime, now, DateUtils.MINUTE_IN_MILLIS);
-        if (humanReadable.toString().startsWith("In") || humanReadable.toString().startsWith("0")) {
-            humanReadable = "Now";
+        try {
+            CharSequence humanReadable = DateUtils.getRelativeTimeSpanString(modTime, now, DateUtils.MINUTE_IN_MILLIS);
+            if (humanReadable == null) {
+                return "";
+            }
+            if (humanReadable.toString().startsWith("In") || humanReadable.toString().startsWith("0")) {
+                humanReadable = "Now";
+            }
+            return humanReadable.toString();
+        } catch (RuntimeException ignored) {
+            return "";
         }
-        return humanReadable.toString();
     }
 
     private String modTimeToFormattedTime(long modTime) {

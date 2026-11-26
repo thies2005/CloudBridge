@@ -38,8 +38,6 @@ import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.FileExplorerRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.util.LargeParcel;
-import es.dmoral.toasty.Toasty;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class RemoteDestinationDialog extends DialogFragment implements  SwipeRefreshLayout.OnRefreshListener,
                                                                         FileExplorerRecyclerViewAdapter.OnClickListener,
@@ -114,7 +112,6 @@ public class RemoteDestinationDialog extends DialogFragment implements  SwipeRef
         swipeRefreshLayout.setOnRefreshListener(this);
 
         RecyclerView recyclerView = view.findViewById(R.id.recycler_view);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
         View emptyFolderView = view.findViewById(R.id.empty_folder_view);
         View noSearchResultsView = view.findViewById(R.id.no_search_results_view);
@@ -456,7 +453,7 @@ public class RemoteDestinationDialog extends DialogFragment implements  SwipeRef
         protected void onPostExecute(List<FileItem> fileItems) {
             super.onPostExecute(fileItems);
             if (fileItems == null) {
-                Toasty.error(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT).show();
                 fileItems = new ArrayList<>();
             }
             directoryObject.setContent(fileItems);
@@ -494,9 +491,9 @@ public class RemoteDestinationDialog extends DialogFragment implements  SwipeRef
         protected void onPostExecute(Boolean result) {
             super.onPostExecute(result);
             if (result) {
-                Toasty.success(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.make_directory_success), Toast.LENGTH_SHORT).show();
             } else {
-                Toasty.error(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_mkdir), Toast.LENGTH_SHORT).show();
             }
             if (!pathWhenTaskStarted.equals(directoryObject.getCurrentPath())) {
                 directoryObject.removePathFromCache(pathWhenTaskStarted);

@@ -10,16 +10,22 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginEnd="8dp"
-        android:orientation="vertical">
+        android:layout_marginStart="@dimen/settings_padding_ends"
+        android:layout_marginEnd="@dimen/settings_padding_ends"
+        android:orientation="vertical"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/general_settings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/general_Settings_icon_background"
@@ -31,25 +37,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#C71414" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/general_Settings_icon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/general_settings_icon_content_description"
                 android:src="@drawable/ic_settings"
                 app:layout_constraintBottom_toBottomOf="@+id/general_Settings_icon_background"
                 app:layout_constraintEnd_toEndOf="@+id/general_Settings_icon_background"
                 app:layout_constraintStart_toStartOf="@+id/general_Settings_icon_background"
                 app:layout_constraintTop_toTopOf="@+id/general_Settings_icon_background"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -78,7 +87,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/file_access_settings_icon_background"
@@ -90,25 +103,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#3584D8" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/file_access_settings_icon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/file_access_settings_icon_content_description"
                 android:src="@drawable/ic_file_black"
                 app:layout_constraintBottom_toBottomOf="@+id/file_access_settings_icon_background"
                 app:layout_constraintEnd_toEndOf="@+id/file_access_settings_icon_background"
                 app:layout_constraintStart_toStartOf="@+id/file_access_settings_icon_background"
                 app:layout_constraintTop_toTopOf="@+id/file_access_settings_icon_background"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -137,7 +153,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/themingIconBackground"
@@ -149,25 +169,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#43AB3B" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/look_and_feel_settings_icon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/look_and_feel_settings_icon_content_description"
                 android:src="@drawable/ic_look_and_feel"
                 app:layout_constraintBottom_toBottomOf="@+id/themingIconBackground"
                 app:layout_constraintEnd_toEndOf="@+id/themingIconBackground"
                 app:layout_constraintStart_toStartOf="@+id/themingIconBackground"
                 app:layout_constraintTop_toTopOf="@+id/themingIconBackground"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -196,7 +219,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/notificationIconBackground"
@@ -208,25 +235,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#E59308" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/notificationIcon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/notification_settings_icon_content_description"
                 android:src="@drawable/ic_notifications"
                 app:layout_constraintBottom_toBottomOf="@+id/notificationIconBackground"
                 app:layout_constraintEnd_toEndOf="@+id/notificationIconBackground"
                 app:layout_constraintStart_toStartOf="@+id/notificationIconBackground"
                 app:layout_constraintTop_toTopOf="@+id/notificationIconBackground"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -254,7 +284,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/importSettingsIconBackground"
@@ -266,25 +300,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#2A9702" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/importSettingsIcon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/import_settings_icon_content_description"
                 android:src="@drawable/ic_import"
                 app:layout_constraintBottom_toBottomOf="@+id/importSettingsIconBackground"
                 app:layout_constraintEnd_toEndOf="@+id/importSettingsIconBackground"
                 app:layout_constraintStart_toStartOf="@+id/importSettingsIconBackground"
                 app:layout_constraintTop_toTopOf="@+id/importSettingsIconBackground"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -312,7 +349,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/exportSettingsIconBackground"
@@ -324,25 +365,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#2A9702" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/exportSettingsIcon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/export_settings_icon_content_description"
                 android:src="@drawable/ic_export"
                 app:layout_constraintBottom_toBottomOf="@+id/exportSettingsIconBackground"
                 app:layout_constraintEnd_toEndOf="@+id/exportSettingsIconBackground"
                 app:layout_constraintStart_toStartOf="@+id/exportSettingsIconBackground"
                 app:layout_constraintTop_toTopOf="@+id/exportSettingsIconBackground"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -370,7 +414,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/loggingSettingsIconBackground"
@@ -382,25 +430,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#32D6E5" />
+                app:tint="?attr/colorPrimaryContainer" />
 
             <ImageView
                 android:id="@+id/loggingSettingsIcon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/logging_settings_icon_content_description"
                 android:src="@drawable/ic_file_alert"
                 app:layout_constraintBottom_toBottomOf="@+id/loggingSettingsIconBackground"
                 app:layout_constraintEnd_toEndOf="@+id/loggingSettingsIconBackground"
                 app:layout_constraintStart_toStartOf="@+id/loggingSettingsIconBackground"
                 app:layout_constraintTop_toTopOf="@+id/loggingSettingsIconBackground"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnPrimaryContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -429,7 +480,11 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:background="@drawable/pixel_settings_row"
+            android:foreground="?attr/selectableItemBackground"
+            android:layout_marginBottom="4dp"
+            android:minHeight="72dp">
 
             <ImageView
                 android:id="@+id/resetAppIconBackground"
@@ -441,25 +496,28 @@
                 app:layout_constraintTop_toTopOf="parent"
                 android:importantForAccessibility="no"
                 app:srcCompat="@drawable/shape_circle"
-                app:tint="#D32F2F" />
+                app:tint="?attr/colorErrorContainer" />
 
             <ImageView
                 android:id="@+id/resetAppIcon"
                 android:layout_width="@dimen/settings_icon_image_size"
                 android:layout_height="@dimen/settings_icon_image_size"
+                android:importantForAccessibility="no"
                 android:contentDescription="@string/reset_app_icon_content_description"
                 android:src="@drawable/ic_delete_black"
                 app:layout_constraintBottom_toBottomOf="@+id/resetAppIconBackground"
                 app:layout_constraintEnd_toEndOf="@+id/resetAppIconBackground"
                 app:layout_constraintStart_toStartOf="@+id/resetAppIconBackground"
                 app:layout_constraintTop_toTopOf="@+id/resetAppIconBackground"
-                app:tint="@color/iconTint" />
+                app:tint="?attr/colorOnErrorContainer" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/settingsIconMargin"
                 android:layout_marginEnd="@dimen/settingsIconMargin"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:orientation="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -471,7 +529,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/reset_app_title"
-                    android:textColor="#D32F2F"
+                    android:textColor="?attr/colorError"
                     android:textStyle="bold" />
 
                 <TextView

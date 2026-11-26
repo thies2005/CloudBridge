@@ -21,7 +21,6 @@ import ca.pkay.rcloneexplorer.RecyclerViewAdapters.TriggerRecyclerViewAdapter;
 import ca.pkay.rcloneexplorer.Services.TriggerService;
 import ca.pkay.rcloneexplorer.Activities.TaskActivity;
 import ca.pkay.rcloneexplorer.Activities.TriggerActivity;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class TriggerFragment extends Fragment {
 
@@ -123,7 +122,6 @@ public class TriggerFragment extends Fragment {
 
         RecyclerView recyclerView =  v.findViewById(R.id.trigger_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(c));
-        recyclerView.setItemAnimator(new LandingAnimator());
 
         TriggerRecyclerViewAdapter recyclerViewAdapter = new TriggerRecyclerViewAdapter(dbHandler.getAllTrigger(), c);
         recyclerView.setAdapter(recyclerViewAdapter);

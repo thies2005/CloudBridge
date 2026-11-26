@@ -57,8 +57,6 @@ import ca.pkay.rcloneexplorer.Services.ThumbnailsLoadingService;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.util.LargeParcel;
 import de.felixnuesse.ui.BreadcrumbView;
-import es.dmoral.toasty.Toasty;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class RemoteFolderPickerFragment extends Fragment implements   FileExplorerRecyclerViewAdapter.OnClickListener,
                                                                             SwipeRefreshLayout.OnRefreshListener,
@@ -201,11 +199,6 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
             startAtRoot = savedInstanceState.getBoolean(SAVED_START_AT_BOOT);
         }
 
-        if (showThumbnails) {
-            initializeThumbnailParams();
-            startThumbnailService();
-        }
-
         swipeRefreshLayout = view.findViewById(R.id.file_explorer_srl);
         swipeRefreshLayout.setOnRefreshListener(this);
 
@@ -213,7 +206,6 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
 
         RecyclerView recyclerView = view.findViewById(R.id.file_explorer_list);
         recyclerViewLinearLayoutManager = new LinearLayoutManager(context);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(recyclerViewLinearLayoutManager);
         View emptyFolderView = view.findViewById(R.id.empty_folder_view);
         View noSearchResultsView = view.findViewById(R.id.no_search_results_view);
@@ -276,6 +268,7 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
         registerReceivers();
 
         if (showThumbnails) {
+            initializeThumbnailParams();
             startThumbnailService();
         }
 
@@ -462,15 +455,15 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
         byte[] values = new byte[16];
         random.nextBytes(values);
         thumbnailServerAuth = Base64.encodeToString(values, Base64.NO_PADDING | Base64.NO_WRAP | Base64.URL_SAFE);
-        thumbnailServerPort = allocatePort(29179, true);
+        thumbnailServerPort = allocatePort(0, false);
     }
 
     private static int allocatePort(int port, boolean allocateFallback) {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try (ServerSocket serverSocket = new ServerSocket(port, 1, java.net.InetAddress.getLoopbackAddress())) {
             serverSocket.setReuseAddress(true);
             return serverSocket.getLocalPort();
         } catch (IOException e) {
-            if (allocateFallback) {
+            if (allocateFallback && port != 0) {
                 return allocatePort(0, false);
             }
         }
@@ -570,46 +563,13 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
 
     private void sortSelected(int sortById, int sortOrderId) {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-
-        switch (sortById) {
-            case R.id.radio_sort_name:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                    sortOrder = SortDialog.ALPHA_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                    sortOrder = SortDialog.ALPHA_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_date:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                    sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                    sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_size:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                    sortOrder = SortDialog.SIZE_ASCENDING;
-                } else {
-                    Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                    sortOrder = SortDialog.SIZE_DESCENDING;
-                }
-                break;
-        }
+        sortOrder = FileComparators.resolveSortOrder(sortById, sortOrderId);
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
 
         if (isSearchMode) {
-            List<FileItem> sortedSearch = new ArrayList<>();
-            List<FileItem> searchResult = recyclerViewAdapter.getCurrentContent();
-            for (FileItem item : directoryContent) {
-                if (searchResult.contains(item)) {
-                    sortedSearch.add(item);
-                }
-            }
+            List<FileItem> sortedSearch = new ArrayList<>(recyclerViewAdapter.getCurrentContent());
+            FileComparators.sortFileItems(sortedSearch, sortOrder);
             recyclerViewAdapter.updateSortedData(sortedSearch);
         } else {
             recyclerViewAdapter.updateSortedData(directoryContent);
@@ -622,32 +582,7 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
 
     private void sortDirectory() {
         List<FileItem> directoryContent = directoryObject.getDirectoryContent();
-        switch (sortOrder) {
-            case SortDialog.MOD_TIME_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeDescending());
-                sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                break;
-            case SortDialog.MOD_TIME_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortModTimeAscending());
-                sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                break;
-            case SortDialog.SIZE_DESCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeDescending());
-                sortOrder = SortDialog.SIZE_ASCENDING;
-                break;
-            case SortDialog.SIZE_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortSizeAscending());
-                sortOrder = SortDialog.SIZE_DESCENDING;
-                break;
-            case SortDialog.ALPHA_ASCENDING:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaAscending());
-                sortOrder = SortDialog.ALPHA_ASCENDING;
-                break;
-            case SortDialog.ALPHA_DESCENDING:
-            default:
-                Collections.sort(directoryContent, new FileComparators.SortAlphaDescending());
-                sortOrder = SortDialog.ALPHA_DESCENDING;
-        }
+        FileComparators.sortFileItems(directoryContent, sortOrder);
         directoryObject.setContent(directoryContent);
     }
 
@@ -874,7 +809,7 @@ public class RemoteFolderPickerFragment extends Fragment implements   FileExplor
                     return;
                 }
                 FLog.w(TAG, "FetchDirectoryContent/onPostExecute: "+getString(R.string.error_getting_dir_content));
-                Toasty.error(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, getString(R.string.error_getting_dir_content), Toast.LENGTH_SHORT).show();
                 fileItems = new ArrayList<>();
             }
 

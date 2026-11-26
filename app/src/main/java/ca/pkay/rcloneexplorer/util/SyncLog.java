@@ -36,34 +36,24 @@ public class SyncLog {
     public static final int TYPE_ERROR = 0;
     public static final int TYPE_INFO = 1;
 
-    public static ArrayList<JSONObject> getLog(Context c){
+    public static synchronized ArrayList<JSONObject> getLog(Context c){
         File log = new File(c.getFilesDir().getPath() + "/sync.log");
-        StringBuilder file = new StringBuilder();
-        try {
-            char[] buffer = new char[4096];
-            InputStream inputStream = new FileInputStream(log);
-            Reader in = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
-            for (int numRead; (numRead = in.read(buffer, 0, buffer.length)) > 0; ) {
-                file.append(buffer, 0, numRead);
+        ArrayList<JSONObject> jsons = new ArrayList<>();
+        if (!log.exists()) return jsons;
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new InputStreamReader(new FileInputStream(log), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                try { jsons.add(new JSONObject(line)); } catch (JSONException ignored) { }
             }
         } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        String lines[] = file.toString().split("\\r?\\n");
-
-        ArrayList<JSONObject> jsons = new ArrayList<>();
-        for (int i = 0; i < lines.length; i++) {
-            try {
-                jsons.add(new JSONObject(lines[i]));
-            } catch (JSONException e) {
-            }
+            Log.e("SyncLog", "Could not read logs", e);
         }
         Collections.reverse(jsons);
         return jsons;
     }
 
-    private static void appendLog(Context c, String entry){
+    private static synchronized void appendLog(Context c, String entry){
 
         File log = new File(c.getFilesDir().getPath() + "/sync.log");
         try {
@@ -80,10 +70,12 @@ public class SyncLog {
     public static long log(Context c, String title, String content, int type){
         JSONObject json = new JSONObject();
         long now = System.currentTimeMillis();
+        String safeTitle = SecretRedactor.redact(title);
+        String safeContent = SecretRedactor.redact(content);
         try {
             json.put(TIMESTAMP, now);
-            json.put(CONTENT, content);
-            json.put(TITLE, title);
+            json.put(CONTENT, safeContent);
+            json.put(TITLE, safeTitle);
             json.put(TYPE, type);
         } catch (JSONException e) {
             e.printStackTrace();
@@ -100,15 +92,37 @@ public class SyncLog {
         return log(c, title, content, TYPE_INFO);
     }
 
-    public static void delete(Context c){
-        File log = new File(c.getFilesDir().getPath() + "/sync.log");
-        if (log.exists()) {
-            if (log.delete()) {
-                System.out.println("file Deleted");
-            } else {
-                System.out.println("file not Deleted");
-            }
+    public static synchronized void appendLegacy(Context c, String message) {
+        File directory = new File(c.getFilesDir(), "logs");
+        if (!directory.exists() && !directory.mkdirs()) return;
+        File log = new File(directory, "log.txt");
+        if (log.length() / 1024 > 10000 && !log.delete()) {
+            Log.w("SyncLog", "Could not rotate legacy log");
         }
+        String safeMessage = SecretRedactor.redact(message);
+        String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
+        try (FileWriter writer = new FileWriter(log, true)) {
+            writer.append(timestamp).append(" - ").append(safeMessage != null ? safeMessage : "").append('\n');
+        } catch (IOException e) { Log.e("SyncLog", "Could not write legacy log", e); }
     }
 
+    public static synchronized boolean hasLogFiles(Context c) { return new File(c.getFilesDir(), "sync.log").length() > 0 || new File(c.getFilesDir(), "logs/log.txt").length() > 0 || new File(c.getFilesDir(), "logs/rcd.log").length() > 0 || new File(c.getFilesDir(), "logs/serve.log").length() > 0; }
+
+    public static synchronized boolean delete(Context c){
+        File log = new File(c.getFilesDir(), "sync.log");
+        File legacy = new File(c.getFilesDir(), "logs/log.txt");
+        boolean first = !log.exists() || log.delete();
+        boolean second = !legacy.exists() || legacy.delete();
+        boolean third = true;
+        // Running rclone processes may hold these files open; preserve their inodes.
+        for (String name : new String[]{"logs/rcd.log", "logs/serve.log"}) {
+            File activeLog = new File(c.getFilesDir(), name);
+            if (activeLog.exists()) {
+                try (java.io.FileOutputStream ignored = new java.io.FileOutputStream(activeLog, false)) {
+                    // Opening without append truncates the file.
+                } catch (IOException e) { Log.e("SyncLog", "Could not clear active log", e); third = false; }
+            }
+        }
+        return first && second && third;
+    }
 }

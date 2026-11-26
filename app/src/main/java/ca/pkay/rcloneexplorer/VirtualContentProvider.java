@@ -223,21 +223,26 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     }
 
+    @VisibleForTesting
+    static boolean isSafeDisplayName(@Nullable String displayName) {
+        if (displayName == null || displayName.isEmpty()
+                || ".".equals(displayName) || "..".equals(displayName)) {
+            return false;
+        }
+        for (int i = 0; i < displayName.length(); i++) {
+            char c = displayName.charAt(i);
+            if (c == '/' || c == '\\' || c == ':' || c == '\0' || c < 0x20 || c == 0x7F) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static boolean isSafeDocumentPath(@Nullable String docId) {
         if (docId == null || docId.isEmpty() || docId.indexOf('\\') >= 0 || docId.indexOf('\0') >= 0) {
             return false;
         }
-        String afterColon = docId;
-        int colonIdx = docId.indexOf(':');
-        if (colonIdx >= 0) {
-            afterColon = docId.substring(colonIdx + 1);
-        }
-        for (String segment : afterColon.split("/")) {
-            if (".".equals(segment) || "..".equals(segment)) {
-                return false;
-            }
-        }
-        for (String segment : docId.split("/")) {
+        for (String segment : docId.split("[:/]")) {
             if (".".equals(segment) || "..".equals(segment)) {
                 return false;
             }
@@ -358,10 +363,12 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     @Override
     public Cursor queryDocument(@NonNull String documentId, String[] projection) throws FileNotFoundException {
+        if (!isSafeDocumentPath(documentId)) {
+            throw new FileNotFoundException();
+        }
         if (rcdAvailable && rcdService != null) {
             rcdService.onNotifyUse();
         }
-        grantPermission(documentId);
         FLog.v(TAG, "queryDocument(): %s", documentId);
         if (null == projection) {
             projection = DEFAULT_DOCUMENT_PROJECTION;
@@ -443,6 +450,9 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     @Override
     public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
+        if (!isSafeDocumentPath(parentDocumentId)) {
+            throw new FileNotFoundException();
+        }
         FLog.v(TAG, "queryChildDocuments(): parent=%s", parentDocumentId);
         if (null != sortOrder && !sortOrder.equals("_display_name ASC")) {
             FLog.w(TAG, "Specified sort order not supported, using default");
@@ -453,6 +463,9 @@ public class VirtualContentProvider extends SingleRootProvider {
             }
             return getRemotesAsCursor(projection, null);
         } else {
+            if (!parentDocumentId.startsWith(ROOT_DOC_PREFIX)) {
+                throw new FileNotFoundException();
+            }
             if (null == projection) {
                 projection = DEFAULT_DOCUMENT_PROJECTION;
             }
@@ -646,21 +659,18 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     @Override
     public String createDocument(String parentDocumentId, String mimeType, String displayName) throws FileNotFoundException {
-        if (displayName.contains("/")) {
-            char[] normalized = displayName.toCharArray();
-            for (int i = 0, charArrayLength = normalized.length; i < charArrayLength; i++) {
-                if (normalized[i] == '/') {
-                    normalized[i] = '_';
-                }
-            }
-            displayName = new String(normalized);
+        if (!isSafeDocumentPath(parentDocumentId) || !isSafeDisplayName(displayName)) {
+            throw new FileNotFoundException();
         }
 
-        String documentId = parentDocumentId + "/" + displayName;
+        String documentId = getTargetByChild(parentDocumentId, displayName);
+        if (!isSafeDocumentPath(documentId)) {
+            throw new FileNotFoundException();
+        }
         ListItem existingItem = getFileItem(getNoRootId(documentId));
         int noConflictId = 2;
         while (existingItem != null) {
-            documentId = parentDocumentId + "/" + displayName + " (" + noConflictId++ + ")";
+            documentId = getTargetByChild(parentDocumentId, displayName + " (" + noConflictId++ + ")");
             existingItem = getFileItem(getNoRootId(documentId));
         }
 
@@ -708,14 +718,24 @@ public class VirtualContentProvider extends SingleRootProvider {
     @Override
     public String renameDocument(final String documentId, final String displayName) throws FileNotFoundException {
         FLog.v(TAG, "renameDocument: %s -> %s", documentId, displayName);
-        if (isRemoteDocument(documentId)) {
+        if (!isSafeDocumentPath(documentId) || !isSafeDisplayName(displayName)) {
+            throw new FileNotFoundException();
+        }
+        if (ROOT_DOC_ID.equals(documentId) || isRemoteDocument(documentId)) {
             // todo: evaluate if this should be supported from the DocumentsProvider
             FLog.e(TAG, "renameDocument: renaming remotes not (yet) supported");
             throw new FileNotFoundException();
         }
+        final String parentId = getParent(documentId);
+        if (parentId == null || !isSafeDocumentPath(parentId)) {
+            throw new FileNotFoundException();
+        }
         final String remoteName = getRemoteName(getNoRootId(documentId));
         final String srcPath = getRclonePath(documentId);
-        final String targetDocId = getTargetByChild(getParent(documentId), displayName);
+        final String targetDocId = getTargetByChild(parentId, displayName);
+        if (!isSafeDocumentPath(targetDocId) || !parentId.equals(getParent(targetDocId))) {
+            throw new FileNotFoundException();
+        }
         final String dstPath = getRclonePath(targetDocId);
         FLog.v(TAG, "remoteName: %s, srcPath: %s, targetDocId: %s, dstPath: %s", remoteName, srcPath, targetDocId, dstPath);
         if (!acquireRcd()) {
@@ -781,9 +801,15 @@ public class VirtualContentProvider extends SingleRootProvider {
     @Override
     public void deleteDocument(String rawDocumentId) throws FileNotFoundException {
         FLog.v(TAG, "deleteDocument: %s", rawDocumentId);
+        if (!isSafeDocumentPath(rawDocumentId) || ROOT_DOC_ID.equals(rawDocumentId)) {
+            throw new FileNotFoundException();
+        }
 
         final String rootedDocumentId = getRootedDocumentId(getShortId(rawDocumentId));
 
+        if (!isSafeDocumentPath(rootedDocumentId)) {
+            throw new FileNotFoundException();
+        }
         if (isRemoteDocument(rootedDocumentId)) {
             FLog.e(TAG, "deleteDocument: deleting remotes not supported");
             throw new UnsupportedOperationException();
@@ -829,6 +855,10 @@ public class VirtualContentProvider extends SingleRootProvider {
     @Override
     public String copyDocument(final String rootedSrcDocId, String rootedTargetParentDocId) throws FileNotFoundException {
         FLog.v(TAG, "copyDocument: %s -> %s", rootedSrcDocId, rootedTargetParentDocId);
+        if (!isSafeDocumentPath(rootedSrcDocId) || !isSafeDocumentPath(rootedTargetParentDocId)
+                || ROOT_DOC_ID.equals(rootedSrcDocId) || ROOT_DOC_ID.equals(rootedTargetParentDocId)) {
+            throw new FileNotFoundException();
+        }
         if (isRemoteDocument(rootedSrcDocId)) {
             FLog.e(TAG, "copyDocument: copying remotes not supported");
             throw new FileNotFoundException();
@@ -842,6 +872,9 @@ public class VirtualContentProvider extends SingleRootProvider {
         final String srcPath = getRcloneFullPath(sourceDocumentId);
         final String srcRemoteName = getRemoteName(sourceDocumentId);
         final String targetDocumentId = getTargetDocumentId(sourceDocumentId, targetParentDocumentId);
+        if (!isSafeDocumentPath(getRootedDocumentId(targetDocumentId))) {
+            throw new FileNotFoundException();
+        }
         final String dstFullPath = getRcloneFullPath(targetDocumentId);
         final String dstPath = getRclonePath(targetDocumentId);
         final String dstRemoteName = getRemoteName(targetDocumentId);
@@ -876,6 +909,11 @@ public class VirtualContentProvider extends SingleRootProvider {
     @Override
     public String moveDocument(final String rootedSrcDocId, String sourceParentDocumentId, final String rootedTargetDocParentId) throws FileNotFoundException {
         FLog.d(TAG, "moveDocument: %s -> %s", rootedSrcDocId, rootedTargetDocParentId);
+        if (!isSafeDocumentPath(rootedSrcDocId) || !isSafeDocumentPath(rootedTargetDocParentId)
+                || (sourceParentDocumentId != null && !isSafeDocumentPath(sourceParentDocumentId))
+                || ROOT_DOC_ID.equals(rootedSrcDocId) || ROOT_DOC_ID.equals(rootedTargetDocParentId)) {
+            throw new FileNotFoundException();
+        }
         if (isRemoteDocument(rootedSrcDocId)) {
             FLog.e(TAG, "moveDocument: moving remotes not supported");
             throw new FileNotFoundException();
@@ -889,6 +927,9 @@ public class VirtualContentProvider extends SingleRootProvider {
         }
 
         final String targetDocumentId = getTargetDocumentId(sourceDocumentId, targetParentDocumentId);
+        if (!isSafeDocumentPath(getRootedDocumentId(targetDocumentId))) {
+            throw new FileNotFoundException();
+        }
         OnJobFinishListener listener = new OnJobFinishListener() {
             @Override
             void onFinish(RcloneRcd.JobStatusResponse status) {
@@ -936,7 +977,14 @@ public class VirtualContentProvider extends SingleRootProvider {
 
     @Override
     public String getDocumentType(String documentId) throws FileNotFoundException {
-        ListItem item = remoteState.get(getNoRootId(documentId)).item;
+        if (!isSafeDocumentPath(documentId)) {
+            throw new FileNotFoundException();
+        }
+        if (ROOT_DOC_ID.equals(documentId) || isRemoteDocument(documentId)) {
+            return MIME_TYPE_DIR;
+        }
+        FsStateNode stateNode = remoteState.get(getNoRootId(documentId));
+        ListItem item = stateNode != null ? stateNode.item : null;
         if (null == item) {
             int lastSlash = documentId.lastIndexOf('/');
             String name = lastSlash >= 0 ? documentId.substring(lastSlash + 1) : documentId;
@@ -1271,7 +1319,7 @@ public class VirtualContentProvider extends SingleRootProvider {
     public ParcelFileDescriptor openDocument(String documentId, String mode, CancellationSignal signal) throws FileNotFoundException {
         FLog.d(TAG, "openDocument: %s, mode=%s, package=%s", documentId, mode, getCallingPackage());
         // Bug in Android File Manager (gitlab.com/axet/android-file-manager)
-        if (ROOT_DOC_ID.equals(documentId)) {
+        if (!isSafeDocumentPath(documentId) || ROOT_DOC_ID.equals(documentId)) {
             throw new FileNotFoundException();
         }
         documentId = getNoRootId(documentId);
@@ -1326,32 +1374,6 @@ public class VirtualContentProvider extends SingleRootProvider {
         throw new UnsupportedOperationException();
     }
 
-    private void grantPermission(String documentId) {
-        Context context = getContext();
-        boolean isEnabled = preferences.getBoolean(context.getString(R.string.pref_key_vcp_grant_all), false);
-        if (!isEnabled) {
-            return;
-        }
-        Uri uri = DocumentsContract.buildDocumentUri(BuildConfig.VCP_AUTHORITY, documentId);
-
-        int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
-        if (PackageManager.PERMISSION_GRANTED == context.checkCallingUriPermission(uri, flags)) {
-            return;
-        }
-
-        ContentResolver contentResolver = context.getContentResolver();
-        List<UriPermission> permissions = contentResolver.getOutgoingPersistedUriPermissions();
-        for(UriPermission permission : permissions) {
-            if (permission.getUri().equals(uri)) {
-                FLog.v(TAG, "Client already has persisted permission, not granting additional permissions");
-                return;
-            }
-        }
-        String callingPackage = getCallingPackage();
-        FLog.d(TAG, "granting permisssions to client %s", callingPackage);
-        context.grantUriPermission(callingPackage, uri, flags);
-    }
-
     @RequiresApi(api = Build.VERSION_CODES.O)
     private void revokePermission(String documentId) {
         Context context = getContext();
@@ -1391,6 +1413,17 @@ public class VirtualContentProvider extends SingleRootProvider {
         return item;
     }
 
+    @VisibleForTesting
+    static boolean isVcpAllowedRemote(@Nullable RemoteItem remoteItem, boolean isSafDav) {
+        if (remoteItem == null) {
+            return false;
+        }
+        return RemoteItem.SAFW != remoteItem.getType()
+                && RemoteItem.LOCAL != remoteItem.getType()
+                && !remoteItem.isPathAlias()
+                && !isSafDav;
+    }
+
     /**
      * Checks if the config file was changed and then reloads it
      */
@@ -1402,7 +1435,7 @@ public class VirtualContentProvider extends SingleRootProvider {
                 FLog.d(TAG, "reloadRemotesIfRequired(): requesting new remote config data");
                 ArrayList<String> newRemotes = new ArrayList<String>();
                 for (RemoteItem remoteItem : rclone.getRemotes()) {
-                    if (RemoteItem.SAFW == remoteItem.getType() || RemoteItem.LOCAL == remoteItem.getType()) {
+                    if (!isVcpAllowedRemote(remoteItem, rclone.isSafDavRemote(remoteItem))) {
                         continue;
                     }
                     remotes.put(remoteItem.getName(), remoteItem);

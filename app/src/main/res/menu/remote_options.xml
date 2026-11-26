@@ -21,9 +21,11 @@
         android:id="@+id/action_reauthenticate"
         android:title="@string/reauthenticate" />
 
-    <item
-        android:id="@+id/action_delete"
-        android:title="@string/delete" />
+    <group android:id="@+id/menu_group_destructive">
+        <item
+            android:id="@+id/action_delete"
+            android:title="@string/delete" />
+    </group>
 
     <item
             android:id="@+id/action_remote_properties"
@@ -32,4 +34,12 @@
     <item
         android:id="@+id/action_add_to_home_screen"
         android:title="@string/add_to_home_screen" />
+
+    <item
+        android:id="@+id/action_toggle_search_index"
+        android:title="@string/remote_search_index_enable" />
+
+    <item
+        android:id="@+id/action_refresh_search_index"
+        android:title="@string/remote_search_index_refresh" />
 </menu>

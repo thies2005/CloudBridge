@@ -1,27 +1,26 @@
 package ca.pkay.rcloneexplorer.Activities
 
+import android.widget.Toast
+
 
 import androidx.appcompat.app.AppCompatActivity
 import ca.pkay.rcloneexplorer.Database.DatabaseHandler
 import androidx.cardview.widget.CardView
 import android.widget.EditText
 import android.widget.CheckBox
-import android.widget.Spinner
+import ca.pkay.rcloneexplorer.util.ExposedChoice
 import android.widget.TimePicker
 import android.os.Bundle
 import ca.pkay.rcloneexplorer.util.ActivityHelper
 import ca.pkay.rcloneexplorer.R
-import es.dmoral.toasty.Toasty
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import android.text.TextWatcher
 import android.text.Editable
 import android.text.format.DateFormat
 import android.view.View
 import android.widget.CompoundButton
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.appcompat.widget.Toolbar
-import androidx.core.view.WindowCompat
 import ca.pkay.rcloneexplorer.Items.Task
 import ca.pkay.rcloneexplorer.Items.Trigger
 import ca.pkay.rcloneexplorer.Services.TriggerService
@@ -42,8 +41,8 @@ class TriggerActivity : AppCompatActivity() {
 
     private lateinit var mTitle: EditText
     private lateinit var mEnabled: CheckBox
-    private lateinit var mType: Spinner
-    private lateinit var mInterval: Spinner
+    private lateinit var mType: ExposedChoice
+    private lateinit var mInterval: ExposedChoice
 
     private lateinit var mWeekdayMon: CheckBox
     private lateinit var mWeekdayTue: CheckBox
@@ -53,14 +52,13 @@ class TriggerActivity : AppCompatActivity() {
     private lateinit var mWeekdaySat: CheckBox
     private lateinit var mWeekdaySun: CheckBox
 
-    private lateinit var mTargetDropdown: Spinner
+    private lateinit var mTargetDropdown: ExposedChoice
     private lateinit var mTimepicker: TimePicker
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
         ActivityHelper.applyTheme(this)
+        super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_trigger)
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -96,20 +94,21 @@ class TriggerActivity : AppCompatActivity() {
             if (triggerId != 0L) {
                 val notNullTrigger = dbHandler.getTrigger(triggerId)
                 if (notNullTrigger == null) {
-                    Toasty.error(
+                    Toast.makeText(
                         this,
-                        this.resources.getString(R.string.triggeractivity_trigger_not_found)
-                    ).show()
+                        this.resources.getString(R.string.triggeractivity_trigger_not_found),
+                        Toast.LENGTH_SHORT).show()
                     finish()
                     return
                 }
                 mTrigger = notNullTrigger!!
+                setTitle(R.string.pixel_edit_trigger_title)
             }
         } else {
             mTrigger = Trigger(Trigger.TRIGGER_ID_DOESNTEXIST)
         }
         
-        val saveButton = findViewById<FloatingActionButton>(R.id.saveButton)
+        val saveButton = findViewById<ExtendedFloatingActionButton>(R.id.saveButton)
         saveButton.setOnClickListener { saveTrigger() }
         setUpTargetsDropdown()
 
@@ -127,22 +126,25 @@ class TriggerActivity : AppCompatActivity() {
         }
 
         val initialTriggerType = mTrigger.type
-        mType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View, pos: Int, id: Long) {
-                if (pos == Trigger.TRIGGER_TYPE_SCHEDULE) {
-                    mTrigger.type = Trigger.TRIGGER_TYPE_SCHEDULE
-                } else {
-                    mTrigger.type = Trigger.TRIGGER_TYPE_INTERVAL
-                }
-
-                //update ui here, because typechanges also changes displayed items.
-                updateUiFromTrigger()
+        // Populate the interval choices before the type listener runs, because a type
+        // change refreshes the UI and reads the interval selection.
+        mInterval.setChoices(ArrayAdapter(this, android.R.layout.simple_list_item_1,
+            resources.getStringArray(R.array.triggerIntervals)))
+        mType.setChoices(ArrayAdapter(this, android.R.layout.simple_list_item_1,
+            resources.getStringArray(R.array.triggerTypeItems)))
+        mType.onChoiceChanged = { pos ->
+            if (pos == Trigger.TRIGGER_TYPE_SCHEDULE) {
+                mTrigger.type = Trigger.TRIGGER_TYPE_SCHEDULE
+            } else {
+                mTrigger.type = Trigger.TRIGGER_TYPE_INTERVAL
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+
+            //update ui here, because typechanges also changes displayed items.
+            updateUiFromTrigger()
         }
 
         //restore initial triggerstate here
-        mType.setSelection(initialTriggerType)
+        mType.selectPosition(initialTriggerType)
         mWeekdayMon.setOnCheckedChangeListener { _: CompoundButton?, isChecked: Boolean ->
             mTrigger.setEnabledAtDay(
                 Trigger.TRIGGER_DAY_MON, isChecked
@@ -182,26 +184,14 @@ class TriggerActivity : AppCompatActivity() {
             mTrigger.time = hourOfDay * 60 + minute
         }
 
-        mInterval.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View, pos: Int, id: Long) {
-                when (pos) {
-                    0 -> mTrigger.time = 15
-                    1 -> mTrigger.time = 30
-                    3 -> mTrigger.time = 120
-                    2 -> mTrigger.time = 60
-                    else -> mTrigger.time = 60
-                }
+        mInterval.onChoiceChanged = { pos ->
+            when (pos) {
+                0 -> mTrigger.time = 15
+                1 -> mTrigger.time = 30
+                3 -> mTrigger.time = 120
+                2 -> mTrigger.time = 60
+                else -> mTrigger.time = 60
             }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        mTargetDropdown.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View, pos: Int, id: Long) {
-                mTrigger.triggerTarget = mTaskList[pos].id
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         updateUiFromTrigger()
@@ -220,8 +210,19 @@ class TriggerActivity : AppCompatActivity() {
         for (i in this.mTaskList.indices) {
             items[i] = this.mTaskList[i].title
         }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
-        mTargetDropdown.adapter = adapter
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, items)
+        mTargetDropdown.setChoices(adapter)
+        mTargetDropdown.onChoiceChanged = { pos ->
+            if (pos in mTaskList.indices) {
+                mTrigger.triggerTarget = mTaskList[pos].id
+            }
+        }
+        // A plain Spinner announced its initial position, which defaulted new triggers to the
+        // first task; ExposedChoice is silent, so adopt an initial target explicitly here.
+        if (mTaskList.isNotEmpty()) {
+            val stored = mTaskList.indexOfFirst { it.id == mTrigger.triggerTarget }
+            mTargetDropdown.selectPosition(if (stored >= 0) stored else 0)
+        }
     }
 
     private fun updateUiFromTrigger() {
@@ -251,25 +252,25 @@ class TriggerActivity : AppCompatActivity() {
         } else {
             mCardInterval.visibility = View.VISIBLE
             when (timeValue) {
-                15 -> mInterval.setSelection(0)
-                30 -> mInterval.setSelection(1)
-                120 -> mInterval.setSelection(3)
-                60 -> mInterval.setSelection(2)
-                else -> mInterval.setSelection(2)
+                15 -> mInterval.selectPosition(0)
+                30 -> mInterval.selectPosition(1)
+                120 -> mInterval.selectPosition(3)
+                60 -> mInterval.selectPosition(2)
+                else -> mInterval.selectPosition(2)
             }
         }
 
         //Todo properly populate the fields
         for (task in mTaskList) {
             if (task.id == mTrigger.triggerTarget) {
-                mTargetDropdown.setSelection(mTaskList.indexOf(task))
+                mTargetDropdown.selectPosition(mTaskList.indexOf(task))
             }
         }
     }
 
     private fun checkTaskExistence(): Boolean {
         if (mTaskList.isEmpty()) {
-            Toasty.error(this, this.resources.getString(R.string.trigger_save_notasks)).show()
+            Toast.makeText(this, this.resources.getString(R.string.trigger_save_notasks), Toast.LENGTH_SHORT).show()
             return false
         }
         return true
@@ -278,13 +279,13 @@ class TriggerActivity : AppCompatActivity() {
     private fun saveTrigger() {
         // check if title is set
         if (mTrigger.title.isBlank()) {
-            Toasty.error(this, this.resources.getString(R.string.trigger_save_notitle)).show()
+            Toast.makeText(this, this.resources.getString(R.string.trigger_save_notitle), Toast.LENGTH_SHORT).show()
             return
         }
 
         // check if target task is set
         if (!checkTaskExistence()) {
-            Toasty.error(this, this.resources.getString(R.string.trigger_save_notasks)).show()
+            Toast.makeText(this, this.resources.getString(R.string.trigger_save_notasks), Toast.LENGTH_SHORT).show()
             return
         }
         if (mTrigger.id == Trigger.TRIGGER_ID_DOESNTEXIST) {

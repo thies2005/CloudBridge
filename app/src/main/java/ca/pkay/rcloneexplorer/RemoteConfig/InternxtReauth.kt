@@ -7,14 +7,15 @@ import android.os.AsyncTask
 import android.os.Build
 import android.text.InputType
 import android.widget.Toast
+import ca.pkay.rcloneexplorer.BuildConfig
 import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.util.FLog
+import ca.pkay.rcloneexplorer.util.SecretRedactor
 import ca.pkay.rcloneexplorer.notifications.AppErrorNotificationManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import es.dmoral.toasty.Toasty
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -66,8 +67,8 @@ class InternxtReauth(
     }
 
     private fun updateTOTPSecret(totpSecret: String): Boolean {
-        val options = arrayListOf(remoteName, "totp_secret", totpSecret, "--obscure")
-        val proc = rclone.config("update", options)
+        val options = arrayListOf(remoteName, "totp_secret", totpSecret)
+        val proc = rclone.configUpdate(options)
         if (proc == null) {
             errorMessage = context.getString(R.string.error_creating_remote)
             return false
@@ -91,14 +92,14 @@ class InternxtReauth(
         var result = ""
 
         while (true) {
-            val options = arrayListOf(remoteName, "--non-interactive", "--no-obscure")
+            val options = arrayListOf("--non-interactive", "--no-obscure")
             if (state.isNotEmpty()) {
                 options.add("--continue")
-                options.add("--state")
-                options.add(state)
-                options.add("--result")
-                options.add(result)
+                options.add("--state=$state")
+                options.add("--result=$result")
             }
+            options.add("--")
+            options.add(remoteName)
 
             val proc = rclone.config("update", options)
             if (proc == null) {
@@ -134,7 +135,7 @@ class InternxtReauth(
             outputReader.join(1000)
             errorReader.join(1000)
 
-            val stderrSummary = stderrCapture.toString().trim()
+            val stderrSummary = SecretRedactor.redact(stderrCapture.toString().trim()) ?: ""
 
             if (!completed) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) proc.destroyForcibly() else proc.destroy()
@@ -145,7 +146,11 @@ class InternxtReauth(
 
             if (proc.exitValue() != 0) {
                 errorMessage = describeError("Internxt reauth failed (exit ${proc.exitValue()})", stderrSummary)
-                FLog.e(TAG, "Internxt reauth failed. stderr: $stderrSummary")
+                if (BuildConfig.DEBUG) {
+                    FLog.d(TAG, "Internxt reauth failed. stderr: %s", stderrSummary)
+                } else {
+                    FLog.e(TAG, "Internxt reauth failed (exit %d)", proc.exitValue())
+                }
                 return false
             }
 
@@ -171,7 +176,11 @@ class InternxtReauth(
                 }
             } catch (e: Exception) {
                 errorMessage = describeError("Failed to parse Internxt reauth state", stderrSummary)
-                FLog.e(TAG, "Failed to parse Internxt reauth state. stdout=$jsonStr stderr=$stderrSummary", e)
+                if (BuildConfig.DEBUG) {
+                    FLog.d(TAG, "Failed to parse Internxt reauth state: %s", stderrSummary)
+                } else {
+                    FLog.e(TAG, "Failed to parse Internxt reauth state", e)
+                }
                 return false
             }
         }
@@ -271,14 +280,12 @@ class InternxtReauth(
         progressDialog?.dismiss()
         if (success) {
             AppErrorNotificationManager.clearSessionExpiredNotification(context, remoteName)
-            Toasty.success(context, context.getString(R.string.internxt_reauth_success), Toast.LENGTH_SHORT, true).show()
+            Toast.makeText(context, context.getString(R.string.internxt_reauth_success), Toast.LENGTH_SHORT).show()
         } else if (errorMessage != context.getString(R.string.cancelled)) {
-            Toasty.error(
+            Toast.makeText(
                 context,
                 errorMessage ?: context.getString(R.string.error_creating_remote),
-                Toast.LENGTH_SHORT,
-                true
-            ).show()
+                Toast.LENGTH_SHORT).show()
         }
     }
 }

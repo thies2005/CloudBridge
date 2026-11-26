@@ -26,6 +26,11 @@ class LogPreferencesFragment : PreferenceFragmentCompat() {
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
         requireActivity().title = getString(R.string.logging_settings_header)
 
+        findPreference<Preference>("open_logs")?.setOnPreferenceClickListener {
+            (requireActivity() as ca.pkay.rcloneexplorer.Activities.SettingsActivity).showLogs()
+            true
+        }
+
         val sigkill = findPreference<Preference>("TempKeySigquit") as ButtonPreference
         sigkill.setButtonText(getString(R.string.pref_send_sigquit_button))
         sigkill.setButtonOnClick {
@@ -34,6 +39,11 @@ class LogPreferencesFragment : PreferenceFragmentCompat() {
 
     }
 
+
+    override fun onResume() {
+        super.onResume()
+        requireActivity().title = getString(R.string.logging_settings_header)
+    }
 
     private fun sigquitAll() {
         Toast.makeText(context, getString(R.string.stopping_everything), Toast.LENGTH_LONG).show()

@@ -1,0 +1,39 @@
+<resources>
+    <style name="AppTheme.NoActionBar.Settings" parent="AppTheme.NoActionBar">
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay.CloudBridge.Settings</item>
+        <item name="android:listPreferredItemPaddingStart">@dimen/settings_preference_padding_ends</item>
+        <item name="android:listPreferredItemPaddingEnd">@dimen/settings_preference_padding_ends</item>
+    </style>
+
+    <style name="PreferenceThemeOverlay.CloudBridge.Settings" parent="PreferenceThemeOverlay">
+        <item name="preferenceStyle">@style/CloudBridge.Preference</item>
+        <item name="preferenceCategoryStyle">@style/CloudBridge.PreferenceCategory</item>
+        <item name="dialogPreferenceStyle">@style/CloudBridge.DialogPreference</item>
+        <item name="editTextPreferenceStyle">@style/CloudBridge.EditTextPreference</item>
+        <item name="switchPreferenceCompatStyle">@style/CloudBridge.SwitchPreference</item>
+    </style>
+
+    <style name="CloudBridge.Preference" parent="Preference.Material">
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="CloudBridge.PreferenceCategory" parent="Preference.Category.Material">
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <style name="CloudBridge.DialogPreference" parent="Preference.DialogPreference.Material">
+        <item name="iconSpaceReserved">false</item>
+        <item name="singleLineTitle">false</item>
+    </style>
+
+    <style name="CloudBridge.EditTextPreference" parent="Preference.DialogPreference.EditTextPreference.Material">
+        <item name="iconSpaceReserved">false</item>
+        <item name="singleLineTitle">false</item>
+    </style>
+
+    <style name="CloudBridge.SwitchPreference" parent="Preference.SwitchPreferenceCompat.Material">
+        <item name="android:widgetLayout">@layout/settings_material_switch</item>
+        <item name="iconSpaceReserved">false</item>
+        <item name="singleLineTitle">false</item>
+    </style>
+</resources>

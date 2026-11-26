@@ -5,6 +5,9 @@ import static ca.pkay.rcloneexplorer.util.ActivityHelper.tryStartService;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -14,10 +17,10 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
@@ -29,9 +32,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.List;
 
+import ca.pkay.rcloneexplorer.BuildConfig;
 import ca.pkay.rcloneexplorer.Dialogs.Dialogs;
 import ca.pkay.rcloneexplorer.Dialogs.LoadingDialog;
 import ca.pkay.rcloneexplorer.Fragments.ShareFragment;
@@ -43,7 +50,6 @@ import ca.pkay.rcloneexplorer.RuntimeConfiguration;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
 import ca.pkay.rcloneexplorer.workmanager.EphemeralTaskManager;
-import es.dmoral.toasty.Toasty;
 
 public class SharingActivity extends AppCompatActivity implements ShareRemotesFragment.OnRemoteClickListener,
         ShareFragment.OnShareDestinationSelected {
@@ -68,9 +74,8 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sharing);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -215,6 +220,89 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         }
     }
 
+    @VisibleForTesting
+    static boolean isAllowedShareScheme(@Nullable String scheme) {
+        return "content".equalsIgnoreCase(scheme) || "file".equalsIgnoreCase(scheme);
+    }
+
+    @VisibleForTesting
+    @Nullable
+    static String normalizeAuthority(@Nullable String rawAuthority) {
+        if (rawAuthority == null || rawAuthority.isEmpty()) {
+            return null;
+        }
+        int at = rawAuthority.lastIndexOf('@');
+        String stripped = at >= 0 ? rawAuthority.substring(at + 1) : rawAuthority;
+        return stripped.isEmpty() ? null : stripped.toLowerCase(Locale.ROOT);
+    }
+
+    @VisibleForTesting
+    static boolean isOwnAuthority(@Nullable String rawAuthority, @NonNull Set<String> ownAuthorities) {
+        String normalized = normalizeAuthority(rawAuthority);
+        if (normalized == null) {
+            return false;
+        }
+        for (String own : ownAuthorities) {
+            if (own != null && normalized.equals(own.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @VisibleForTesting
+    static boolean isResolvedOwnProvider(
+            @Nullable String resolvedPackageName,
+            int resolvedUid,
+            @NonNull String ownPackageName,
+            int ownUid) {
+        if (resolvedPackageName == null && resolvedUid < 0) {
+            return false;
+        }
+        return ownPackageName.equals(resolvedPackageName) || (resolvedUid >= 0 && resolvedUid == ownUid);
+    }
+
+    private boolean isTrustedExternalContentUri(@NonNull Uri uri) {
+        String authority = normalizeAuthority(uri.getAuthority());
+        if (authority == null) {
+            return false;
+        }
+        Set<String> ownAuthorities = new HashSet<>();
+        ownAuthorities.add(BuildConfig.VCP_AUTHORITY);
+        ownAuthorities.add(BuildConfig.APPLICATION_ID + ".fileprovider");
+        String pkgName = getPackageName();
+        ownAuthorities.add(pkgName + ".vcp");
+        ownAuthorities.add(pkgName + ".fileprovider");
+        PackageManager pm = getPackageManager();
+        try {
+            PackageInfo pkgInfo = pm.getPackageInfo(pkgName, PackageManager.GET_PROVIDERS);
+            if (pkgInfo != null && pkgInfo.providers != null) {
+                for (ProviderInfo providerInfo : pkgInfo.providers) {
+                    if (providerInfo != null && providerInfo.authority != null) {
+                        for (String part : providerInfo.authority.split(";")) {
+                            String trimmed = part.trim();
+                            if (!trimmed.isEmpty()) {
+                                ownAuthorities.add(trimmed);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+        if (isOwnAuthority(authority, ownAuthorities)) {
+            return false;
+        }
+        ProviderInfo resolved = pm.resolveContentProvider(authority, 0);
+        if (resolved != null) {
+            int resolvedUid = resolved.applicationInfo != null ? resolved.applicationInfo.uid : -1;
+            if (isResolvedOwnProvider(resolved.packageName, resolvedUid, pkgName, android.os.Process.myUid())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @SuppressLint("StaticFieldLeak")
     private class CopyFile extends AsyncTask<Void, Void, Boolean> {
 
@@ -241,13 +329,18 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
             if (!staging.mkdirs()) return false;
             for (Uri uri : uris) {
                 String fileName;
-                if (null == uri || null == uri.getScheme() || null == uri.getPath()) {
-                    FLog.w(TAG, "Can't copy invalid uri %s", uri);
+                if (null == uri || !isAllowedShareScheme(uri.getScheme())) {
+                    FLog.w(TAG, "Can't copy uri with disallowed scheme");
                     success = false;
                     continue;
                 }
 
-                if ("file".equalsIgnoreCase(uri.getScheme()) && uri.getPath() != null) {
+                if ("file".equalsIgnoreCase(uri.getScheme())) {
+                    if (uri.getPath() == null || getApplicationInfo() == null || getApplicationInfo().dataDir == null) {
+                        FLog.e(TAG, "Copy error: rejected file URI without valid path");
+                        success = false;
+                        continue;
+                    }
                     try {
                         String canonicalSrc = new File(uri.getPath()).getCanonicalPath();
                         String internalDataDir = new File(getApplicationInfo().dataDir).getCanonicalPath();
@@ -258,6 +351,12 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                         }
                     } catch (IOException e) {
                         FLog.e(TAG, "Copy error: failed to canonicalize file URI", e);
+                        success = false;
+                        continue;
+                    }
+                } else if ("content".equalsIgnoreCase(uri.getScheme())) {
+                    if (!isTrustedExternalContentUri(uri)) {
+                        FLog.e(TAG, "Copy error: rejected self-owned content URI");
                         success = false;
                         continue;
                     }
@@ -357,8 +456,8 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                 return;
             }
             if (!success) {
-                Toasty.error(context, getString(duplicateName ? R.string.share_duplicate_file_name
-                        : R.string.error_retrieving_files), Toast.LENGTH_LONG, true).show();
+                Toast.makeText(context, getString(duplicateName ? R.string.share_duplicate_file_name
+                        : R.string.error_retrieving_files), Toast.LENGTH_LONG).show();
                 finish();
             }
             isDataReady = true;

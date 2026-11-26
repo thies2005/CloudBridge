@@ -113,4 +113,7 @@
         android:clickable="true"
         android:focusable="true"
         layout="@layout/move_bar"/>
+    <include
+        android:id="@+id/no_search_results_view"
+        layout="@layout/no_search_results" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

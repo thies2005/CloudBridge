@@ -10,6 +10,11 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.graphics.drawable.DrawableCompat;
+import android.graphics.drawable.Drawable;
+import com.google.android.material.color.MaterialColors;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import android.view.LayoutInflater;
@@ -22,7 +27,6 @@ import java.io.File;
 
 import ca.pkay.rcloneexplorer.Activities.MainActivity;
 import ca.pkay.rcloneexplorer.R;
-import es.dmoral.toasty.Toasty;
 
 public class SettingsFragment extends Fragment {
 
@@ -98,13 +102,25 @@ public class SettingsFragment extends Fragment {
 
     private void showResetConfirmation() {
         Context context = requireContext();
-        new MaterialAlertDialogBuilder(context)
+        Drawable icon = AppCompatResources.getDrawable(context, R.drawable.ic_delete_black);
+        if (icon != null) {
+            icon = DrawableCompat.wrap(icon.mutate());
+            DrawableCompat.setTint(icon, MaterialColors.getColor(viewForColor(), R.attr.colorError));
+        }
+        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
                 .setTitle(R.string.reset_app_confirm_title)
                 .setMessage(R.string.reset_app_confirm_message)
-                .setIcon(R.drawable.ic_delete_black)
+                .setIcon(icon)
                 .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.delete, (dialog, which) -> performReset())
-                .show();
+                .setPositiveButton(R.string.delete, (dlg, which) -> performReset())
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(
+                MaterialColors.getColor(viewForColor(), R.attr.colorError)));
+        dialog.show();
+    }
+
+    private View viewForColor() {
+        return requireView();
     }
 
     private void performReset() {
@@ -137,13 +153,13 @@ public class SettingsFragment extends Fragment {
             // Clear all app data through the system API
             ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
             if (am != null) {
-                Toasty.success(context, context.getString(R.string.reset_app_success), Toast.LENGTH_SHORT, true).show();
+                Toast.makeText(context, context.getString(R.string.reset_app_success), Toast.LENGTH_SHORT).show();
                 am.clearApplicationUserData();
                 // clearApplicationUserData kills the process, so nothing below executes
             }
         } catch (Exception e) {
             // Fallback: just restart the app
-            Toasty.success(context, context.getString(R.string.reset_app_success), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(context, context.getString(R.string.reset_app_success), Toast.LENGTH_SHORT).show();
             Intent intent = new Intent(context, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             context.startActivity(intent);

@@ -10,8 +10,6 @@ import io.github.x0b.safdav.file.ItemAccess;
 import io.github.x0b.safdav.file.ItemExistsException;
 import io.github.x0b.safdav.file.ItemNotFoundException;
 
-import java.io.FileDescriptor;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,13 +44,20 @@ public class SafFileAccess implements ItemAccess<SafFileItem> {
     public InputStream readFile(SafFileItem documentUri) {
         Uri uri = documentUri.getFile().getUri();
         ContentResolver resolver = context.getContentResolver();
-        try (ParcelFileDescriptor parcelFileDescriptor = resolver.openFileDescriptor(uri, "r");) {
+        ParcelFileDescriptor parcelFileDescriptor = null;
+        try {
+            parcelFileDescriptor = resolver.openFileDescriptor(uri, "r");
             if (null == parcelFileDescriptor) {
                 throw new FileAccessError();
             }
-            FileDescriptor fileDescriptor = parcelFileDescriptor.getFileDescriptor();
-            return new FileInputStream(fileDescriptor);
+            return new ParcelFileDescriptor.AutoCloseInputStream(parcelFileDescriptor);
         } catch (IOException e) {
+            if (parcelFileDescriptor != null) {
+                try {
+                    parcelFileDescriptor.close();
+                } catch (IOException ignored) {
+                }
+            }
             return null;
         }
     }
@@ -75,22 +80,16 @@ public class SafFileAccess implements ItemAccess<SafFileItem> {
 
     @Override
     public void writeFile(Uri documentUri, InputStream stream, long len) {
-        try (OutputStream os = context.getContentResolver().openOutputStream(documentUri);) {
+        if (len < 0) {
+            throw new IllegalArgumentException("Negative write length");
+        }
+        try (OutputStream os = context.getContentResolver().openOutputStream(documentUri)) {
             if (os == null) {
                 throw new FileAccessError();
             }
             try {
-                byte[] buffer = new byte[64 * 1024];
-                int blen = stream.read(buffer);
-                while (blen != -1) {
-                    len -= blen;
-                    os.write(buffer, 0, blen);
-                    // don't read past length
-                    if (len < 1) {
-                        break;
-                    }
-                    blen = stream.read(buffer);
-                }
+                DocumentsContractAccess.copyBounded(stream, os, len);
+                os.flush();
             } catch (IOException e) {
                 throw new FileAccessError(e);
             }

@@ -16,7 +16,6 @@ import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.WindowCompat;
 import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -37,7 +36,6 @@ import ca.pkay.rcloneexplorer.RecyclerViewAdapters.FilePickerAdapter;
 import ca.pkay.rcloneexplorer.util.ActivityHelper;
 import ca.pkay.rcloneexplorer.util.FLog;
 import de.felixnuesse.ui.BreadcrumbView;
-import es.dmoral.toasty.Toasty;
 
 public class FilePicker extends AppCompatActivity implements FilePickerAdapter.OnClickListener,
         InputDialog.OnPositive,
@@ -64,9 +62,8 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         ActivityHelper.applyTheme(this);
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_file_picker);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -175,7 +172,7 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
         } else if (filePickerAdapter.isDataSelected()) {
             setResultData(filePickerAdapter.getSelectedFiles());
         } else {
-            Toasty.info(this, getString(R.string.nothing_selected), Toast.LENGTH_SHORT, true).show();
+            Toast.makeText(this, getString(R.string.nothing_selected), Toast.LENGTH_SHORT).show();
             finish();
         }
     }
@@ -387,64 +384,12 @@ public class FilePicker extends AppCompatActivity implements FilePickerAdapter.O
     }
 
     private void sortDirectory() {
-        switch (sortOrder) {
-            case SortDialog.MOD_TIME_DESCENDING:
-                Collections.sort(fileList, new FileComparators.SortFileModTimeDescending());
-                sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                break;
-            case SortDialog.MOD_TIME_ASCENDING:
-                Collections.sort(fileList, new FileComparators.SortFileModTimeAscending());
-                sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                break;
-            case SortDialog.SIZE_DESCENDING:
-                Collections.sort(fileList, new FileComparators.SortFileSizeDescending());
-                sortOrder = SortDialog.SIZE_ASCENDING;
-                break;
-            case SortDialog.SIZE_ASCENDING:
-                Collections.sort(fileList, new FileComparators.SortFileSizeAscending());
-                sortOrder = SortDialog.SIZE_DESCENDING;
-                break;
-            case SortDialog.ALPHA_ASCENDING:
-                Collections.sort(fileList, new FileComparators.SortFileAlphaAscending());
-                sortOrder = SortDialog.ALPHA_ASCENDING;
-                break;
-            case SortDialog.ALPHA_DESCENDING:
-            default:
-                Collections.sort(fileList, new FileComparators.SortFileAlphaDescending());
-                sortOrder = SortDialog.ALPHA_DESCENDING;
-        }
+        FileComparators.sortFiles(fileList, sortOrder);
     }
 
     private void sortSelected(int sortById, int sortOrderId) {
-        switch (sortById) {
-            case R.id.radio_sort_name:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(fileList, new FileComparators.SortFileAlphaAscending());
-                    sortOrder = SortDialog.ALPHA_ASCENDING;
-                } else {
-                    Collections.sort(fileList, new FileComparators.SortFileAlphaDescending());
-                    sortOrder = SortDialog.ALPHA_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_date:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(fileList, new FileComparators.SortFileModTimeAscending());
-                    sortOrder = SortDialog.MOD_TIME_ASCENDING;
-                } else {
-                    Collections.sort(fileList, new FileComparators.SortFileModTimeDescending());
-                    sortOrder = SortDialog.MOD_TIME_DESCENDING;
-                }
-                break;
-            case R.id.radio_sort_size:
-                if (sortOrderId == R.id.radio_sort_ascending) {
-                    Collections.sort(fileList, new FileComparators.SortFileSizeAscending());
-                    sortOrder = SortDialog.SIZE_ASCENDING;
-                } else {
-                    Collections.sort(fileList, new FileComparators.SortFileSizeDescending());
-                    sortOrder = SortDialog.SIZE_DESCENDING;
-                }
-                break;
-        }
+        sortOrder = FileComparators.resolveSortOrder(sortById, sortOrderId);
+        FileComparators.sortFiles(fileList, sortOrder);
         filePickerAdapter.updateData(fileList);
 
         if (sortOrder > 0) {

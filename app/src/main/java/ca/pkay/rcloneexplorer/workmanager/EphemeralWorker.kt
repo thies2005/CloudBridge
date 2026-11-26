@@ -19,6 +19,7 @@ import androidx.work.WorkerParameters
 import ca.pkay.rcloneexplorer.Items.FileItem
 import ca.pkay.rcloneexplorer.Items.RemoteItem
 import ca.pkay.rcloneexplorer.Log2File
+import ca.pkay.rcloneexplorer.ProcessRegistry
 import ca.pkay.rcloneexplorer.R
 import ca.pkay.rcloneexplorer.Rclone
 import ca.pkay.rcloneexplorer.notifications.prototypes.WorkerNotification
@@ -69,6 +70,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         const val DELETE_PATH = "DELETE_PATH"
 
         const val DELETE_MANIFEST = "DELETE_MANIFEST"
+
+        const val BATCH_MANIFEST = "BATCH_MANIFEST"
+        const val BATCH_SOURCE_PARENT = "BATCH_SOURCE_PARENT"
     }
 
     internal enum class FAILURE_REASON {
@@ -102,8 +106,13 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
 
     override fun doWork(): Result {
         registerBroadcastReceivers()
+        val batchManifest = inputData.getString(BATCH_MANIFEST)?.let { name ->
+            File(File(mContext.noBackupFilesDir, "transfer-batches"), name).also {
+                EphemeralTaskManager.cleanBatchOnCompletion(mContext, id, it)
+            }
+        }
         try {
-            return runOperation()
+            return runOperation(batchManifest)
         } finally {
             mContext.unregisterReceiver(connectivityChangeBroadcastReceiver)
             // A system stop can re-enqueue this same request with its original input paths.
@@ -123,7 +132,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         }
     }
 
-    private fun runOperation(): Result {
+    private fun runOperation(batchManifest: File?): Result {
 
         if (inputData.keyValueMap.containsKey(EPHEMERAL_TYPE)){
             val type = Type.valueOf(inputData.getString(EPHEMERAL_TYPE) ?: "")
@@ -154,7 +163,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                 val transferLocks = TransferLocks.acquire(mContext, "ephemeral")
                 var filesFrom: File? = null
                 try {
-                    when(type){
+                    if (batchManifest != null) {
+                        handleBatch(type, remoteItem, batchManifest)
+                    } else when (type) {
                     Type.DOWNLOAD -> {
                         val target = inputData.getString(DOWNLOAD_TARGETPATH)
                         val fileItem = getFileitemFromParcel(DOWNLOAD_SOURCE)
@@ -233,7 +244,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                         }
                     }
                 }
-                handleSync(mTitle)
+                    if (batchManifest == null) handleSync(mTitle)
                 } finally {
                     transferLocks?.release()
                     filesFrom?.delete()
@@ -257,6 +268,54 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         }
         log("Critical: No valid ephemeral type passed!")
         return Result.failure()
+    }
+
+    private fun handleBatch(type: Type, remote: RemoteItem, manifest: File) {
+        val targetKey = when (type) {
+            Type.DOWNLOAD -> DOWNLOAD_TARGETPATH
+            Type.UPLOAD -> UPLOAD_TARGETPATH
+            else -> error("Unsupported transfer batch type: $type")
+        }
+        val target = inputData.getString(targetKey)
+        val sourceParent = inputData.getString(BATCH_SOURCE_PARENT)
+        if (target == null || sourceParent == null) {
+            failureReason = FAILURE_REASON.RCLONE_ERROR
+            log("Transfer batch is missing its source or destination")
+            return
+        }
+
+        try {
+            val names = manifest.readLines()
+            if (names.isEmpty()) {
+                failureReason = FAILURE_REASON.RCLONE_ERROR
+                log("Transfer batch is empty")
+                return
+            }
+            val report = File(manifest.parentFile, "$id.report")
+            try {
+                val rclone = Rclone(mContext)
+                sPendingProcesses.add {
+                    if (type == Type.DOWNLOAD) {
+                        rclone.downloadFilesFrom(remote, sourceParent, target, manifest, report)
+                    } else {
+                        rclone.uploadFilesFrom(remote, sourceParent, target, manifest, report)
+                    }
+                }
+                handleSync(mTitle)
+                if (failureReason == FAILURE_REASON.NO_FAILURE && !isStopped) {
+                    val missing = report.useLines { TransferBatch.missingSources(names, it) }
+                    if (missing.isNotEmpty()) {
+                        failureReason = FAILURE_REASON.RCLONE_ERROR
+                        log("Transfer batch skipped ${missing.size} selected items")
+                    }
+                }
+            } finally {
+                report.delete()
+            }
+        } catch (e: IOException) {
+            failureReason = FAILURE_REASON.RCLONE_ERROR
+            FLog.e(tag(), "Could not read or report transfer batch", e)
+        }
     }
 
     override fun onStopped() {
@@ -284,11 +343,27 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             mNotificationManager?.cancelSyncNotification(ongoingNotificationID)
             return
         }
+        val totalProcs = sPendingProcesses.size.coerceAtLeast(1)
+        var procIndex = 0
         while (!isStopped && sPendingProcesses.isNotEmpty()) {
             // Fold the finished process's deletions into the running total; its stats are
             // replaced as soon as the next process starts reporting.
             statusObject.accumulateDeletions()
-            if (rcloneProcess.run(sPendingProcesses.removeFirst()) { readProcess(it, title) } == null && !isStopped) {
+            val basePercent = (procIndex * 100) / totalProcs
+            procIndex++
+            if (rcloneProcess.run(sPendingProcesses.removeFirst()) { process ->
+                ProcessRegistry.updateProgress(
+                    process,
+                    title,
+                    basePercent,
+                    totalProcs > 1,
+                    title,
+                    "",
+                    "",
+                    emptyList()
+                )
+                readProcess(process, title)
+            } == null && !isStopped) {
                 failureReason = FAILURE_REASON.RCLONE_ERROR
                 log("Sync: Rclone process could not be started")
             }
@@ -318,6 +393,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
 
                     // Process all log lines so stats/progress advance the notification
                     statusObject.parseLoglineToStatusObject(logline)
+                    if (statusObject.notificationContent.isNotEmpty() || statusObject.notificationPercent > 0) {
+                        ProcessRegistry.updateFromStatusObject(localProcessReference, title, statusObject)
+                    }
 
                     // Only rebuild when there is content to show, and at most once per
                     // minNotifyIntervalMs to avoid notification churn on busy logs.
@@ -409,7 +487,17 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         //Todo: This should be context dependend on the type. It is currently not!
 
 
-        var message = mNotificationManager?.generateSuccessMessage(statusObject, getCurrentFile())?: "error"
+        var message = if (inputData.getString(BATCH_MANIFEST) != null) {
+            val plural = if (inputData.getString(EPHEMERAL_TYPE) == Type.UPLOAD.name) {
+                R.plurals.worker_upload_success_message
+            } else {
+                R.plurals.worker_download_success_message
+            }
+            val transferred = statusObject.getTransfers()
+            mContext.resources.getQuantityString(plural, transferred, transferred.toString())
+        } else {
+            mNotificationManager?.generateSuccessMessage(statusObject, getCurrentFile()) ?: "error"
+        }
 
         mNotificationManager?.showSuccessNotification(
             mTitle,

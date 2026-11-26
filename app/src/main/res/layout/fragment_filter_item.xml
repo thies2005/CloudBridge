@@ -12,24 +12,34 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <Spinner
-            android:id="@+id/filter_entry_filter_type"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/filter_entry_filter_type_layout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="wrap_content"
-            android:layout_height="0dp"
+            android:layout_height="wrap_content"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ca.pkay.rcloneexplorer.util.ExposedChoice
+                android:id="@+id/filter_entry_filter_type"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:inputType="none"
+                android:minWidth="120dp" />
+        </com.google.android.material.textfield.TextInputLayout>
 
         <EditText
             android:id="@+id/filter_entry_filter_text"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:hint="@string/filter_entry_filter_text"
             android:importantForAutofill="no"
             android:inputType="text"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/filter_entry_delete"
-            app:layout_constraintStart_toEndOf="@+id/filter_entry_filter_type"
+            app:layout_constraintStart_toEndOf="@+id/filter_entry_filter_type_layout"
             app:layout_constraintTop_toTopOf="parent" />
 
         <ImageButton

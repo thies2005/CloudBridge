@@ -52,7 +52,26 @@
         android:layout_height="wrap_content"
         android:text="@string/allow_remote_access" />
 
+    <CheckBox
+        android:id="@+id/checkbox_allow_write_access"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:checked="false"
+        android:visibility="gone"
+        android:text="@string/serve_allow_write_access" />
+
     <TextView
+        android:id="@+id/text_dlna_warning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:text="@string/serve_dlna_warning"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorError"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/text_authentication_header"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:paddingTop="16dp"

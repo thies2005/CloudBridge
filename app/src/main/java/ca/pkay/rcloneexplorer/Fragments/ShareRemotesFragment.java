@@ -24,7 +24,6 @@ import ca.pkay.rcloneexplorer.Items.RemoteItem;
 import ca.pkay.rcloneexplorer.R;
 import ca.pkay.rcloneexplorer.Rclone;
 import ca.pkay.rcloneexplorer.RecyclerViewAdapters.ShareRemotesRecyclerViewAdapter;
-import jp.wasabeef.recyclerview.animators.LandingAnimator;
 
 public class ShareRemotesFragment extends Fragment {
 
@@ -77,7 +76,6 @@ public class ShareRemotesFragment extends Fragment {
 
         final Context context = view.getContext();
         RecyclerView recyclerView =  view.findViewById(R.id.share_remotes_list);
-        recyclerView.setItemAnimator(new LandingAnimator());
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
         ShareRemotesRecyclerViewAdapter recyclerViewAdapter = new ShareRemotesRecyclerViewAdapter(remotes, remoteClickListener);
         recyclerView.setAdapter(recyclerViewAdapter);
