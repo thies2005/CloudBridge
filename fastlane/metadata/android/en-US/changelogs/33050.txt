@@ -1,0 +1,1 @@
+Material 3 Expressive UI (Light, Dark, AMOLED, edge-to-edge), Tier 1-3 search with drive mapping and filters, Current Processes view with ETA, unified caching, batched transfers, logs in Settings, and major SAF/VCP, KeyStore, and security reliability fixes.

@@ -20,10 +20,10 @@ Binaries:
   https://github.com/thies2005/CloudBridge/releases/download/v%v/cloudbridge_v%v-oss-universal-release.apk
 
 Builds:
-  - versionName: 1.0.6
-    versionCode: 32710
+  - versionName: 1.1.0
+    versionCode: 33050
     disable: Local candidate; publish and verify the immutable release before enabling
-    commit: v1.0.6
+    commit: v1.1.0
     subdir: app
     sudo:
       - echo 'deb https://deb.debian.org/debian bookworm main' > /etc/apt/sources.list.d/cloudbridge-jdk17.list
@@ -93,5 +93,5 @@ MaintainerNotes: |
 
 AutoUpdateMode: None
 UpdateCheckMode: None
-CurrentVersion: 1.0.6
-CurrentVersionCode: 32710
+CurrentVersion: 1.1.0
+CurrentVersionCode: 33050
