@@ -374,7 +374,7 @@ public class SafDAVServer extends NanoHTTPD {
             String name = path.substring(path.lastIndexOf('/') + 1);
             try {
                 item = itemAccess.readMeta(uri);
-                itemAccess.writeFile(uri, is, length);
+                itemAccess.writeFile(item.getUri(), is, length);
             } catch (ItemNotFoundException e) {
                 item = itemAccess.createFile(uri, name, mime, is, length);
                 etag = "\"" + sanitizeHeaderToken(item.getETag()) + "\"";

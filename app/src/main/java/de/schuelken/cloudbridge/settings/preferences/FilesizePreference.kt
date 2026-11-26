@@ -17,8 +17,10 @@ class FilesizePreference(context: Context, attrs: AttributeSet): DialogPreferenc
 
     override fun onClick() {
         FilesizeDialog(this.context, getValue()) {
-            persistLong(it)
-            notifyChanged()
+            if (callChangeListener(it)) {
+                persistLong(it)
+                notifyChanged()
+            }
         }.show()
     }
 

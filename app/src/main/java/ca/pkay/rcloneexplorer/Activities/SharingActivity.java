@@ -303,6 +303,39 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
         return true;
     }
 
+    @VisibleForTesting
+    @SuppressLint("SdCardPath")
+    static boolean isInternalPrivatePath(
+            @Nullable String canonicalSrc,
+            @Nullable String internalDataDir,
+            @Nullable String packageName) {
+        if (canonicalSrc == null || canonicalSrc.isEmpty()
+                || internalDataDir == null || internalDataDir.isEmpty()) {
+            return true;
+        }
+        if (canonicalSrc.equals(internalDataDir) || canonicalSrc.startsWith(internalDataDir + File.separator)) {
+            return true;
+        }
+        if (canonicalSrc.equals("/proc") || canonicalSrc.startsWith("/proc/")) {
+            return true;
+        }
+        if (packageName != null && !packageName.isEmpty()) {
+            String dataDataPrefix = "/data/data/" + packageName;
+            if (canonicalSrc.equals(dataDataPrefix) || canonicalSrc.startsWith(dataDataPrefix + File.separator)) {
+                return true;
+            }
+            if (canonicalSrc.startsWith("/data/user/") || canonicalSrc.startsWith("/data/user_de/")) {
+                String suffix = "/" + packageName;
+                int idx = canonicalSrc.indexOf(suffix);
+                if (idx > 0 && (idx + suffix.length() == canonicalSrc.length()
+                        || canonicalSrc.charAt(idx + suffix.length()) == '/')) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     @SuppressLint("StaticFieldLeak")
     private class CopyFile extends AsyncTask<Void, Void, Boolean> {
 
@@ -342,9 +375,11 @@ public class SharingActivity extends AppCompatActivity implements ShareRemotesFr
                         continue;
                     }
                     try {
-                        String canonicalSrc = new File(uri.getPath()).getCanonicalPath();
+                        String rawPath = uri.getPath();
+                        String canonicalSrc = new File(rawPath).getCanonicalPath();
                         String internalDataDir = new File(getApplicationInfo().dataDir).getCanonicalPath();
-                        if (canonicalSrc.equals(internalDataDir) || canonicalSrc.startsWith(internalDataDir + File.separator)) {
+                        if (isInternalPrivatePath(rawPath, internalDataDir, getPackageName())
+                                || isInternalPrivatePath(canonicalSrc, internalDataDir, getPackageName())) {
                             FLog.e(TAG, "Copy error: rejected internal file URI");
                             success = false;
                             continue;

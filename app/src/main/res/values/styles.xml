@@ -88,7 +88,10 @@
         <item name="contentPadding">@dimen/cardPadding</item>
     </style>
 
-    <style name="RoundedCornersDialog" parent="@style/MaterialAlertDialog.Material3">
+    <style name="RoundedCornersDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.CloudBridge.Rounded</item>
+    </style>
+    <style name="MaterialAlertDialog.CloudBridge.Rounded" parent="@style/MaterialAlertDialog.Material3">
         <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.Dialog.Rounded</item>
     </style>
     <style name="ShapeAppearanceOverlay.Dialog.Rounded" parent="">

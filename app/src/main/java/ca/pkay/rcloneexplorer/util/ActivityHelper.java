@@ -150,7 +150,8 @@ public class ActivityHelper {
                     View mainChild = dg.getChildAt(0);
                     mainChild.setPadding(bars.left, bars.top, bars.right, bottomInset);
                 }
-                navView.setPadding(bars.left, bars.top, 0, bars.bottom);
+                boolean isRtl = ViewCompat.getLayoutDirection(navView) == ViewCompat.LAYOUT_DIRECTION_RTL;
+                navView.setPadding(isRtl ? 0 : bars.left, bars.top, isRtl ? bars.right : 0, bars.bottom);
             } else {
                 view.setPadding(left + bars.left, top + bars.top, right + bars.right,
                         bottom + bottomInset);

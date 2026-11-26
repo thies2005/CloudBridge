@@ -69,6 +69,8 @@ public final class UnixDomainSocketFactory extends SocketFactory {
         private volatile boolean outputShutdown;
         private volatile SocketAddress remoteAddress = new InetSocketAddress(InetAddress.getLoopbackAddress(), 80);
         private int soTimeoutMs;
+        @Nullable private Integer receiveBufferSize;
+        @Nullable private Integer sendBufferSize;
 
         UnixSocket(@NonNull File socketFile) {
             this.socketFile = socketFile;
@@ -82,19 +84,34 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public void connect(SocketAddress endpoint, int timeout) throws IOException {
-            if (closed) {
-                throw new SocketException("Socket is closed");
-            }
-            if (endpoint != null) {
-                this.remoteAddress = endpoint;
+            synchronized (this) {
+                if (closed) {
+                    throw new SocketException("Socket is closed");
+                }
+                if (endpoint != null) {
+                    this.remoteAddress = endpoint;
+                }
             }
             LocalSocketAddress unixAddr = new LocalSocketAddress(
                     socketFile.getAbsolutePath(), LocalSocketAddress.Namespace.FILESYSTEM);
+            // Connect outside the lock so concurrent close() can abort a blocked connect.
             localSocket.connect(unixAddr);
-            if (soTimeoutMs > 0) {
-                localSocket.setSoTimeout(soTimeoutMs);
+            synchronized (this) {
+                if (closed) {
+                    localSocket.close();
+                    throw new SocketException("Socket is closed");
+                }
+                connected = true;
+                if (soTimeoutMs > 0) {
+                    localSocket.setSoTimeout(soTimeoutMs);
+                }
+                if (receiveBufferSize != null) {
+                    localSocket.setReceiveBufferSize(receiveBufferSize);
+                }
+                if (sendBufferSize != null) {
+                    localSocket.setSendBufferSize(sendBufferSize);
+                }
             }
-            connected = true;
         }
 
         @Override
@@ -153,7 +170,13 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public synchronized void setSoTimeout(int timeout) throws SocketException {
+            if (closed) {
+                throw new SocketException("Socket is closed");
+            }
             this.soTimeoutMs = timeout;
+            if (!connected) {
+                return;
+            }
             try {
                 localSocket.setSoTimeout(timeout);
             } catch (IOException e) {
@@ -165,6 +188,12 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public synchronized int getSoTimeout() throws SocketException {
+            if (closed) {
+                throw new SocketException("Socket is closed");
+            }
+            if (!connected) {
+                return soTimeoutMs;
+            }
             try {
                 return localSocket.getSoTimeout();
             } catch (IOException e) {
@@ -194,6 +223,13 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public synchronized void setReceiveBufferSize(int size) throws SocketException {
+            if (closed) {
+                throw new SocketException("Socket is closed");
+            }
+            this.receiveBufferSize = size;
+            if (!connected) {
+                return;
+            }
             try {
                 localSocket.setReceiveBufferSize(size);
             } catch (IOException e) {
@@ -205,6 +241,12 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public synchronized int getReceiveBufferSize() throws SocketException {
+            if (closed) {
+                throw new SocketException("Socket is closed");
+            }
+            if (!connected) {
+                return receiveBufferSize != null ? receiveBufferSize : 0;
+            }
             try {
                 return localSocket.getReceiveBufferSize();
             } catch (IOException e) {
@@ -216,6 +258,13 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public synchronized void setSendBufferSize(int size) throws SocketException {
+            if (closed) {
+                throw new SocketException("Socket is closed");
+            }
+            this.sendBufferSize = size;
+            if (!connected) {
+                return;
+            }
             try {
                 localSocket.setSendBufferSize(size);
             } catch (IOException e) {
@@ -227,6 +276,12 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public synchronized int getSendBufferSize() throws SocketException {
+            if (closed) {
+                throw new SocketException("Socket is closed");
+            }
+            if (!connected) {
+                return sendBufferSize != null ? sendBufferSize : 0;
+            }
             try {
                 return localSocket.getSendBufferSize();
             } catch (IOException e) {

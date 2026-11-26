@@ -106,7 +106,8 @@ class DynamicRemoteConfigFragment : Fragment() {
         mOptionFilter = savedInstanceState?.getString(STATE_FILTER).orEmpty()
         rclone = Rclone(this.context)
         val formState = ViewModelProvider(this)[FormState::class.java]
-        if (!formState.initialized) {
+        val hadInitialized = formState.initialized
+        if (!hadInitialized) {
             if (editTarget != null) {
                 val config = rclone!!.getConfig(editTarget)
                 if (config == null || config[RCLONE_CONFIG_NAME_KEY] != editTarget) {
@@ -132,6 +133,14 @@ class DynamicRemoteConfigFragment : Fragment() {
             Log.e(this::class.java.simpleName, "Unknown Provider: $mProviderTitle")
             Toast.makeText(this.mContext, R.string.dynamic_config_unknown_error, Toast.LENGTH_LONG).show()
             requireActivity().finish()
+        } else if (mIsEditTask && !hadInitialized) {
+            // Strip existing obscured password values once on initial edit load so toggling
+            // "Show advanced" or filtering options later does not erase newly entered passwords.
+            mProvider?.options?.forEach { option ->
+                if (option.isPassword) {
+                    mOptionMap.remove(option.name)
+                }
+            }
         }
 
         this.mUseOauth = when (mProvider?.name) {
@@ -281,10 +290,6 @@ class DynamicRemoteConfigFragment : Fragment() {
             when (it.type) {
                 "string" -> {
                     if (it.isPassword) {
-                        if (mIsEditTask) {
-                            // Do not re-submit already-obscured ciphertext from rclone config dump
-                            mOptionMap.remove(it.name)
-                        }
                         val input = getAttachedEditText(
                             it.name,
                             layout,

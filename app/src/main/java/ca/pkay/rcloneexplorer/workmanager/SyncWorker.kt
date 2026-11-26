@@ -496,6 +496,7 @@ class SyncWorker (private var mContext: Context, workerParams: WorkerParameters)
     }
 
     private fun sendUploadFinishedBroadcast(remote: String, path: String?) {
+        de.schuelken.cloudbridge.cache.CacheManager.getInstance(mContext).invalidateDirectory(remote, path)
         val intent = Intent()
         intent.action = getString(R.string.background_service_broadcast)
         intent.putExtra(getString(R.string.background_service_broadcast_data_remote), remote)

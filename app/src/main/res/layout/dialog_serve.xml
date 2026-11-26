@@ -105,7 +105,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:passwordToggleEnabled="true"
-        app:passwordToggleTint="@color/iconTint">
+        app:passwordToggleTint="?attr/colorOnSurfaceVariant">
 
         <EditText
             android:id="@+id/edit_text_password"

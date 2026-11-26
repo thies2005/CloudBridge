@@ -114,16 +114,17 @@ class ConfigCreate internal constructor(
         }.start()
         
         try {
-            val finished = createProc.waitFor(1, java.util.concurrent.TimeUnit.MINUTES)
+            val finished = waitForCompat(createProc, 60_000L)
             val exitCode = if (finished) createProc.exitValue() else -1
             FLog.d(TAG, "Step 1 finished=%s, exitCode=%d", finished, exitCode)
             if (exitCode != 0) {
+                if (!finished) destroyCompat(createProc)
                 FLog.e(TAG, "Step 1 failed with exit code %d", exitCode)
                 return false
             }
         } catch (e: Exception) {
             FLog.e(TAG, "Step 1 EXCEPTION", e)
-            createProc.destroyForcibly()
+            destroyCompat(createProc)
             return false
         }
         
@@ -194,13 +195,13 @@ class ConfigCreate internal constructor(
             outputReader.start()
             errorReader.start()
 
-            val completed = proc.waitFor(2, java.util.concurrent.TimeUnit.MINUTES)
+            val completed = waitForCompat(proc, 120_000L)
             outputReader.join(1000)
             errorReader.join(1000)
 
             if (!completed) {
                 FLog.e(TAG, "Config update timed out")
-                proc.destroyForcibly()
+                destroyCompat(proc)
                 return false
             }
 
@@ -394,5 +395,29 @@ class ConfigCreate internal constructor(
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         mContext.startActivity(intent)
+    }
+
+    private fun waitForCompat(proc: Process, timeoutMs: Long): Boolean {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            return proc.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                proc.exitValue()
+                return true
+            } catch (_: IllegalThreadStateException) {
+                Thread.sleep(50L)
+            }
+        }
+        return false
+    }
+
+    private fun destroyCompat(proc: Process) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            proc.destroyForcibly()
+        } else {
+            proc.destroy()
+        }
     }
 }

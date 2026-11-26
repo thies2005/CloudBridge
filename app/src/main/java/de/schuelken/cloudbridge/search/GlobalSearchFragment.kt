@@ -236,8 +236,10 @@ class GlobalSearchFragment : Fragment(), FileExplorerRecyclerViewAdapter.OnClick
         checked: BooleanArray,
         forceRefresh: Boolean
     ) {
-        val cm = CacheManager.getInstance(ctx)
+        val appCtx = ctx.applicationContext
+        val cm = CacheManager.getInstance(appCtx)
         var startedAny = false
+        val toDisable = ArrayList<String>()
         for (i in remotes.indices) {
             val remote = remotes[i]
             val wasEnabled = initialChecked[i]
@@ -248,18 +250,34 @@ class GlobalSearchFragment : Fragment(), FileExplorerRecyclerViewAdapter.OnClick
                 }
                 val needsInitialBuild = !wasEnabled || cm.getIndexStats(remote.name) == null
                 if (forceRefresh || needsInitialBuild) {
-                    SearchIndexWorker.enqueueIndexRemote(ctx, remote.name)
+                    SearchIndexWorker.enqueueIndexRemote(appCtx, remote.name)
                     startedAny = true
                 }
             } else if (wasEnabled) {
-                cm.setTier3SearchEnabled(remote.name, false)
+                androidx.work.WorkManager.getInstance(appCtx)
+                    .cancelUniqueWork("tier3_index_${remote.name}")
+                toDisable.add(remote.name)
             }
         }
         if (startedAny) {
             Toast.makeText(ctx, R.string.search_index_preparing, Toast.LENGTH_SHORT).show()
         }
-        updateIndexingStatus()
-        scheduleSearch(currentQuery)
+        if (toDisable.isNotEmpty()) {
+            executor.execute {
+                for (name in toDisable) {
+                    cm.setTier3SearchEnabled(name, false)
+                }
+                mainHandler.post {
+                    if (isAdded) {
+                        updateIndexingStatus()
+                        scheduleSearch(currentQuery)
+                    }
+                }
+            }
+        } else {
+            updateIndexingStatus()
+            scheduleSearch(currentQuery)
+        }
     }
 
     private fun scheduleSearch(query: String) {

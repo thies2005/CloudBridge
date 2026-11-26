@@ -116,7 +116,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
         } finally {
             mContext.unregisterReceiver(connectivityChangeBroadcastReceiver)
             // A system stop can re-enqueue this same request with its original input paths.
-            if (!isStopped || stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP) {
+            if (!isStopped || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP)) {
                 deleteManifest?.delete()
                 if (inputData.getBoolean(DELETE_STAGED_UPLOAD, false)) {
                     inputData.getString(UPLOAD_FILE)?.let {
@@ -555,6 +555,11 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
     }
 
     private fun sendUploadFinishedBroadcast(remote: String, path: String?, path2: String? = null) {
+        val cacheManager = de.schuelken.cloudbridge.cache.CacheManager.getInstance(mContext)
+        cacheManager.invalidateDirectory(remote, path)
+        if (path2 != null) {
+            cacheManager.invalidateDirectory(remote, path2)
+        }
         val intent = Intent()
         intent.action = getString(R.string.background_service_broadcast)
         intent.putExtra(getString(R.string.background_service_broadcast_data_remote), remote)

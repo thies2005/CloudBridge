@@ -78,8 +78,14 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
                 val sizeMb = preference.getValue() / (1024.0 * 1024.0)
                 resources.getString(R.string.pref_cache_max_size_summary, sizeMb.toFloat())
             }
-        cacheMaxPreference?.setOnPreferenceChangeListener { _, _ ->
-            CacheManager.getInstance(requireContext()).evictDataCacheIfNeeded()
+        cacheMaxPreference?.setOnPreferenceChangeListener { _, newValue ->
+            val newBytes = newValue as? Long
+            val appContext = requireContext().applicationContext
+            if (newBytes != null) {
+                Thread {
+                    CacheManager.getInstance(appContext).setMaxCacheBytes(newBytes)
+                }.start()
+            }
             true
         }
 
@@ -119,14 +125,9 @@ class GeneralPreferencesFragment : PreferenceFragmentCompat() {
         proxyPasswordPref.setOnPreferenceChangeListener { pref, newValue ->
             val password = newValue as? String ?: ""
             ProxyPasswordStore.setPassword(appContext, password)
-            if (pref is EditTextPreference) {
-                pref.text = ""
-                pref.summary = if (ProxyPasswordStore.hasPassword(appContext)) {
-                    getString(R.string.pref_proxy_password_masked)
-                } else {
-                    getString(R.string.pref_proxy_password_not_set)
-                }
-            }
+            // Re-assigning the SummaryProvider triggers notifyChanged() without calling setSummary(),
+            // which throws IllegalStateException when a SummaryProvider is installed.
+            pref.summaryProvider = pref.summaryProvider
             false
         }
     }

@@ -146,6 +146,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private final String SAVED_MOVE_START_PATH = "ca.pkay.rcexplorer.FILE_EXPLORER_FRAG_MOVE_START_PATH";
     private final String SAVED_SYNC_DIRECTION = "ca.pkay.rcexplorer.FILE_EXPLORER_FRAG_SYNC_DIRECTION";
     private final String SAVED_SYNC_REMOTE_PATH = "ca.pkay.rcexplorer.FILE_EXPLORER_FRAG_SYNC_REMOTE_PATH";
+    private final String SAVED_SYNC_TARGET_REMOTE = "ca.pkay.rcexplorer.FILE_EXPLORER_FRAG_SYNC_TARGET_REMOTE";
     private String originalToolbarTitle;
     private Stack<String> pathStack;
     private Map<String, Integer> directoryPosition;
@@ -178,6 +179,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private Boolean isSearchMode;
     private String searchString;
     private String syncRemotePath;
+    private RemoteItem syncTargetRemote;
     private int syncDirection;
     private boolean is720dp;
     private boolean showThumbnails;
@@ -200,6 +202,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private Runnable pendingSearchRunnable;
     private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor();
     private final AtomicReference<Process> recursiveSearchProcess = new AtomicReference<>();
+    private final java.util.concurrent.atomic.AtomicLong searchGeneration = new java.util.concurrent.atomic.AtomicLong(0L);
     private File pendingApkInstallFile;
     private String pendingApkRemoteLabel;
     private final ActivityResultLauncher<Intent> installPermissionLauncher =
@@ -470,6 +473,9 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         if (syncRemotePath != null) {
             outState.putString(SAVED_SYNC_REMOTE_PATH, syncRemotePath);
         }
+        if (syncTargetRemote != null) {
+            outState.putParcelable(SAVED_SYNC_TARGET_REMOTE, syncTargetRemote);
+        }
         if (LargeParcel.calculateBundleSize(outState) > 250 * 1024) {
             outState.remove(SAVED_CONTENT);
         }
@@ -505,6 +511,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         moveStartPath = savedInstanceState.getString(SAVED_MOVE_START_PATH);
         syncDirection = savedInstanceState.getInt(SAVED_SYNC_DIRECTION, -1);
         syncRemotePath = savedInstanceState.getString(SAVED_SYNC_REMOTE_PATH);
+        syncTargetRemote = savedInstanceState.getParcelable(SAVED_SYNC_TARGET_REMOTE);
     }
 
     private void setFabBehaviour(boolean enableSnackBarBehaviour) {
@@ -609,13 +616,17 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             String selectedPath = data.getStringExtra(FilePicker.FILE_PICKER_RESULT);
             recyclerViewAdapter.cancelSelection();
 
-            EphemeralTaskManager.Companion.queueDownloads(context, remote, downloadList, selectedPath);
+            for (Map.Entry<RemoteItem, List<FileItem>> entry : groupItemsByRemote(downloadList).entrySet()) {
+                EphemeralTaskManager.Companion.queueDownloads(context, entry.getKey(), entry.getValue(), selectedPath);
+            }
             downloadList.clear();
         } else if (requestCode == FILE_PICKER_SYNC_RESULT && resultCode == FragmentActivity.RESULT_OK) {
             String path = data.getStringExtra(FilePicker.FILE_PICKER_RESULT);
+            RemoteItem targetRemote = syncTargetRemote != null ? syncTargetRemote : remote;
+            syncTargetRemote = null;
 
             Task ephemeralTask = new Task(-1);
-            ephemeralTask.setRemoteId(remote.getName());
+            ephemeralTask.setRemoteId(targetRemote.getName());
             ephemeralTask.setLocalPath(path);
             ephemeralTask.setDirection(syncDirection);
             ephemeralTask.setRemotePath(syncRemotePath);
@@ -699,7 +710,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 new LinkTask().execute(directoryObject.getCurrentPath());
                 return true;
             case R.id.action_sync:
-                showSyncDialog(directoryObject.getCurrentPath());
+                showSyncDialog(remote, directoryObject.getCurrentPath());
                 return true;
             case R.id.action_go_to:
                 showSFTPgoToDialog();
@@ -923,6 +934,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     }
 
     private void cancelActiveSearch() {
+        searchGeneration.incrementAndGet();
         if (pendingSearchRunnable != null) {
             searchDebounceHandler.removeCallbacks(pendingSearchRunnable);
         }
@@ -981,6 +993,13 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         if (searchButton != null) searchButton.setVisibility(View.GONE);
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        cancelActiveSearch();
+        searchExecutor.shutdownNow();
+    }
+
     private void showOpenAsDialog(FileItem fileItem) {
         OpenAsDialog openAsDialog = new OpenAsDialog();
         openAsDialog
@@ -1013,11 +1032,50 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         new DownloadAndOpen(DownloadAndOpen.OPEN_AS_IMAGE).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, fileItem);
     }
 
+    private RemoteItem resolveItemRemote(@Nullable FileItem item) {
+        return (item != null && item.getRemote() != null) ? item.getRemote() : remote;
+    }
+
+    private Map<RemoteItem, List<FileItem>> groupItemsByRemote(List<FileItem> items) {
+        Map<String, RemoteItem> remoteByName = new java.util.LinkedHashMap<>();
+        Map<String, List<FileItem>> itemsByName = new java.util.LinkedHashMap<>();
+        for (FileItem item : items) {
+            RemoteItem target = resolveItemRemote(item);
+            if (target == null) {
+                continue;
+            }
+            String name = target.getName();
+            if (!remoteByName.containsKey(name)) {
+                remoteByName.put(name, target);
+                itemsByName.put(name, new ArrayList<>());
+            }
+            itemsByName.get(name).add(item);
+        }
+        Map<RemoteItem, List<FileItem>> grouped = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, RemoteItem> entry : remoteByName.entrySet()) {
+            grouped.put(entry.getValue(), itemsByName.get(entry.getKey()));
+        }
+        return grouped;
+    }
+
+    private String parentPathForItem(FileItem item, RemoteItem targetRemote) {
+        String itemPath = item != null ? item.getPath() : null;
+        if (itemPath == null || itemPath.isEmpty()) {
+            return "//" + targetRemote.getName();
+        }
+        int lastSlash = itemPath.lastIndexOf('/');
+        if (lastSlash <= 0) {
+            return "//" + targetRemote.getName();
+        }
+        return itemPath.substring(0, lastSlash);
+    }
+
     private void showFileProperties(FileItem fileItem) {
+        RemoteItem targetRemote = resolveItemRemote(fileItem);
         FilePropertiesDialog filePropertiesDialog = new FilePropertiesDialog()
                 .setFile(fileItem)
-                .setRemote(remote);
-        if (remote.isCrypt()) {
+                .setRemote(targetRemote);
+        if (targetRemote.isCrypt()) {
             filePropertiesDialog.withHashCalculations(false);
         }
         if (getFragmentManager() != null) {
@@ -1072,7 +1130,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         final SearchFilter filterSnapshot = currentSearchFilter;
 
         if (scopeSnapshot == SearchScope.FOLDER && querySnapshot.isEmpty() && filterSnapshot.isDefault()) {
-            if (searchStatusBar != null) searchStatusBar.setVisibility(View.GONE);
+            cancelActiveSearch();
             recyclerViewAdapter.setSearchDisplay("", false);
             List<FileItem> content = directoryObject.getDirectoryContent();
             if (!recyclerViewAdapter.getCurrentContent().equals(content)) {
@@ -1081,13 +1139,14 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             return;
         }
 
-        pendingSearchRunnable = () -> executeSearch(querySnapshot, scopeSnapshot, filterSnapshot);
+        final long generation = searchGeneration.incrementAndGet();
+        pendingSearchRunnable = () -> executeSearch(querySnapshot, scopeSnapshot, filterSnapshot, generation);
         long delayMs = (scopeSnapshot == SearchScope.RECURSIVE) ? 400L : 180L;
         searchDebounceHandler.postDelayed(pendingSearchRunnable, delayMs);
     }
 
-    private void executeSearch(String query, SearchScope scope, SearchFilter filter) {
-        if (!isAdded() || context == null) return;
+    private void executeSearch(String query, SearchScope scope, SearchFilter filter, long generation) {
+        if (!isAdded() || context == null || searchGeneration.get() != generation) return;
         Process prev = recursiveSearchProcess.getAndSet(null);
         if (prev != null) {
             prev.destroy();
@@ -1102,11 +1161,13 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             searchStatusBar.setVisibility(View.GONE);
         }
 
+        final Context appCtx = context.getApplicationContext();
         final List<FileItem> folderSnapshot = new ArrayList<>(directoryObject.getDirectoryContent());
         final String currentPath = directoryObject.getCurrentPath();
         final int activeSort = sortOrder;
 
         searchExecutor.execute(() -> {
+            if (searchGeneration.get() != generation) return;
             List<FileItem> results;
             boolean showPath = scope != SearchScope.FOLDER;
             boolean truncated = false;
@@ -1117,7 +1178,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 for (RemoteItem r : allRemotes) {
                     remoteMap.put(r.getName(), r);
                 }
-                results = CacheManager.getInstance(context).searchIndexed(query, remoteMap, filter, 300);
+                results = CacheManager.getInstance(appCtx).searchIndexed(query, remoteMap, filter, 300);
                 if (results.size() >= 300) truncated = true;
             } else if (scope == SearchScope.RECURSIVE) {
                 if (query.trim().isEmpty() && filter.isDefault()) {
@@ -1125,8 +1186,8 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 } else {
                     int maxItems = 500;
                     final long searchStartMs = System.currentTimeMillis();
-                    final StatusObject statusHelper = new StatusObject(context.getApplicationContext());
-                    final String procTitle = getString(R.string.search_recursive_process_title, remote.getDisplayName());
+                    final StatusObject statusHelper = new StatusObject(appCtx);
+                    final String procTitle = appCtx.getString(R.string.search_recursive_process_title, remote.getDisplayName());
                     List<FileItem> allItems = rclone.getDirectoryContentRecursive(
                             remote,
                             currentPath,
@@ -1147,17 +1208,17 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                                     String etaFormatted = itemsFound <= 0 ? "" : statusHelper.prettyPrintDuration(etaSec);
                                     String elapsedFormatted = statusHelper.prettyPrintDuration(elapsedSec);
                                     String contentText = itemsFound <= 0
-                                            ? getString(R.string.search_recursive_running, 0)
-                                            : getString(R.string.search_recursive_progress_eta, itemsFound, etaFormatted);
+                                            ? appCtx.getString(R.string.search_recursive_running, 0)
+                                            : appCtx.getString(R.string.search_recursive_progress_eta, itemsFound, etaFormatted);
                                     List<String> details = new ArrayList<>();
-                                    details.add(getString(R.string.search_index_items_mapped, itemsFound));
+                                    details.add(appCtx.getString(R.string.search_index_items_mapped, itemsFound));
                                     if (itemsFound > 0) {
-                                        details.add(getString(R.string.search_index_speed, itemsPerSec));
-                                        details.add(getString(R.string.sync_notification_remaining, etaFormatted));
+                                        details.add(appCtx.getString(R.string.search_index_speed, itemsPerSec));
+                                        details.add(appCtx.getString(R.string.sync_notification_remaining, etaFormatted));
                                     }
-                                    details.add(getString(R.string.sync_notification_elapsed, elapsedFormatted));
+                                    details.add(appCtx.getString(R.string.sync_notification_elapsed, elapsedFormatted));
                                     if (entryPath != null && !entryPath.isEmpty()) {
-                                        details.add(getString(R.string.search_index_current_path, entryPath));
+                                        details.add(appCtx.getString(R.string.search_index_current_path, entryPath));
                                     }
                                     ProcessRegistry.updateProgress(
                                             proc,
@@ -1171,7 +1232,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                                     );
                                 }
                                 searchDebounceHandler.post(() -> {
-                                    if (isAdded() && isSearchMode && searchStatusText != null) {
+                                    if (searchGeneration.get() == generation && isAdded() && isSearchMode && searchStatusText != null) {
                                         searchStatusText.setText(getString(R.string.search_recursive_running, itemsFound));
                                     }
                                 });
@@ -1186,12 +1247,13 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 results = SearchEngine.filterItems(folderSnapshot, query, filter, false);
             }
 
+            if (searchGeneration.get() != generation) return;
             FileComparators.sortFileItems(results, activeSort);
             final List<FileItem> finalResults = results;
             final boolean wasTruncated = truncated;
 
             searchDebounceHandler.post(() -> {
-                if (!isAdded() || !isSearchMode || recyclerViewAdapter == null) return;
+                if (searchGeneration.get() != generation || !isAdded() || !isSearchMode || recyclerViewAdapter == null) return;
                 if (searchStatusBar != null) {
                     if (wasTruncated && searchStatusText != null) {
                         searchStatusBar.setVisibility(View.VISIBLE);
@@ -1548,6 +1610,8 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     }
 
     private void showFileMenu(View view, final FileItem fileItem) {
+        final RemoteItem targetRemote = resolveItemRemote(fileItem);
+        final boolean isSameRemote = targetRemote.getName().equals(remoteName);
         PopupMenu popupMenu = new PopupMenu(context, view);
         popupMenu.getMenuInflater().inflate(R.menu.file_explorer_menu, popupMenu.getMenu());
         androidx.core.view.MenuCompat.setGroupDividerEnabled(popupMenu.getMenu(), true);
@@ -1569,13 +1633,13 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                         switch (which) {
                             case 0: // HTTP
                                 intent.putExtra(StreamingService.SERVE_PATH_ARG, fileItem.getPath());
-                                intent.putExtra(StreamingService.REMOTE_ARG, remote);
+                                intent.putExtra(StreamingService.REMOTE_ARG, targetRemote);
                                 intent.putExtra(StreamingService.SERVE_PROTOCOL, StreamingService.SERVE_HTTP);
                                 intent.putExtra(StreamingService.SHOW_NOTIFICATION_TEXT, true);
                                 break;
                             case 1: // Webdav
                                 intent.putExtra(StreamingService.SERVE_PATH_ARG, fileItem.getPath());
-                                intent.putExtra(StreamingService.REMOTE_ARG, remote);
+                                intent.putExtra(StreamingService.REMOTE_ARG, targetRemote);
                                 intent.putExtra(StreamingService.SERVE_PROTOCOL, StreamingService.SERVE_WEBDAV);
                                 intent.putExtra(StreamingService.SHOW_NOTIFICATION_TEXT, true);
                                 break;
@@ -1605,10 +1669,10 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                     deleteFiles(Collections.singletonList(fileItem));
                     break;
                 case R.id.action_link:
-                    new LinkTask().execute(fileItem.getPath());
+                    new LinkTask(targetRemote).execute(fileItem.getPath());
                     break;
                 case R.id.action_sync:
-                    showSyncDialog(fileItem.getPath());
+                    showSyncDialog(targetRemote, fileItem.getPath());
                     break;
                 default:
                     return false;
@@ -1621,15 +1685,19 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         } else {
             popupMenu.getMenu().findItem(R.id.action_sync).setVisible(false);
         }
-        if (!remote.hasSyncSupport()) {
+        if (!isSameRemote) {
+            // Move destination picker only browses the currently open remote.
+            popupMenu.getMenu().findItem(R.id.action_move).setVisible(false);
+        }
+        if (!targetRemote.hasSyncSupport()) {
             // TODO: remove once destination sync is added.
             popupMenu.getMenu().findItem(R.id.action_sync).setVisible(false);
         }
-        Boolean cachedLinkSupport = CacheManager.getInstance(context).getPublicLinkSupport(remote.getName());
-        if (!remote.hasLinkSupport() || Boolean.FALSE.equals(cachedLinkSupport)) {
+        Boolean cachedLinkSupport = CacheManager.getInstance(context).getPublicLinkSupport(targetRemote.getName());
+        if (!targetRemote.hasLinkSupport() || Boolean.FALSE.equals(cachedLinkSupport)) {
             popupMenu.getMenu().findItem(R.id.action_link).setVisible(false);
         }
-        if (remote.isRemoteType(RemoteItem.LOCAL, RemoteItem.SAFW) || remote.isPathAlias()) {
+        if (targetRemote.isRemoteType(RemoteItem.LOCAL, RemoteItem.SAFW) || targetRemote.isPathAlias()) {
             // TODO: replace with .setTitle(copy) once destination copy is added
             popupMenu.getMenu().findItem(R.id.action_download).setVisible(false);
         }
@@ -1684,7 +1752,8 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         }
     }
 
-    private void showSyncDialog(String path) {
+    private void showSyncDialog(RemoteItem targetRemote, String path) {
+        syncTargetRemote = targetRemote != null ? targetRemote : remote;
         syncRemotePath = path;
 
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
@@ -1777,7 +1846,14 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         if (context == null) {
             return;
         }
-        EphemeralTaskManager.Companion.queueDelete(this.context, remote, deleteList, directoryObject.getCurrentPath());
+        for (Map.Entry<RemoteItem, List<FileItem>> entry : groupItemsByRemote(deleteList).entrySet()) {
+            RemoteItem targetRemote = entry.getKey();
+            List<FileItem> items = entry.getValue();
+            String refreshPath = targetRemote.getName().equals(remoteName) && (!isSearchMode || searchScope == SearchScope.FOLDER)
+                    ? directoryObject.getCurrentPath()
+                    : parentPathForItem(items.get(0), targetRemote);
+            EphemeralTaskManager.Companion.queueDelete(this.context, targetRemote, items, refreshPath);
+        }
     }
 
     private void renameFiles() {
@@ -1802,6 +1878,12 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     private void moveFiles(List<FileItem> moveItems) {
         if (moveItems.size() < 1) {
             return;
+        }
+        for (FileItem item : moveItems) {
+            if (!resolveItemRemote(item).getName().equals(remoteName)) {
+                Toast.makeText(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT).show();
+                return;
+            }
         }
         moveStartPath = directoryObject.getCurrentPath();
         moveList = new ArrayList<>(moveItems);
@@ -1853,13 +1935,15 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                     return;
                 }
                 recyclerViewAdapter.cancelSelection();
+                RemoteItem targetRemote = resolveItemRemote(renameItem);
+                String parentPath = parentPathForItem(renameItem, targetRemote);
                 String newFilePath;
-                if (directoryObject.getCurrentPath().equals("//" + remoteName)) {
+                if (parentPath.equals("//" + targetRemote.getName())) {
                     newFilePath = input;
                 } else {
-                    newFilePath = directoryObject.getCurrentPath() + "/" + input;
+                    newFilePath = parentPath + "/" + input;
                 }
-                new RenameFileTask().execute(renameItem.getPath(), newFilePath);
+                new RenameFileTask(targetRemote, parentPath).execute(renameItem.getPath(), newFilePath);
                 renameItem = null;
                 break;
         }
@@ -1946,16 +2030,16 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             String curPath = directoryObject.getCurrentPath();
             CacheManager cm = CacheManager.getInstance(context);
             if (!silentFetch) {
-                CacheManager.CachedListing cached = cm.getDirectoryListing(remote, curPath);
+                CacheManager.CachedListing cached = cm.getDirectoryListing(remote, curPath, startAtRoot);
                 if (cached != null && !cached.isStale()) {
                     return cached.getItems();
                 }
             }
             List<FileItem> fileItemList = rclone.getDirectoryContent(remote, curPath, startAtRoot);
             if (fileItemList != null) {
-                cm.saveDirectoryListing(remote.getName(), curPath, fileItemList);
+                cm.saveDirectoryListing(remote.getName(), curPath, fileItemList, startAtRoot);
             } else if (!silentFetch) {
-                CacheManager.CachedListing fallback = cm.getDirectoryListing(remote, curPath);
+                CacheManager.CachedListing fallback = cm.getDirectoryListing(remote, curPath, startAtRoot);
                 if (fallback != null) {
                     return fallback.getItems();
                 }
@@ -2011,7 +2095,14 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     @SuppressLint("StaticFieldLeak")
     private class RenameFileTask extends AsyncTask<String, Void, Boolean> {
 
+        private final RemoteItem targetRemote;
+        private final String targetParentPath;
         private String pathWhenTaskStarted;
+
+        RenameFileTask(RemoteItem targetRemote, String targetParentPath) {
+            this.targetRemote = targetRemote != null ? targetRemote : remote;
+            this.targetParentPath = targetParentPath;
+        }
 
         @Override
         protected void onPreExecute() {
@@ -2025,7 +2116,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
             String oldFileName = strings[0];
             String newFileName = strings[1];
 
-            return rclone.moveTo(remote, oldFileName, newFileName);
+            return rclone.moveTo(targetRemote, oldFileName, newFileName);
         }
 
         @Override
@@ -2035,14 +2126,17 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             if (result) {
-                CacheManager.getInstance(context).invalidateDirectory(remote.getName(), pathWhenTaskStarted);
+                CacheManager.getInstance(context).invalidateDirectory(targetRemote.getName(), targetParentPath);
                 Toast.makeText(context, getString(R.string.file_renamed_success), Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(context, getString(R.string.error_moving_file), Toast.LENGTH_SHORT).show();
 
             }
-            if (!pathWhenTaskStarted.equals(directoryObject.getCurrentPath())) {
-                directoryObject.removePathFromCache(pathWhenTaskStarted);
+            if (targetRemote.getName().equals(remoteName)) {
+                directoryObject.removePathFromCache(targetParentPath);
+            }
+            if (!targetRemote.getName().equals(remoteName) || !pathWhenTaskStarted.equals(directoryObject.getCurrentPath())) {
+                swipeRefreshLayout.setRefreshing(false);
                 return;
             }
             if (fetchDirectoryTask != null) {
@@ -2107,6 +2201,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         private Process process;
         private volatile boolean isCancelled = false;
         private String mimeType;
+        private String targetRemoteLabel;
 
         DownloadAndOpen() {
             this(-1);
@@ -2144,6 +2239,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         protected Boolean doInBackground(FileItem... fileItems) {
             FileItem fileItem = fileItems[0];
             RemoteItem targetRemote = fileItem.getRemote() != null ? fileItem.getRemote() : remote;
+            targetRemoteLabel = targetRemote != null ? targetRemote.getDisplayName() : null;
             mimeType = fileItem.getMimeType();
             CacheManager cacheManager = CacheManager.getInstance(context);
             File cachedFile = cacheManager.getCachedFile(
@@ -2251,7 +2347,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
                 return;
             }
             File file = new File(fileLocation);
-            String remoteLabel = remote != null ? remote.getDisplayName() : null;
+            String remoteLabel = targetRemoteLabel != null ? targetRemoteLabel : (remote != null ? remote.getDisplayName() : null);
             ApkInstallHelper.openFile(context, file, mimeType, openAs, remoteLabel, (settingsIntent, apkFile) -> {
                 pendingApkInstallFile = apkFile;
                 pendingApkRemoteLabel = remoteLabel;
@@ -2432,8 +2528,17 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
     @SuppressLint("StaticFieldLeak")
     private class LinkTask extends AsyncTask<String, Void, Rclone.LinkResult> {
 
+        private final RemoteItem targetRemote;
         private LoadingDialog loadingDialog;
         private String linkPath;
+
+        LinkTask() {
+            this(remote);
+        }
+
+        LinkTask(RemoteItem targetRemote) {
+            this.targetRemote = targetRemote != null ? targetRemote : remote;
+        }
 
         @Override
         protected void onPreExecute() {
@@ -2448,7 +2553,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
         @Override
         protected Rclone.LinkResult doInBackground(String... strings) {
             linkPath = strings[0];
-            return rclone.linkWithOptions(remote, linkPath, null, false);
+            return rclone.linkWithOptions(targetRemote, linkPath, null, false);
         }
 
         @Override
@@ -2468,7 +2573,7 @@ public class FileExplorerFragment extends Fragment implements   FileExplorerRecy
 
             LinkDialog linkDialog = new LinkDialog()
                     .setLinkUrl(result.url)
-                    .setTarget(remote, linkPath);
+                    .setTarget(targetRemote, linkPath);
             if (getFragmentManager() != null && !getChildFragmentManager().isStateSaved()) {
                 linkDialog.show(getChildFragmentManager(), "link dialog");
             }

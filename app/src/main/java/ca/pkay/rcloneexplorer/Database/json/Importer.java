@@ -80,25 +80,60 @@ public class Importer {
         if (!localPath.startsWith("/") || localPath.indexOf(':') >= 0 || localPath.indexOf('\0') >= 0) {
             return false;
         }
+        if (localPath.equals("/proc") || localPath.startsWith("/proc/")) {
+            return false;
+        }
         try {
             String canonicalDataDir = new File(internalDataDir).getCanonicalPath();
             String canonicalLocal = new File(localPath).getCanonicalPath();
             if ("/".equals(canonicalLocal)) {
                 return false;
             }
-            if (canonicalLocal.equals(canonicalDataDir)) {
+            if (canonicalLocal.equals(canonicalDataDir)
+                    || canonicalLocal.startsWith(canonicalDataDir + File.separator)
+                    || canonicalDataDir.startsWith(canonicalLocal + File.separator)) {
                 return false;
             }
-            if (canonicalLocal.startsWith(canonicalDataDir + File.separator)) {
+            if (canonicalLocal.equals("/proc") || canonicalLocal.startsWith("/proc/")) {
                 return false;
             }
-            if (canonicalDataDir.startsWith(canonicalLocal + File.separator)) {
+            String pkgName = new File(canonicalDataDir).getName();
+            if (!pkgName.isEmpty() && isAliasOfInternalDataDir(canonicalLocal, pkgName)) {
                 return false;
             }
             return true;
         } catch (IOException e) {
             return false;
         }
+    }
+
+    @android.annotation.SuppressLint("SdCardPath")
+    private static boolean isAliasOfInternalDataDir(String canonicalPath, String packageName) {
+        String dataDataPrefix = "/data/data/" + packageName;
+        if (canonicalPath.equals(dataDataPrefix)
+                || canonicalPath.startsWith(dataDataPrefix + File.separator)
+                || dataDataPrefix.startsWith(canonicalPath + File.separator)) {
+            return true;
+        }
+        if (canonicalPath.equals("/data/user") || canonicalPath.equals("/data/user_de")) {
+            return true;
+        }
+        if (canonicalPath.startsWith("/data/user/") || canonicalPath.startsWith("/data/user_de/")) {
+            String rest = canonicalPath.startsWith("/data/user_de/")
+                    ? canonicalPath.substring("/data/user_de/".length())
+                    : canonicalPath.substring("/data/user/".length());
+            // Block user root ancestor (e.g. /data/user_de/0) as well as /<uid>/<pkg> and its children
+            if (!rest.contains("/")) {
+                return true;
+            }
+            String suffix = "/" + packageName;
+            int idx = canonicalPath.indexOf(suffix);
+            if (idx > 0 && (idx + suffix.length() == canonicalPath.length()
+                    || canonicalPath.charAt(idx + suffix.length()) == '/')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static void validateJson(String json) throws JSONException {

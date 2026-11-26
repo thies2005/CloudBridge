@@ -738,8 +738,8 @@ public class RcloneRcd {
         String dstFs = remoteNameAsFs(dstRemoteName);
         String dstRemote = pathAsPath(dstRemoteName, dstPath);
         JobIdResponse response = performRcCall("operations/movefile", new MoveFileRcOpParam(srcFs, srcRemote, dstFs, dstRemote), JobIdResponse.class);
-        pendingJobs.add(response.jobid);
         registerJobHandler(response.jobid, handler);
+        pendingJobs.add(response.jobid);
     }
 
     public String getPublicLink(String remoteName, String path) {

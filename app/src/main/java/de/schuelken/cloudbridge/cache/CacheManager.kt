@@ -169,8 +169,12 @@ class CacheManager private constructor(context: Context) {
 
     // --- Directory Listing Cache ---
 
-    fun getDirectoryListing(remote: RemoteItem, path: String): CachedListing? {
-        val normalizedPath = normalizePath(path)
+    @JvmOverloads
+    fun getDirectoryListing(remote: RemoteItem, path: String, startAtRoot: Boolean = false): CachedListing? {
+        // SFTP/FTP startAtRoot listings live in a separate namespace (/tmp vs ~/tmp) that cannot
+        // share the UNIQUE(remote_name, path) table with home-relative entries or Tier-3 FTS.
+        if (startAtRoot) return null
+        val normalizedPath = normalizePath(remote.name, path)
         val db = dbHelper.readableDatabase
         val fetchedAt: Long
         db.rawQuery(
@@ -209,9 +213,11 @@ class CacheManager private constructor(context: Context) {
         return CachedListing(items, isStale, fetchedAt)
     }
 
+    @JvmOverloads
     @Synchronized
-    fun saveDirectoryListing(remoteName: String, path: String, items: List<FileItem>) {
-        val normalizedPath = normalizePath(path)
+    fun saveDirectoryListing(remoteName: String, path: String, items: List<FileItem>, startAtRoot: Boolean = false) {
+        if (startAtRoot) return
+        val normalizedPath = normalizePath(remoteName, path)
         val now = System.currentTimeMillis()
         val db = dbHelper.writableDatabase
         db.beginTransaction()
@@ -242,7 +248,7 @@ class CacheManager private constructor(context: Context) {
 
     @Synchronized
     fun invalidateDirectory(remoteName: String, path: String?) {
-        val normalized = normalizePath(path ?: "")
+        val normalized = normalizePath(remoteName, path ?: "")
         val parent = parentOf(normalized)
         val db = dbHelper.writableDatabase
         db.beginTransaction()
@@ -408,6 +414,7 @@ class CacheManager private constructor(context: Context) {
         val results = ArrayList<FileItem>()
         val db = dbHelper.readableDatabase
 
+        val limitClause = if (filter.isDefault()) "LIMIT $limit" else ""
         val sql = if (ftsQuery.isNotEmpty()) {
             args.add(ftsQuery)
             """
@@ -417,14 +424,14 @@ class CacheManager private constructor(context: Context) {
                 ON e.remote_name = f.remote_name AND e.path = f.path
             WHERE e.remote_name IN ($placeholders)
               AND ${CacheDatabaseHelper.TABLE_FILE_FTS} MATCH ?
-            LIMIT $limit
+            $limitClause
             """.trimIndent()
         } else {
             """
             SELECT remote_name, path, name, size, mod_time, mime_type, is_dir
             FROM ${CacheDatabaseHelper.TABLE_FILE_ENTRIES}
             WHERE remote_name IN ($placeholders)
-            LIMIT $limit
+            $limitClause
             """.trimIndent()
         }
 
@@ -434,6 +441,7 @@ class CacheManager private constructor(context: Context) {
                     val item = readFileItemFromCursor(cursor, remotesByName) ?: continue
                     if (filter.matches(item)) {
                         results.add(item)
+                        if (results.size >= limit) break
                     }
                 }
             }
@@ -459,18 +467,20 @@ class CacheManager private constructor(context: Context) {
             .replace("_", "\\_")
         val likeArgs = ArrayList<String>(enabledRemotes)
         likeArgs.add("%$escaped%")
+        val limitClause = if (filter.isDefault()) "LIMIT $limit" else ""
         val likeSql = """
             SELECT remote_name, path, name, size, mod_time, mime_type, is_dir
             FROM ${CacheDatabaseHelper.TABLE_FILE_ENTRIES}
             WHERE remote_name IN ($placeholders)
               AND LOWER(name) LIKE ? ESCAPE '\'
-            LIMIT $limit
+            $limitClause
         """.trimIndent()
         dbHelper.readableDatabase.rawQuery(likeSql, likeArgs.toTypedArray()).use { cursor ->
             while (cursor.moveToNext()) {
                 val item = readFileItemFromCursor(cursor, remotesByName) ?: continue
                 if (filter.matches(item)) {
                     results.add(item)
+                    if (results.size >= limit) break
                 }
             }
         }
@@ -502,49 +512,50 @@ class CacheManager private constructor(context: Context) {
         items: List<FileItem>,
         onProgress: ((written: Int, total: Int) -> Unit)? = null
     ) {
-        val entryStmt = db.compileStatement(
+        db.compileStatement(
             """
             INSERT OR REPLACE INTO ${CacheDatabaseHelper.TABLE_FILE_ENTRIES}
             (remote_name, parent_path, path, name, size, mod_time, mime_type, is_dir)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
-        )
-        val ftsStmt = db.compileStatement(
-            """
-            INSERT INTO ${CacheDatabaseHelper.TABLE_FILE_FTS}
-            (remote_name, parent_path, path, name)
-            VALUES (?, ?, ?, ?)
-            """.trimIndent()
-        )
+        ).use { entryStmt ->
+            db.compileStatement(
+                """
+                INSERT INTO ${CacheDatabaseHelper.TABLE_FILE_FTS}
+                (remote_name, parent_path, path, name)
+                VALUES (?, ?, ?, ?)
+                """.trimIndent()
+            ).use { ftsStmt ->
+                val total = items.size
+                var written = 0
+                for (item in items) {
+                    val itemPath = normalizePath(remoteName, item.path)
+                    val parent = fixedParentPath ?: parentOf(itemPath)
+                    val isDirInt = if (item.isDir) 1L else 0L
 
-        val total = items.size
-        var written = 0
-        for (item in items) {
-            val itemPath = normalizePath(item.path)
-            val parent = fixedParentPath ?: parentOf(itemPath)
-            val isDirInt = if (item.isDir) 1L else 0L
+                    entryStmt.clearBindings()
+                    entryStmt.bindString(1, remoteName)
+                    entryStmt.bindString(2, parent)
+                    entryStmt.bindString(3, itemPath)
+                    entryStmt.bindString(4, item.name ?: "")
+                    entryStmt.bindLong(5, item.size)
+                    entryStmt.bindLong(6, item.modTime)
+                    entryStmt.bindString(7, item.mimeType ?: "application/octet-stream")
+                    entryStmt.bindLong(8, isDirInt)
+                    entryStmt.executeInsert()
 
-            entryStmt.clearBindings()
-            entryStmt.bindString(1, remoteName)
-            entryStmt.bindString(2, parent)
-            entryStmt.bindString(3, itemPath)
-            entryStmt.bindString(4, item.name ?: "")
-            entryStmt.bindLong(5, item.size)
-            entryStmt.bindLong(6, item.modTime)
-            entryStmt.bindString(7, item.mimeType ?: "application/octet-stream")
-            entryStmt.bindLong(8, isDirInt)
-            entryStmt.executeInsert()
+                    ftsStmt.clearBindings()
+                    ftsStmt.bindString(1, remoteName)
+                    ftsStmt.bindString(2, parent)
+                    ftsStmt.bindString(3, itemPath)
+                    ftsStmt.bindString(4, item.name ?: "")
+                    ftsStmt.executeInsert()
 
-            ftsStmt.clearBindings()
-            ftsStmt.bindString(1, remoteName)
-            ftsStmt.bindString(2, parent)
-            ftsStmt.bindString(3, itemPath)
-            ftsStmt.bindString(4, item.name ?: "")
-            ftsStmt.executeInsert()
-
-            written++
-            if (onProgress != null && (written % 250 == 0 || written == total)) {
-                onProgress(written, total)
+                    written++
+                    if (onProgress != null && (written % 250 == 0 || written == total)) {
+                        onProgress(written, total)
+                    }
+                }
             }
         }
     }
@@ -574,7 +585,8 @@ class CacheManager private constructor(context: Context) {
         return if (base.isEmpty() || base == "." || base == "..") "file" else base
     }
 
-    private fun normalizePath(path: String): String {
+    private fun normalizePath(remoteName: String, path: String): String {
+        if (path == "//$remoteName") return ""
         return path.trim('/')
     }
 
@@ -609,8 +621,7 @@ class CacheManager private constructor(context: Context) {
         @JvmStatic
         @androidx.annotation.VisibleForTesting
         internal fun buildFtsMatchQuery(raw: String): String {
-            val tokens = raw.split(Regex("\\s+"))
-                .map { it.replace(Regex("[^\\p{L}\\p{N}_]"), "") }
+            val tokens = raw.split(Regex("[^\\p{L}\\p{N}_]+"))
                 .filter { it.isNotEmpty() }
             if (tokens.isEmpty()) return ""
             return tokens.joinToString(" ") { "$it*" }

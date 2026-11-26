@@ -183,7 +183,9 @@ class SearchIndexWorker(
                 }
             ) ?: return@withContext if (isStopped) Result.failure() else Result.retry()
 
-            if (isStopped) return@withContext Result.failure()
+            if (isStopped || !cacheManager.isTier3SearchEnabled(remoteName)) {
+                return@withContext if (isStopped) Result.failure() else Result.success()
+            }
 
             cacheManager.saveRecursiveIndex(remoteName, items) { written, total ->
                 val percent = if (total <= 0) {

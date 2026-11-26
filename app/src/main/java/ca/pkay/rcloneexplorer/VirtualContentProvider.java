@@ -375,10 +375,9 @@ public class VirtualContentProvider extends SingleRootProvider {
         }
         // Return the current topmost level, e.g. rclone/remotes
         if (ROOT_DOC_ID.equals(documentId)) {
-            try (MatrixCursor result = new MatrixCursor(projection)) {
-                addRootDocProjectedRow(result);
-                return result;
-            }
+            MatrixCursor result = new MatrixCursor(projection);
+            addRootDocProjectedRow(result);
+            return result;
         // Return the level below, e.g. rclone/remotes/gdrive:
         } else if (isRemoteDocument(documentId)) {
             String remoteName = getRemoteName(getShortId(documentId));
@@ -484,49 +483,54 @@ public class VirtualContentProvider extends SingleRootProvider {
             if (RemoteItem.LOCAL == remoteItem.getType() && "".equals(dirPath)) {
                 dirPath = Rclone.getLocalRemotePathPrefix(remoteItem, getContext());
             }
-            try (MatrixCursor result = new MatrixCursor(projection)) {
-                ListItem[] directFiles = null;
-                String extraInfo = "unknown error";
-                Bundle bundle = new Bundle();
-                try {
-                    if (acquireRcd()) {
-                        directFiles = rcd.list(remoteItem.getName(), dirPath);
-                    } else {
-                        ContentResolver contentResolver = getContext().getContentResolver();
-                        Uri targetUri = buildUriFromId(getRootedDocumentId(getShortId(originalParentDocId)));
-                        result.setNotificationUri(contentResolver, targetUri);
-                        bundle.putBoolean(DocumentsContract.EXTRA_LOADING, true);
-                        CompletableFuture.runAsync(() -> {
-                            FLog.d(TAG, "queryChildDocuments: notifying %s", targetUri);
-                            contentResolver.notifyChange(targetUri, null);
-                        }, asyncExc);
-                    }
+            MatrixCursor result = new MatrixCursor(projection);
+            ListItem[] directFiles = null;
+            String extraInfo = "unknown error";
+            Bundle bundle = new Bundle();
+            try {
+                if (acquireRcd()) {
+                    directFiles = rcd.list(remoteItem.getName(), dirPath);
+                } else {
+                    ContentResolver contentResolver = getContext().getContentResolver();
+                    Uri targetUri = buildUriFromId(getRootedDocumentId(getShortId(originalParentDocId)));
+                    result.setNotificationUri(contentResolver, targetUri);
+                    bundle.putBoolean(DocumentsContract.EXTRA_LOADING, true);
+                    CompletableFuture.runAsync(() -> {
+                        FLog.d(TAG, "queryChildDocuments: notifying %s", targetUri);
+                        contentResolver.notifyChange(targetUri, null);
+                    }, asyncExc);
+                }
 
-                } catch (RcloneRcd.RcdOpException e) {
-                    extraInfo = e.getError();
-                }
-                if (null == directFiles) {
-                    Context context = Objects.requireNonNull(getContext());
-                    if (null == extraInfo) {
-                        extraInfo = context.getString(R.string.virtual_content_provider_null_content);
-                    } else {
-                        extraInfo = context.getString(R.string.virtual_content_provider_exception_error, extraInfo);
-                    }
-                    bundle.putString(DocumentsContract.EXTRA_ERROR, extraInfo);
-                    bundle.putString(DocumentsContract.EXTRA_INFO, context.getString(R.string.virtual_content_provider_exception_advice));
-                    return new ExtrasMatrixCursor(DEFAULT_DOCUMENT_PROJECTION, bundle);
-                }
-                Arrays.sort(directFiles, decodeSorting(sortOrder));
-                int flags = getFlags(remoteItem);
-                for (ListItem item : directFiles) {
-                    String shortId = remoteName + ":" + getRelativeItemPath(item.path);
-                    fsCache.put(shortId, item);
-                    remoteState.put(shortId, item, FsStateNode.CACHED);
-                    Object[] resultValues = getForProjection(item, getRootedDocumentId(shortId), projection);
-                    result.addRow(resultValues);
-                }
-                return result;
+            } catch (RcloneRcd.RcdOpException e) {
+                extraInfo = e.getError();
             }
+            if (null == directFiles) {
+                result.close();
+                Context context = Objects.requireNonNull(getContext());
+                if (null == extraInfo) {
+                    extraInfo = context.getString(R.string.virtual_content_provider_null_content);
+                } else {
+                    extraInfo = context.getString(R.string.virtual_content_provider_exception_error, extraInfo);
+                }
+                bundle.putString(DocumentsContract.EXTRA_ERROR, extraInfo);
+                bundle.putString(DocumentsContract.EXTRA_INFO, context.getString(R.string.virtual_content_provider_exception_advice));
+                ExtrasMatrixCursor errorCursor = new ExtrasMatrixCursor(DEFAULT_DOCUMENT_PROJECTION, bundle);
+                if (bundle.getBoolean(DocumentsContract.EXTRA_LOADING, false)) {
+                    Uri targetUri = buildUriFromId(getRootedDocumentId(getShortId(originalParentDocId)));
+                    errorCursor.setNotificationUri(context.getContentResolver(), targetUri);
+                }
+                return errorCursor;
+            }
+            Arrays.sort(directFiles, decodeSorting(sortOrder));
+            int flags = getFlags(remoteItem);
+            for (ListItem item : directFiles) {
+                String shortId = remoteName + ":" + getRelativeItemPath(item.path);
+                fsCache.put(shortId, item);
+                remoteState.put(shortId, item, FsStateNode.CACHED);
+                Object[] resultValues = getForProjection(item, getRootedDocumentId(shortId), projection);
+                result.addRow(resultValues);
+            }
+            return result;
         }
     }
 
@@ -1273,45 +1277,53 @@ public class VirtualContentProvider extends SingleRootProvider {
             extras.putString(DocumentsContract.EXTRA_ERROR, context.getString(R.string.virtual_content_provider_service_error));
             return new ExtrasMatrixCursor(projection, extras);
         }
-        try (MatrixCursor cursor = new MatrixCursor(projection)) {
+        MatrixCursor cursor = new MatrixCursor(projection);
+        try {
             final Uri notificationUri;
             if (null != remoteName) {
                 notificationUri = buildUriFromRemote(remoteName);
             } else {
                 notificationUri = buildRemotesUri();
             }
-            cursor.setNotificationUri(getContext().getContentResolver(), notificationUri);
+            cursor.setNotificationUri(context.getContentResolver(), notificationUri);
 
             CompletableFuture.runAsync(this::reloadRemotesIfRequired, asyncExc).thenRun(() -> {
-                getContext().getContentResolver().notifyChange(notificationUri, null);
+                context.getContentResolver().notifyChange(notificationUri, null);
             });
 
             // Todo: don't call this on main thread. Instead, use cached + update strategy.
             //Set<Map.Entry<String, RcloneRcd.ConfigDumpRemote>> entries = rcd.configDump().entrySet();
             if (null == remotes || remotes.isEmpty()) {
+                cursor.close();
                 Bundle extras = new Bundle(1);
                 extras.putString(DocumentsContract.EXTRA_INFO, context.getString(R.string.virtual_content_provider_no_remotes));
                 FLog.d(TAG, "getRemotesAsCursor: No remotes, returning empty cursor");
-                return new ExtrasMatrixCursor(projection, extras);
+                ExtrasMatrixCursor emptyCursor = new ExtrasMatrixCursor(projection, extras);
+                emptyCursor.setNotificationUri(context.getContentResolver(), notificationUri);
+                return emptyCursor;
             }
             for (RemoteItem item : remotes.values()) {
                 // Exclude from results - no need to loop back
-                if (null != remoteName && remoteName.equals(item.getName())) {
+                if (null != remoteName) {
                     if (remoteName.equals(item.getName())) {
                         cursor.addRow(getForProjection(item, projection));
                         break;
                     }
                 } else {
                     cursor.addRow(getForProjection(item, projection));
-                };
+                }
             }
             FLog.d(TAG, "getRemotesAsCursor: Returning cursor with remotes");
             return cursor;
         } catch (RcloneRcd.RcdOpException e) {
+            cursor.close();
             Bundle extras = new Bundle(1);
             extras.putString(DocumentsContract.EXTRA_ERROR,
                     context.getString(R.string.virtual_content_provider_exception_error, e.getError()));
             return new ExtrasMatrixCursor(projection, extras);
+        } catch (RuntimeException e) {
+            cursor.close();
+            throw e;
         }
     }
 

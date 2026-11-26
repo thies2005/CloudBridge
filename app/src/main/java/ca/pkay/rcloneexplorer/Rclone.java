@@ -596,33 +596,36 @@ public class Rclone {
             if (progressListener != null) {
                 progressListener.onProgress(0, 0L, null);
             }
-            StringBuilder output = new StringBuilder();
+            List<FileItem> fileItemList = new ArrayList<>();
+            String prefix = (path == null || path.compareTo("//" + remote.getName()) == 0 || path.isEmpty())
+                    ? ""
+                    : path + "/";
+            boolean hitMaxItems = false;
             int itemsFound = 0;
             long bytesFound = 0L;
             long lastProgressMs = 0L;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    output.append(line);
                     String trimmed = line.trim();
                     if (trimmed.startsWith("{")) {
+                        String jsonText = trimmed.endsWith(",")
+                                ? trimmed.substring(0, trimmed.length() - 1)
+                                : trimmed;
+                        JSONObject entryJson = new JSONObject(jsonText);
+                        FileItem item = parseLsJsonObject(remote, prefix, entryJson, startAtRoot);
+                        fileItemList.add(item);
                         itemsFound++;
-                        String entryPath = null;
-                        long entrySize = 0L;
-                        try {
-                            String jsonText = trimmed.endsWith(",")
-                                    ? trimmed.substring(0, trimmed.length() - 1)
-                                    : trimmed;
-                            JSONObject entryJson = new JSONObject(jsonText);
-                            entrySize = Math.max(0L, entryJson.optLong("Size", 0L));
-                            entryPath = entryJson.optString("Path", null);
-                        } catch (JSONException ignored) {
-                        }
-                        bytesFound += entrySize;
+                        bytesFound += Math.max(0L, item.getSize());
                         long now = System.currentTimeMillis();
                         if (progressListener != null && (itemsFound == 1 || now - lastProgressMs >= 200L)) {
                             lastProgressMs = now;
-                            progressListener.onProgress(itemsFound, bytesFound, entryPath);
+                            progressListener.onProgress(itemsFound, bytesFound, entryJson.optString("Path", null));
+                        }
+                        if (maxItems > 0 && fileItemList.size() >= maxItems) {
+                            hitMaxItems = true;
+                            process.destroy();
+                            break;
                         }
                     }
                 }
@@ -631,6 +634,10 @@ public class Rclone {
                 progressListener.onProgress(itemsFound, bytesFound, null);
             }
             process.waitFor();
+            if (hitMaxItems) {
+                discardDiagnostics(process);
+                return fileItemList;
+            }
             if (process.exitValue() != 0 && (process.exitValue() != 6 || !remote.isRemoteType(RemoteItem.LOCAL, RemoteItem.ALIAS))) {
                 logErrorOutput(process);
                 return null;
@@ -640,15 +647,17 @@ public class Rclone {
             } else {
                 discardDiagnostics(process);
             }
-            JSONArray results = new JSONArray(output.toString());
-            return parseLsJsonArray(remote, path, results, startAtRoot, maxItems, process);
+            return fileItemList;
         } catch (InterruptedException e) {
             if (process != null) process.destroy();
             Thread.currentThread().interrupt();
             logErrorOutput(process);
             return null;
         } catch (IOException | JSONException e) {
-            logErrorOutput(process);
+            if (process != null) {
+                process.destroy();
+                discardDiagnostics(process);
+            }
             FLog.e(TAG, "getDirectoryContentRecursive: failed", e);
             return null;
         } finally {
@@ -688,25 +697,7 @@ public class Rclone {
         for (int i = 0; i < count; i++) {
             try {
                 JSONObject jsonObject = results.getJSONObject(i);
-                String filePath = prefix + jsonObject.getString("Path");
-                String fileName = jsonObject.getString("Name");
-                long fileSize = jsonObject.getLong("Size");
-                String fileModTime = jsonObject.getString("ModTime");
-                boolean fileIsDir = jsonObject.getBoolean("IsDir");
-                String mimeType = jsonObject.getString("MimeType");
-
-                if (remote.isCrypt()) {
-                    String extension = FileItem.extractExtension(fileName);
-                    if (!extension.isEmpty()) {
-                        String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
-                        if (type != null) {
-                            mimeType = type;
-                        }
-                    }
-                }
-
-                FileItem fileItem = new FileItem(remote, filePath, fileName, fileSize, fileModTime, mimeType, fileIsDir, startAtRoot);
-                fileItemList.add(fileItem);
+                fileItemList.add(parseLsJsonObject(remote, prefix, jsonObject, startAtRoot));
             } catch (JSONException e) {
                 logErrorOutput(process);
                 FLog.e(TAG, "parseLsJsonArray: Could not decode JSON", e);
@@ -714,6 +705,31 @@ public class Rclone {
             }
         }
         return fileItemList;
+    }
+
+    private FileItem parseLsJsonObject(
+            RemoteItem remote,
+            String prefix,
+            JSONObject jsonObject,
+            boolean startAtRoot) throws JSONException {
+        String filePath = prefix + jsonObject.getString("Path");
+        String fileName = jsonObject.getString("Name");
+        long fileSize = jsonObject.getLong("Size");
+        String fileModTime = jsonObject.getString("ModTime");
+        boolean fileIsDir = jsonObject.getBoolean("IsDir");
+        String mimeType = jsonObject.getString("MimeType");
+
+        if (remote.isCrypt()) {
+            String extension = FileItem.extractExtension(fileName);
+            if (!extension.isEmpty()) {
+                String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+                if (type != null) {
+                    mimeType = type;
+                }
+            }
+        }
+
+        return new FileItem(remote, filePath, fileName, fileSize, fileModTime, mimeType, fileIsDir, startAtRoot);
     }
 
     public List<RemoteItem> getRemotes() {
@@ -1483,7 +1499,7 @@ public class Rclone {
         // per-file delete paths, and an empty path yields exactly the remote root.
         String root = buildFullRemotePath(remote, "");
         String[] command = createCommandWithOptions("delete",
-                "--files-from", filesFrom.getAbsolutePath(),
+                "--files-from-raw", filesFrom.getAbsolutePath(),
                 "--transfers", getTransfers(),
                 "--stats=1s", "--stats-log-level", "NOTICE", "--use-json-log",
                 "--contimeout", "30s", "--timeout", "2m",
@@ -2446,31 +2462,53 @@ public class Rclone {
 
     public boolean isValidConfig(String path) {
         String[] command = {rclone, "-vvv", "--ask-password=false", "--config", path, "listremotes"};
+        Process process = null;
         try {
-            Process process = getRuntimeProcess(command);
-            process.waitFor();
-            try (BufferedReader stdOut = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                 BufferedReader stdErr = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            process = getRuntimeProcess(command);
+            final java.util.concurrent.atomic.AtomicBoolean stdErrParseError = new java.util.concurrent.atomic.AtomicBoolean(false);
+            final Process procRef = process;
+            Thread stderrDrain = new Thread(() -> {
+                try (BufferedReader stdErr = new BufferedReader(new InputStreamReader(procRef.getErrorStream()))) {
+                    String errLine;
+                    while ((errLine = stdErr.readLine()) != null) {
+                        if (errLine.contains("could not parse line")) {
+                            stdErrParseError.set(true);
+                        }
+                    }
+                } catch (IOException ignored) {
+                }
+            }, "rclone-config-stderr");
+            stderrDrain.setDaemon(true);
+            stderrDrain.start();
+
+            boolean valid = true;
+            try (BufferedReader stdOut = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = stdOut.readLine()) != null) {
                     if (line.contains("could not parse line")) {
-                        return false;
+                        valid = false;
                     }
                     String trimmed = line.trim();
                     if (trimmed.endsWith(":")) {
                         String remoteName = trimmed.substring(0, trimmed.length() - 1);
                         if (remoteName.isEmpty() || remoteName.startsWith("-") || !remoteName.matches("^[A-Za-z0-9_][A-Za-z0-9_. -]*$")) {
-                            return false;
+                            valid = false;
                         }
                     }
                 }
-                while ((line = stdErr.readLine()) != null) {
-                    if (line.contains("could not parse line")) {
-                        return false;
-                    }
-                }
+            }
+            process.waitFor();
+            stderrDrain.join(2000);
+            if (!valid || stdErrParseError.get()) {
+                return false;
             }
         } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            if (process != null) {
+                process.destroy();
+            }
             return false;
         }
         return true;

@@ -110,9 +110,11 @@ public class ServeDialog extends DialogFragment {
         user.addTextChangedListener(credentialsWatcher);
         password.addTextChangedListener(credentialsWatcher);
 
-        dialog = builder.show();
-        updateProtocolDependentUi(protocol.getCheckedRadioButtonId());
-        updateOkButtonState();
+        dialog = builder.create();
+        dialog.setOnShowListener(d -> {
+            updateProtocolDependentUi(protocol.getCheckedRadioButtonId());
+            updateOkButtonState();
+        });
         return dialog;
     }
 
@@ -150,7 +152,10 @@ public class ServeDialog extends DialogFragment {
                 || isDlna
                 || (!user.getText().toString().trim().isEmpty()
                 && !password.getText().toString().trim().isEmpty());
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(canProceed);
+        android.widget.Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive != null) {
+            positive.setEnabled(canProceed);
+        }
     }
 
     @Override

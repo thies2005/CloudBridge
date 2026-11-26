@@ -46,7 +46,11 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
         try {
             Uri fileUri = DocumentsContract.createDocument(context.getContentResolver(), parentUri,
                     mimeType, getDisplayName(uri));
-            sfa.writeFile(fileUri, content, len);
+            if (fileUri == null) {
+                Log.w(TAG, "SAF provider failed to create document: " + uri);
+                throw new FileAccessError();
+            }
+            writeFile(fileUri, content, len);
             //return sfa.readMeta(fileUri);
             return readMeta(uri);
         } catch (FileNotFoundException e) {
@@ -129,7 +133,8 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
                 DocumentsContract.Document.COLUMN_SIZE
         }, null, null, null)) {
             if (null == cursor) {
-                return results;
+                Log.w(TAG, "SAF provider returned null cursor for " + childDocsUri);
+                throw new FileAccessError();
             }
             while (cursor.moveToNext()) {
                 final String documentId = cursor.getString(0);
@@ -151,8 +156,11 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
                 );
                 results.add(item);
             }
+        } catch (SafException e) {
+            throw e;
         } catch (Exception e) {
             Log.w("DocumentsContractAccess", "Failed query: " + e);
+            throw new FileAccessError(e);
         }
         return results;
     }
@@ -233,7 +241,9 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
         }
         // Write directly through the ContentResolver with a 64 KB buffer instead of delegating
         // to SafFileAccess, avoiding an extra indirection and a much smaller copy buffer.
-        try (OutputStream os = context.getContentResolver().openOutputStream(documentUri)) {
+        // Use "wt" so overwriting an existing file truncates any stale trailing bytes on API 29+,
+        // falling back to "w" for SAF providers that reject truncate mode.
+        try (OutputStream os = openOutputStreamTruncating(documentUri)) {
             if (os == null) {
                 throw new FileAccessError();
             }
@@ -243,6 +253,14 @@ public class DocumentsContractAccess implements ItemAccess<SafFastItem> {
             throw new ItemNotFoundException(e);
         } catch (IOException e) {
             throw new FileAccessError(e);
+        }
+    }
+
+    private OutputStream openOutputStreamTruncating(Uri documentUri) throws FileNotFoundException {
+        try {
+            return context.getContentResolver().openOutputStream(documentUri, "wt");
+        } catch (IllegalArgumentException | UnsupportedOperationException e) {
+            return context.getContentResolver().openOutputStream(documentUri, "w");
         }
     }
 

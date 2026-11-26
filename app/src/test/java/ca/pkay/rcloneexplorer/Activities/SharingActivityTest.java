@@ -47,4 +47,18 @@ public class SharingActivityTest {
         assertTrue(SharingActivity.isResolvedOwnProvider("de.schuelken.cloudbridge", 10999, "de.schuelken.cloudbridge", 10234));
         assertTrue(SharingActivity.isResolvedOwnProvider("com.other.pkg", 10234, "de.schuelken.cloudbridge", 10234));
     }
+
+    @Test
+    public void blocksInternalDataDirBindMountsAndProcSelf() {
+        String dataDir = "/data/user/0/de.schuelken.cloudbridge";
+        String pkg = "de.schuelken.cloudbridge";
+        assertTrue(SharingActivity.isInternalPrivatePath(dataDir + "/files/rclone.conf", dataDir, pkg));
+        assertTrue(SharingActivity.isInternalPrivatePath("/data/data/" + pkg + "/files/rclone.conf", dataDir, pkg));
+        assertTrue(SharingActivity.isInternalPrivatePath("/data/user/10/" + pkg + "/files/rclone.conf", dataDir, pkg));
+        assertTrue(SharingActivity.isInternalPrivatePath("/data/user_de/0/" + pkg + "/shared_prefs/a.xml", dataDir, pkg));
+        assertTrue(SharingActivity.isInternalPrivatePath("/proc/self/fd/3", dataDir, pkg));
+        assertTrue(SharingActivity.isInternalPrivatePath("/proc/1234/environ", dataDir, pkg));
+        assertTrue(SharingActivity.isInternalPrivatePath("/proc", dataDir, pkg));
+        assertFalse(SharingActivity.isInternalPrivatePath("/storage/emulated/0/Download/photo.jpg", dataDir, pkg));
+    }
 }

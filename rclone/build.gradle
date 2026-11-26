@@ -268,23 +268,38 @@ task checkoutRclone(dependsOn: createRcloneModule) {
             return
         }
 
-        if (!srcDir.exists()) {
+        if (!new File(srcDir, '.git').exists()) {
+            if (srcDir.exists()) {
+                delete srcDir
+            }
             println "Cloning rclone from ${RCLONE_REPO_URL} (ref: ${RCLONE_REF}) ..."
             exec {
                 workingDir CACHE_PATH
                 commandLine 'git', 'clone', '--no-tags', RCLONE_REPO_URL, 'rclone-src'
             }
+        } else {
+            exec {
+                workingDir srcDir.absolutePath
+                commandLine 'git', 'remote', 'set-url', 'origin', RCLONE_REPO_URL
+            }
         }
 
-        // Always sync to the requested ref so upgrades work without manual cache clears
+        // Always sync to the requested ref so switching forks or upgrading works without manual cache clears
         println "Syncing rclone source to ref: ${RCLONE_REF}"
-        exec {
+        def directFetch = exec {
             workingDir srcDir.absolutePath
-            commandLine 'git', 'fetch', 'origin', '--tags'
+            commandLine 'git', 'fetch', '--no-tags', 'origin', RCLONE_REF
+            ignoreExitValue = true
+        }
+        if (directFetch.exitValue != 0) {
+            exec {
+                workingDir srcDir.absolutePath
+                commandLine 'git', 'fetch', 'origin', '--tags'
+            }
         }
         exec {
             workingDir srcDir.absolutePath
-            commandLine 'git', 'checkout', RCLONE_REF
+            commandLine 'git', 'checkout', '--detach', RCLONE_REF
         }
 
         // Verify resolved commit matches pinned SHA and print for traceability

@@ -75,22 +75,23 @@ public final class ProxyPasswordStore {
     public static void setPassword(@NonNull Context context, @Nullable String password) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         String legacyKey = context.getString(R.string.pref_key_proxy_password);
-        SharedPreferences.Editor editor = prefs.edit().remove(legacyKey);
         if (password == null || password.isEmpty()) {
-            editor.remove(PREF_KEY_ENCRYPTED).apply();
+            prefs.edit().remove(legacyKey).remove(PREF_KEY_ENCRYPTED).apply();
             return;
         }
         try {
             SecretKey key = getOrCreateKey(true);
             if (key == null) {
-                editor.remove(PREF_KEY_ENCRYPTED).apply();
+                FLog.e("ProxyPasswordStore", "Failed to obtain encryption key for proxy password");
                 return;
             }
             byte[] encoded = encryptWithKey(key, password, SECURE_RANDOM);
-            editor.putString(PREF_KEY_ENCRYPTED, Base64.encodeToString(encoded, Base64.NO_WRAP)).apply();
+            prefs.edit()
+                    .remove(legacyKey)
+                    .putString(PREF_KEY_ENCRYPTED, Base64.encodeToString(encoded, Base64.NO_WRAP))
+                    .apply();
         } catch (GeneralSecurityException e) {
-            FLog.e("ProxyPasswordStore", "Failed to encrypt proxy password");
-            editor.remove(PREF_KEY_ENCRYPTED).apply();
+            FLog.e("ProxyPasswordStore", "Failed to encrypt proxy password", e);
         }
     }
 
@@ -134,10 +135,14 @@ public final class ProxyPasswordStore {
     @VisibleForTesting
     public static byte[] encryptWithKey(@NonNull SecretKey key, @NonNull String plaintext, @NonNull SecureRandom random)
             throws GeneralSecurityException {
-        byte[] iv = new byte[GCM_IV_BYTES];
-        random.nextBytes(iv);
         Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-        cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_BITS, iv));
+        // AndroidKeyStore keys with setRandomizedEncryptionRequired(true) reject caller-provided
+        // GCMParameterSpec IVs and require the provider to generate the IV on init(ENCRYPT_MODE, key).
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        byte[] iv = cipher.getIV();
+        if (iv == null || iv.length != GCM_IV_BYTES) {
+            throw new GeneralSecurityException("Unexpected GCM IV length");
+        }
         byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
         byte[] out = new byte[1 + iv.length + ciphertext.length];
         out[0] = VERSION_V1;
