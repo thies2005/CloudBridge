@@ -39,7 +39,8 @@
                 android:paddingTop="12dp"
                 android:paddingEnd="12dp"
                 android:paddingBottom="12dp"
-                android:src="@drawable/ic_create_new_folder" />
+                android:src="@drawable/ic_create_new_folder"
+                app:tint="?attr/colorOnPrimaryContainer" />
 
 
             <View

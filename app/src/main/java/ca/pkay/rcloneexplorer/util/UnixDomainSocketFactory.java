@@ -150,12 +150,13 @@ public final class UnixDomainSocketFactory extends SocketFactory {
 
         @Override
         public boolean isConnected() {
-            return connected && !closed && localSocket.isConnected();
+            return connected && !closed;
         }
 
         @Override
         public boolean isClosed() {
-            return closed || localSocket.isClosed();
+            // Android's LocalSocket.isClosed() unconditionally throws UnsupportedOperationException.
+            return closed;
         }
 
         @Override

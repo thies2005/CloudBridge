@@ -6,6 +6,7 @@
         android:id="@+id/action_search"
         android:icon="@drawable/ic_search"
         android:title="@string/search"
+        app:iconTint="?attr/colorOnSurfaceVariant"
         app:showAsAction="always" />
 
     <item

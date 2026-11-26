@@ -493,7 +493,10 @@ public class FileExplorerRecyclerViewAdapter extends RecyclerView.Adapter<FileEx
     }
 
     private int getSelectionBackgroundColor() {
-        return context.getColor(R.color.selectedItem);
+        return com.google.android.material.color.MaterialColors.getColor(
+                context,
+                com.google.android.material.R.attr.colorSecondaryContainer,
+                context.getColor(R.color.selectedItem));
     }
 
     private void onLongClickAction(FileItem item, ViewHolder holder) {
