@@ -13,6 +13,7 @@ import androidx.annotation.StringRes
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
 import androidx.work.ForegroundInfo
+import androidx.work.WorkInfo
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import ca.pkay.rcloneexplorer.Items.FileItem
@@ -39,6 +40,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 import android.util.Log
 import android.webkit.MimeTypeMap
@@ -83,35 +85,38 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
 
     // States
     private val sIsLoggingEnabled = mPreferences.getBoolean(getString(R.string.pref_key_logs), false)
-    private var sConnectivityChanged = false
-
-    private var sRcloneProcess: Process? = null
+    private val rcloneProcess = TransferProcess()
 
     // A batch delete runs several rclone processes one after another; spawn thunks keep later
     // processes from starting (and piling up on the remote) until the previous one is done.
     private val sPendingProcesses = ArrayDeque<() -> Process?>()
-    private val sCleanupFiles = ArrayList<File>()
+    private var deleteManifest: File? = null
     private var sDeleteEntries: List<DeleteEntry> = emptyList()
     private val statusObject = StatusObject(mContext)
-    private var failureReason = FAILURE_REASON.NO_FAILURE
-    private var endNotificationAlreadyPosted = false
-    private var silentRun = false
+    @Volatile private var failureReason = FAILURE_REASON.NO_FAILURE
+    private val endNotificationAlreadyPosted = AtomicBoolean()
     private val ongoingNotificationID = Random.nextInt()
 
 
     private var mTitle: String = mNotificationManager?.initialTitle ?: ""
 
     override fun doWork(): Result {
+        registerBroadcastReceivers()
         try {
             return runOperation()
         } finally {
-            if (inputData.getBoolean(DELETE_STAGED_UPLOAD, false)) {
-                inputData.getString(UPLOAD_FILE)?.let {
-                    val staged = File(it)
-                    val parent = staged.parentFile
-                    if (parent?.parentFile == File(mContext.cacheDir, "share_staging")) {
-                        staged.delete()
-                        parent.delete()
+            mContext.unregisterReceiver(connectivityChangeBroadcastReceiver)
+            // A system stop can re-enqueue this same request with its original input paths.
+            if (!isStopped || stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP) {
+                deleteManifest?.delete()
+                if (inputData.getBoolean(DELETE_STAGED_UPLOAD, false)) {
+                    inputData.getString(UPLOAD_FILE)?.let {
+                        val staged = File(it)
+                        val parent = staged.parentFile
+                        if (parent?.parentFile == File(mContext.cacheDir, "share_staging")) {
+                            staged.delete()
+                            parent.delete()
+                        }
                     }
                 }
             }
@@ -119,8 +124,6 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
     }
 
     private fun runOperation(): Result {
-
-        registerBroadcastReceivers()
 
         if (inputData.keyValueMap.containsKey(EPHEMERAL_TYPE)){
             val type = Type.valueOf(inputData.getString(EPHEMERAL_TYPE) ?: "")
@@ -149,6 +152,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                 // do not instantiate rclone when you dont want it to run.
                 // It will immediately run!
                 val transferLocks = TransferLocks.acquire(mContext, "ephemeral")
+                var filesFrom: File? = null
                 try {
                     when(type){
                     Type.DOWNLOAD -> {
@@ -197,10 +201,10 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                             log("$DELETE_MANIFEST: the delete manifest is missing!")
                             return Result.failure()
                         }
-                        val entries = DeleteManifest.decode(manifestFile.readText())
                         // Keep the manifest until the batch finishes: if the process dies
                         // mid-batch, WorkManager re-runs the worker and needs it again.
-                        sCleanupFiles.add(manifestFile)
+                        deleteManifest = manifestFile
+                        val entries = DeleteManifest.decode(manifestFile.readText())
                         if (entries.isEmpty()) {
                             log("$DELETE_MANIFEST: no deletable items were passed!")
                             return Result.failure()
@@ -212,10 +216,10 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                         val partition = DeleteManifest.partition(entries)
                         val rclone = Rclone(mContext)
                         if (partition.batchableFiles.isNotEmpty()) {
-                            val filesFrom = File(mContext.cacheDir, "delete-files-from-$id.txt")
-                            filesFrom.writeText(DeleteManifest.filesFromLines(partition.batchableFiles).joinToString("\n"))
-                            sCleanupFiles.add(filesFrom)
-                            sPendingProcesses.add { rclone.deleteFilesFrom(remoteItem, filesFrom) }
+                            val listFile = File.createTempFile("delete-files-from-", ".txt", mContext.cacheDir)
+                            filesFrom = listFile
+                            listFile.writeText(DeleteManifest.filesFromLines(partition.batchableFiles).joinToString("\n"))
+                            sPendingProcesses.add { rclone.deleteFilesFrom(remoteItem, listFile) }
                         }
                         for (dir in partition.dirs) {
                             sPendingProcesses.add { rclone.purgeItem(remoteItem, dir.path) }
@@ -232,7 +236,7 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
                 handleSync(mTitle)
                 } finally {
                     transferLocks?.release()
-                    sCleanupFiles.forEach { it.delete() }
+                    filesFrom?.delete()
                 }
             } else {
                 log("Preconditions are not met!")
@@ -257,18 +261,10 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
 
     override fun onStopped() {
         super.onStopped()
+        rcloneProcess.stop()
         SyncLog.info(mContext, mTitle, mContext.getString(R.string.operation_sync_cancelled))
         SyncLog.info(mContext, mTitle, statusObject.toString())
         failureReason = FAILURE_REASON.CANCELLED
-        finishWork()
-    }
-
-    private fun finishWork() {
-        sRcloneProcess?.destroy()
-        try {
-            mContext.unregisterReceiver(connectivityChangeBroadcastReceiver)
-        } catch (_: IllegalArgumentException) {
-        }
         postSync()
     }
 
@@ -292,13 +288,10 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             // Fold the finished process's deletions into the running total; its stats are
             // replaced as soon as the next process starts reporting.
             statusObject.accumulateDeletions()
-            sRcloneProcess = sPendingProcesses.removeFirst().invoke()
-            if (sRcloneProcess == null) {
+            if (rcloneProcess.run(sPendingProcesses.removeFirst()) { readProcess(it, title) } == null && !isStopped) {
                 failureReason = FAILURE_REASON.RCLONE_ERROR
                 log("Sync: Rclone process could not be started")
-                continue
             }
-            readProcess(sRcloneProcess!!, title)
         }
         mNotificationManager?.cancelSyncNotification(ongoingNotificationID)
     }
@@ -363,24 +356,20 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
     }
 
     private fun postSync() {
-        if (endNotificationAlreadyPosted) {
-            return
-        }
-        if (silentRun) {
+        if (!endNotificationAlreadyPosted.compareAndSet(false, true)) {
             return
         }
 
         val notificationId = System.currentTimeMillis().toInt()
 
         var content = mContext.getString(R.string.operation_failed_unknown, mTitle)
-        when (failureReason) {
+        when (if (isStopped) FAILURE_REASON.CANCELLED else failureReason) {
             FAILURE_REASON.NO_FAILURE -> {
                 showSuccessNotification(notificationId)
                 return
             }
             FAILURE_REASON.CANCELLED -> {
                 showCancelledNotification(notificationId)
-                endNotificationAlreadyPosted = true
                 return
             }
             FAILURE_REASON.NO_TASK -> {
@@ -400,8 +389,6 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
             }
         }
         showFailNotification(notificationId, content)
-        endNotificationAlreadyPosted = true
-        finishWork()
     }
 
     private fun showCancelledNotification(notificationId: Int) {
@@ -525,10 +512,9 @@ class EphemeralWorker (private var mContext: Context, workerParams: WorkerParame
     private val connectivityChangeBroadcastReceiver: BroadcastReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if(endNotificationAlreadyPosted){
+                if (endNotificationAlreadyPosted.get()) {
                     return
                 }
-                sConnectivityChanged = true
                 failureReason = FAILURE_REASON.CONNECTIVITY_CHANGED
             }
         }

@@ -45,6 +45,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -719,12 +721,10 @@ public class VirtualContentProvider extends SingleRootProvider {
         if (!acquireRcd()) {
             throw new FileNotFoundException();
         }
-        MaxWait lock = new MaxWait(5000);
-        OnJobFinishListener listener = new OnJobFinishListener(lock) {
+        OnJobFinishListener listener = new OnJobFinishListener() {
             @Override
             void onFinish(RcloneRcd.JobStatusResponse status) {
                 FLog.v(TAG, "rename finished with: %s at %d", status.success, status.endTime);
-                lock.release();
                 if (!status.success) {
                     FLog.w(TAG, "renameDocument: failed to rename %s to %s", srcPath, dstPath);
                 } else {
@@ -738,9 +738,7 @@ public class VirtualContentProvider extends SingleRootProvider {
         };
         try {
             rcd.moveFile(remoteName, srcPath, remoteName, dstPath, listener);
-            if (!lock.await()) {
-                FLog.w(TAG, "renameDocument: timed out waiting for rcd job (still running)");
-            }
+            listener.awaitSuccess(5000);
             return targetDocId;
         } catch (RcloneRcd.RcdOpException e) {
             FLog.e(TAG, "RCD move failure", e);
@@ -748,78 +746,35 @@ public class VirtualContentProvider extends SingleRootProvider {
         }
     }
 
-    /**
-     * Finish listener that will notify() on the lock object on completion
-     */
-    private static class OnJobFinishListener implements RcloneRcd.JobStatusHandler {
-
-        private final MaxWait lock;
-
-        public OnJobFinishListener(MaxWait lock) {
-            this.lock = lock;
-        }
+    static class OnJobFinishListener implements RcloneRcd.JobStatusHandler {
+        private final CountDownLatch completed = new CountDownLatch(1);
+        private boolean success;
 
         @Override
         public final void handleJobStatus(RcloneRcd.JobStatusResponse jobStatusResponse) {
-            if (null != lock) {
-                // markCompleted() sets the done flag and notifies any thread blocked in await().
-                lock.markCompleted();
+            success = jobStatusResponse.success;
+            try {
+                onFinish(jobStatusResponse);
+            } finally {
+                completed.countDown();
             }
-            onFinish(jobStatusResponse);
+        }
+
+        void awaitSuccess(long timeoutMs) throws FileNotFoundException {
+            try {
+                if (!completed.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                    throw new FileNotFoundException("Timed out waiting for rclone; the operation may still be running");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new FileNotFoundException("Interrupted while waiting for rclone");
+            }
+            if (!success) {
+                throw new FileNotFoundException("The rclone operation failed");
+            }
         }
 
         void onFinish(RcloneRcd.JobStatusResponse jobStatusResponse) {
-        }
-    }
-
-    /**
-     * An inefficient but simple lock to increase compatibility with clients
-     * that don't understand change notifications.
-     */
-    private static class MaxWait {
-
-        private final long timeout;
-        private final Object lock;
-        private volatile boolean completed;
-
-        MaxWait(long timeout) {
-            this.timeout = timeout;
-            this.lock = new Object();
-        }
-
-        /**
-         * Await release of
-         * @return {@code true} if the rcd job signalled completion, {@code false} if the
-         *         timeout elapsed first (the job may still be running).
-         */
-        public boolean await() {
-            synchronized (lock) {
-                if (!completed) {
-                    try {
-                        lock.wait(timeout);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-                return completed;
-            }
-        }
-
-        /** Marks the awaited job as completed and releases a blocked await(). */
-        public void markCompleted() {
-            synchronized (lock) {
-                completed = true;
-                lock.notify();
-            }
-        }
-
-        /** Equivalent to {@link #markCompleted()}; kept for call-site compatibility. */
-        public void release() {
-            markCompleted();
-        }
-
-        public boolean isCompleted() {
-            return completed;
         }
     }
 
@@ -840,15 +795,15 @@ public class VirtualContentProvider extends SingleRootProvider {
             throw new FileNotFoundException();
         }
 
-        MaxWait lock = new MaxWait(10000);
-        OnJobFinishListener listener = new OnJobFinishListener(lock) {
+        OnJobFinishListener listener = new OnJobFinishListener() {
             @Override
             void onFinish(RcloneRcd.JobStatusResponse jobStatusResponse) {
                 FLog.v(TAG, "deleteDocument/onFinish(): success=%s", jobStatusResponse.success);
-                fsCache.remove(documentId);
-                remoteState.remove(documentId);
-                revokeDocumentPermission(rootedDocumentId);
-                lock.release();
+                if (jobStatusResponse.success) {
+                    fsCache.remove(documentId);
+                    remoteState.remove(documentId);
+                    revokeDocumentPermission(rootedDocumentId);
+                }
                 notifyChange(rootedDocumentId);
             }
         };
@@ -864,11 +819,10 @@ public class VirtualContentProvider extends SingleRootProvider {
             } else {
                 rcd.deleteFile(remoteName, document.path, listener);
             }
-            if (!lock.await()) {
-                FLog.w(TAG, "deleteDocument: timed out waiting for rcd job (still running)");
-            }
+            listener.awaitSuccess(10000);
         } catch (RcloneRcd.RcdOpException e) {
             FLog.e(TAG, "deleteDocument() failed", e);
+            throw new FileNotFoundException();
         }
     }
 
@@ -892,14 +846,10 @@ public class VirtualContentProvider extends SingleRootProvider {
         final String dstPath = getRclonePath(targetDocumentId);
         final String dstRemoteName = getRemoteName(targetDocumentId);
 
-        // copyDocument is a data-transfer operation; allow up to 30s for the rcd job so we don't
-        // report success to the client while bytes are still moving.
-        final MaxWait lock = new MaxWait(30000);
-        OnJobFinishListener listener = new OnJobFinishListener(lock) {
+        OnJobFinishListener listener = new OnJobFinishListener() {
             @Override
             void onFinish(RcloneRcd.JobStatusResponse jobStatusResponse) {
                 FLog.v(TAG, "copyDocument/onFinish(): success=%s", jobStatusResponse.success);
-                lock.release();
                 notifyChange(targetDocumentId);
             }
         };
@@ -915,9 +865,7 @@ public class VirtualContentProvider extends SingleRootProvider {
             } else {
                 rcd.copyFile(srcRemoteName, document.path, dstRemoteName, dstPath, listener);
             }
-            if (!lock.await()) {
-                FLog.w(TAG, "copyDocument: timed out waiting for rcd job; client may see success before completion");
-            }
+            listener.awaitSuccess(30000);
             return getRootedDocumentId(targetDocumentId);
         } catch (RcloneRcd.RcdOpException e) {
             FLog.e(TAG, "copyDocument() failed", e);
@@ -941,16 +889,15 @@ public class VirtualContentProvider extends SingleRootProvider {
         }
 
         final String targetDocumentId = getTargetDocumentId(sourceDocumentId, targetParentDocumentId);
-        // moveDocument is a data-transfer operation; allow up to 30s for the rcd job.
-        MaxWait lock = new MaxWait(30000);
-        OnJobFinishListener listener = new OnJobFinishListener(lock) {
+        OnJobFinishListener listener = new OnJobFinishListener() {
             @Override
             void onFinish(RcloneRcd.JobStatusResponse status) {
                 FLog.v(TAG, "move finished with: %s at %d", status.success, status.endTime);
-                fsCache.remove(getNoRootId(sourceDocumentId));
-                remoteState.remove(getNoRootId(sourceDocumentId));
-                revokeDocumentPermission(rootedSrcDocId);
-                lock.release();
+                if (status.success) {
+                    fsCache.remove(getNoRootId(sourceDocumentId));
+                    remoteState.remove(getNoRootId(sourceDocumentId));
+                    revokeDocumentPermission(rootedSrcDocId);
+                }
                 notifyChange(rootedSrcDocId);
                 notifyChange(targetDocumentId);
             }
@@ -974,9 +921,7 @@ public class VirtualContentProvider extends SingleRootProvider {
                 rcd.moveFile(srcRemote, srcPath, dstRemote, dstPath, listener);
             }
 
-            if (!lock.await()) {
-                FLog.w(TAG, "moveDocument: timed out waiting for rcd job; client may see success before completion");
-            }
+            listener.awaitSuccess(30000);
             return getRootedDocumentId(targetDocumentId);
         } catch (RcloneRcd.RcdOpException e) {
             FLog.e(TAG, "moveDocument() failed", e);
