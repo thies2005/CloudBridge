@@ -22,29 +22,31 @@
 ![CloudBridge: Your files. Your connections. Powered by rclone for Android.](fastlane/metadata/android/en-US/images/featureGraphic.jpg)
 
 > [!NOTE]
-> **Google Play testing and F-Droid**
+> **Google Play Closed Testing and F-Droid**
 >
-> CloudBridge is currently being published on Google Play. To install and test it:
+> CloudBridge is currently in **Google Play Closed Testing** (Google requires 12 testers opted in for 14 days before unlocking the public Play Store listing). To install and test it:
 >
 > 1. Join the [CloudBridge testing group](https://groups.google.com/g/thies2005).
-> 2. Open the [CloudBridge test page](https://play.google.com/apps/test/de.schuelken.cloudbridge/16180) and follow the instructions to join the test and install the app from Google Play.
-> 3. Try the app and [report bugs or feedback](https://github.com/thies2005/CloudBridge/issues).
+> 2. Open the [Google Play opt-in page](https://play.google.com/apps/testing/de.schuelken.cloudbridge) and click **Become a tester**.
+> 3. Install from [Google Play](https://play.google.com/store/apps/details?id=de.schuelken.cloudbridge), keep it installed for 14 days, and [report bugs or feedback](https://github.com/thies2005/CloudBridge/issues).
 >
-> Use the same Google account for the group, the test page, and the Play Store on your Android device. Joining the group alone does not install the app.
+> Use the same Google account for the group, the opt-in page, and the Play Store app on your Android device (if you use multiple Google accounts in your browser, open the opt-in link in an Incognito tab). Joining the group alone does not install the app.
 >
 > F-Droid submission: [in review](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/56366); not listed yet. [Progress and publishing steps](docs/FDROID.md).
 
-CloudBridge brings your cloud storage and local files together on your Android phone or tablet. Browse folders, transfer documents, stream media, and schedule recurring tasks from one app. Connect providers such as Internxt and Drime, or import an existing rclone configuration.
+CloudBridge is an actively maintained continuation of [Round-Sync](https://github.com/newhinton/Round-Sync) (RCX / rcloneExplorer) that brings your cloud storage and local files together on your Android phone or tablet. It bundles **rclone directly on your device** — your credentials stay in local private storage and files transfer straight between your device and your cloud provider with no server in the middle.
 
-**Android 6.0+ · Open source · Material 3 · Light and dark themes**
+**Android 6.0+ · Open source (GPLv3) · Material 3 · Light, dark & AMOLED themes**
 
 ## What you can do
 
 | | Features |
 |---|---|
-| **Manage files** | Browse, view, upload, download, move, rename, and delete files and folders. |
-| **Connect your storage** | Use rclone-compatible providers. Setup is available in the app for supported providers; others require a configuration import. |
-| **Plan transfers** | Create copy or sync tasks and run them through scheduled triggers. |
+| **Manage files** | Browse, view, upload, download, move, rename, and delete files and folders across cloud and local storage. |
+| **Connect your storage** | Use rclone-compatible providers directly in the app or import an existing `rclone.conf`, including **Internxt** and **Drime**. |
+| **Persistent Internxt 2FA** | Sign in to Internxt with a one-time 6-digit 2FA code, or enable **Auto-Login (2FA Seed)** so CloudBridge automatically renews expiring sessions and keeps scheduled syncs running. |
+| **Search across drives** | Search the current folder, include subfolders, or use **Global Search** with an optional offline index and file type, size, and date filters. |
+| **Plan & track transfers** | Create copy or sync tasks, run them on scheduled triggers, and follow live transfer progress and ETA in Current Processes. |
 | **Use encryption** | Configure rclone Crypt remotes to encrypt files before uploading them. |
 | **Stream and serve** | Stream media or serve files and directories over HTTP, WebDAV, FTP, or DLNA. |
 | **Work with Android** | Share files from other apps and use the Storage Access Framework for SD cards and USB storage. |
@@ -55,9 +57,9 @@ Provider capabilities depend on the selected service and configuration. CloudBri
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="220" alt="CloudBridge connections to Google Drive, internal storage, and Internxt"><br><strong>Your storage</strong></td>
-    <td align="center" width="33%"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="220" alt="Folders inside an Internxt cloud storage connection"><br><strong>Your files</strong></td>
-    <td align="center" width="33%"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="220" alt="Scheduled photo and Google Drive transfer triggers"><br><strong>Your schedule</strong></td>
+    <td align="center" width="33%"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="220" alt="CloudBridge remotes list showing local storage and configured storage connections"><br><strong>Your storage</strong></td>
+    <td align="center" width="33%"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="220" alt="File browser showing folders and files in Material 3 dark theme"><br><strong>Your files</strong></td>
+    <td align="center" width="33%"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="220" alt="Global Search across indexed remotes with drive, type, size, and date filters"><br><strong>Global search</strong></td>
   </tr>
 </table>
 
