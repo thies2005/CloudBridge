@@ -74,8 +74,11 @@ create a release, commit, tag or push automatically.
 
 ## 3. Upload that release to Google Play
 
-1. Download `cloudbridge_v<version>-oss-release.aab` from the verified stable
-   GitHub release. Use that release's AAB rather than a development artifact.
+1. Download `cloudbridge_v<version>-play-release.aab` from the verified stable
+   GitHub release. For a local Play build, run
+   `./gradlew :app:bundlePlayRelease -PnoAbiSplits` with the Play upload key
+   configured. The Play build leaves app updates to Google Play and omits the
+   APK installation permission.
 2. In Play Console, open **Testing → Internal testing → Create new release**.
    Upload the AAB and add the release notes. Every new uploaded release needs
    a previously unused, increasing version code.

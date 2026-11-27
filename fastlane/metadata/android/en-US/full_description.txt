@@ -1,15 +1,21 @@
-CloudBridge is a cloud file manager for Android, powered by rclone. It helps you to manage your files, everywhere you go, on your local device or on most cloud providers.
+Manage cloud storage and local files together on Android. Browse folders, move and rename files, and upload or download what you need from your phone or tablet.
 
-* <b>File Management:</b> You can list, view, download, upload, move, rename, delete files and folders
-* <b>Streaming:</b> Stream media files, serve files and directories over FTP, HTTP, WebDAV or DLNA
-* <b>Syncing:</b> You can create tasks to automatically schedule syncs of your files
-* <b>Encryption:</b> Keep your files private on any cloud provider with 256 bit crypt remotes
-* <b>Many cloud providers:</b> Access most cloud storage providers via rclone config import, including Internxt and Drime
-* <b>Material Design:</b> Supports automatic dark theme in the style of Material 3
-* <b>Access everything:</b> Supports Storage Access Framework (SAF) for SD card and USB device access, regular storage devices and of course any cloud compatible with rclone
-* <b>Always up to date:</b> CloudBridge is regularly updated to the newest rclone version, so new providers and fixes arrive quickly
+CONNECT YOUR STORAGE
+Connect rclone-compatible services such as Internxt and Drime. Set up supported providers in the app, or import your existing rclone configuration.
 
-<b>Lineage & Credits:</b>
-CloudBridge is a continuation of great open-source work: it is a fork of Round-Sync (by Felix Nüsse / newhinton), which is a fork of RCX (by x0b), which was originally created as rcloneExplorer (by Patryk Kaczmarkiewicz / patrykcoding). CloudBridge is powered by rclone (by Nick Craig-Wood and contributors). Deep gratitude to all original authors and contributors!
+FIND FILES ACROSS DRIVES
+Search the current folder, include subfolders, or search across drives with offline indexing enabled. Narrow results by file type or size.
 
-CloudBridge is free and open source software (GPLv3). Questions, feedback or feature ideas? You are welcome to write me at 136268370+thies2005@users.noreply.github.com, or open an issue or pull request on GitHub: https://github.com/thies2005/CloudBridge
+SCHEDULE AND TRACK TRANSFERS
+Set up recurring copies and syncs, and see progress and estimated time remaining for active transfers when available.
+
+ENCRYPT, STREAM AND SERVE
+Encrypt files before upload with a configured rclone Crypt remote. Stream media or serve files and folders over HTTP, WebDAV, FTP or DLNA.
+
+WORK WITH ANDROID
+Share files to CloudBridge from other apps, and use Android’s file picker to access supported SD cards and USB storage. Choose from light, dark and AMOLED themes in the Material 3 Expressive interface.
+
+CloudBridge is open source under the GPLv3 license. It connects to storage you provide. Supported features depend on your provider and configuration.
+
+Documentation: https://thies2005.github.io/CloudBridge/
+Source code and support: https://github.com/thies2005/CloudBridge

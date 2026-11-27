@@ -1,1 +1,4 @@
-Material 3 Expressive UI (Light, Dark, AMOLED, edge-to-edge), Tier 1-3 search with drive mapping and filters, Current Processes view with ETA, unified caching, batched transfers, logs in Settings, and major SAF/VCP, KeyStore, and security reliability fixes.
+• Refreshed Material 3 interface with light, dark and AMOLED themes.
+• Search in folders, subfolders or across indexed drives. Filter by type and size.
+• See transfer progress and estimated time remaining in Current Processes.
+• Improved caching and reliability when browsing or transferring files.

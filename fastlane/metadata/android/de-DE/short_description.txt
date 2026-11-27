@@ -1,1 +1,1 @@
-Cloud-Dateien verwalten, übertragen und synchronisieren mit rclone
+Cloud-Dateien mit rclone verwalten, durchsuchen und synchronisieren.

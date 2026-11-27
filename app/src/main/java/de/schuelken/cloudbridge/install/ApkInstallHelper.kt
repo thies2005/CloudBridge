@@ -86,6 +86,10 @@ object ApkInstallHelper {
 
         val mimeType = resolveMimeType(name, declaredMimeType, openAs)
         if (mimeType == MIME_APK) {
+            if (BuildConfig.PLAY_DISTRIBUTION) {
+                Toast.makeText(context, R.string.no_app_to_open_file, Toast.LENGTH_SHORT).show()
+                return
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
                 val settingsIntent = Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -120,6 +124,8 @@ object ApkInstallHelper {
     @JvmStatic
     @JvmOverloads
     fun confirmAndInstallApk(context: Context, file: File, remoteLabel: String? = null) {
+        if (BuildConfig.PLAY_DISTRIBUTION) return
+
         val appContext = context.applicationContext
         val originLabel = if (remoteLabel.isNullOrBlank()) {
             context.getString(R.string.apk_install_origin_unknown)

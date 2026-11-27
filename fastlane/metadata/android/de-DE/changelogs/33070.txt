@@ -1,0 +1,4 @@
+• Eigene Google-Play-Edition mit Play-konformer Update-Verwaltung.
+• 16-KB-Speicherseitenausrichtung für 64-Bit-Bibliotheken (arm64-v8a und x86_64).
+• Material-3-Oberfläche mit hellem, dunklem und AMOLED-Design, indizierter Suche und Restzeitanzeige.
+• Verbesserter Zwischenspeicher und zuverlässigere Dateiübertragungen.

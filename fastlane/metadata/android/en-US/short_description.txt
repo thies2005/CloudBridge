@@ -1,1 +1,1 @@
-A file manager for Android, powered by rclone
+Manage, search and sync files across your cloud storage with rclone.

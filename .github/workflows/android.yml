@@ -206,7 +206,7 @@ jobs:
       - name: Run unit tests
         run: |
           set -euo pipefail
-          ./gradlew testOssDebugUnitTest :safdav:testDebugUnitTest
+          ./gradlew testOssDebugUnitTest testPlayDebugUnitTest :safdav:testDebugUnitTest
 
       - name: Run lint
         run: |
@@ -240,7 +240,7 @@ jobs:
           set -euo pipefail
           ./gradlew assembleOssRelease
 
-      - name: Build release AAB
+      - name: Build Play release AAB
         env:
           CB_STORE_FILE: .config/android/cloudbridge-release.keystore
           CB_STORE_PASSWORD: ${{ secrets.CB_STORE_PASSWORD }}
@@ -248,7 +248,7 @@ jobs:
           CB_KEY_PASSWORD: ${{ secrets.CB_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          ./gradlew bundleOssRelease -PnoAbiSplits
+          ./gradlew bundlePlayRelease -PnoAbiSplits
 
       - name: Stage artifacts, checksums, and verify signatures
         env:
@@ -269,7 +269,7 @@ jobs:
           while IFS= read -r -d '' artifact; do
             cp "$artifact" "$STAGING_DIR/"
             aab_count=$((aab_count + 1))
-          done < <(find app/build/outputs/bundle/ossRelease -maxdepth 1 -type f -name '*.aab' -print0)
+          done < <(find app/build/outputs/bundle/playRelease -maxdepth 1 -type f -name '*.aab' -print0)
 
           if [[ "$apk_count" -ne 5 || "$aab_count" -ne 1 ]]; then
             echo "Expected 5 ABI APKs and 1 AAB, found $apk_count APKs and $aab_count AABs." >&2

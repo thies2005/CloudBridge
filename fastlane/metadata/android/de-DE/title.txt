@@ -1,1 +1,1 @@
-CloudBridge
+CloudBridge: Cloud-Manager

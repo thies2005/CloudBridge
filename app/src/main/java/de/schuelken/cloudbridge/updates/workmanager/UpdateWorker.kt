@@ -28,6 +28,7 @@ class UpdateWorker (private var mContext: Context, workerParams: WorkerParameter
 
 
     override suspend fun doWork(): Result {
+        if (BuildConfig.PLAY_DISTRIBUTION) return Result.success()
 
         Log.e(tag(), "Try to check updates...")
 

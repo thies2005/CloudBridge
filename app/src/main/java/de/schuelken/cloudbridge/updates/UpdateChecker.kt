@@ -3,7 +3,9 @@ package de.schuelken.cloudbridge.updates
 import android.content.Context
 import android.os.Build
 import androidx.preference.PreferenceManager
+import ca.pkay.rcloneexplorer.BuildConfig
 import ca.pkay.rcloneexplorer.R
+import de.schuelken.cloudbridge.notifications.AppUpdateNotification
 import de.schuelken.cloudbridge.updates.workmanager.UpdateManager
 
 
@@ -26,12 +28,17 @@ class UpdateChecker(private var mContext: Context) {
     fun schedule() {
         if(!checkForUpdates) {
             updateManager.cancelAll()
+            if (BuildConfig.PLAY_DISTRIBUTION) {
+                AppUpdateNotification(mContext).cancelNotification()
+            }
             return
         }
         updateManager.queueRepeating()
     }
 
     fun isManagedInstallation(): Boolean {
+        if (BuildConfig.PLAY_DISTRIBUTION) return true
+
         val storeApps = mutableListOf(
             "com.android.vending",
             "com.google.android.feedback",

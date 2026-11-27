@@ -178,6 +178,11 @@ def buildRclone(abi) {
                 }
                 workingDir Paths.get(CACHE_PATH, 'rclone-src').toString()
                 def ldflags = "-s -w -X github.com/rclone/rclone/fs.Version=${getSourceVersion()}"
+                // The Go ELF linker defaults to 4 KiB for linux/amd64. Android also
+                // runs this executable on x86_64 devices with 16 KiB pages.
+                if (abi == 'x86_64') {
+                    ldflags += " -R 16384"
+                }
                 commandLine (
                     'go',
                     'build',

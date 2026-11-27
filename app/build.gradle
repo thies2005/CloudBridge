@@ -50,8 +50,9 @@ android {
         // Allocation is commit_count * 20 for development and
         // commit_count * 20 + 10 for stable; ABI outputs add 6-9.
         // The stable workflow checks this default against the tagged commit count.
-        versionCode System.getenv('CB_VERSION_CODE') ? System.getenv('CB_VERSION_CODE').toInteger() : 33050
-        versionName System.getenv('CB_VERSION_NAME') ? System.getenv('CB_VERSION_NAME') : '1.1.0'
+        versionCode System.getenv('CB_VERSION_CODE') ? System.getenv('CB_VERSION_CODE').toInteger() : 33070
+        versionName System.getenv('CB_VERSION_NAME') ? System.getenv('CB_VERSION_NAME') : '1.1.1'
+        buildConfigField "boolean", "PLAY_DISTRIBUTION", "false"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "java.lang.String", "CLI", System.getenv('RCX_BUILD_CLI') ? System.getenv('RCX_BUILD_CLI') : "\"c03129b6-b09f-9cb4-8fcd-7f143b8f94ef\""
         buildConfigField "java.lang.String", "VCP_AUTHORITY", "\"" + applicationId + ".vcp\"";
@@ -106,7 +107,11 @@ android {
         rs {
             dimension 'edition'
         }
-        // OSS build — the default for GitHub releases and Google Play
+        play {
+            dimension 'edition'
+            buildConfigField "boolean", "PLAY_DISTRIBUTION", "true"
+        }
+        // OSS build — the default for GitHub releases
         oss {
             dimension 'edition'
         }
@@ -114,7 +119,7 @@ android {
 
     splits {
         abi {
-            // AAB builds fail while APK splits are enabled; pass -PnoAbiSplits for bundleOssRelease
+            // AAB builds fail while APK splits are enabled; pass -PnoAbiSplits for a bundle task
             enable !project.hasProperty('noAbiSplits')
             reset()
             include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'

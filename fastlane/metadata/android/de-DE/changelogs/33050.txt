@@ -1,0 +1,4 @@
+• Überarbeitete Material-3-Oberfläche mit hellem, dunklem und AMOLED-Design.
+• Suche in Ordnern, Unterordnern oder in allen indizierten Speichern. Filtere nach Typ und Größe.
+• Sieh den Fortschritt und die geschätzte Restzeit laufender Übertragungen.
+• Verbesserter Zwischenspeicher und zuverlässigere Dateiübertragungen.

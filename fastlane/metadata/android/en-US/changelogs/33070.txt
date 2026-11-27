@@ -1,0 +1,4 @@
+• Dedicated Google Play edition with Play-compliant update handling.
+• 16 KB page-size alignment for 64-bit native libraries (arm64-v8a and x86_64).
+• Material 3 interface with light, dark and AMOLED themes, indexed multi-drive search, and transfer ETA.
+• Improved caching and reliability when browsing or transferring files.
